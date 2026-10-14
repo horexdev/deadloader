@@ -3,5 +3,6 @@
 //! the clock are reached through traits so everything here is testable without a game install.
 
 pub mod fs;
+pub mod gameinfo;
 pub mod steam;
 pub mod vdf;
