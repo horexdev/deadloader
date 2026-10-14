@@ -9,6 +9,7 @@ pub mod gameinfo;
 mod hex;
 pub mod journal;
 pub mod library;
+pub mod overlap;
 pub mod place;
 pub mod steam;
 pub mod vdf;
