@@ -20,7 +20,7 @@ pub enum Step {
     Place {
         source: PathBuf,
         dest: PathBuf,
-        #[serde(with = "hex32")]
+        #[serde(with = "crate::hex")]
         sha256: [u8; 32],
     },
     /// Rename without replacing.
@@ -365,26 +365,6 @@ fn roll_forward(fs: &impl FileOps, steps: &[Step], remaining: &[usize]) -> Resul
         }
     }
     Ok(())
-}
-
-mod hex32 {
-    use serde::{Deserialize, Deserializer, Serializer, de::Error};
-
-    pub fn serialize<S: Serializer>(bytes: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&bytes.iter().map(|b| format!("{b:02x}")).collect::<String>())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
-        let text = String::deserialize(d)?;
-        let mut out = [0u8; 32];
-        if text.len() != 64 {
-            return Err(D::Error::custom("expected 64 hex digits"));
-        }
-        for (i, byte) in out.iter_mut().enumerate() {
-            *byte = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).map_err(D::Error::custom)?;
-        }
-        Ok(out)
-    }
 }
 
 #[cfg(test)]

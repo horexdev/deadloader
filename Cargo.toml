@@ -11,7 +11,8 @@ repository = "https://github.com/horexdev/deadloader"
 publish = false
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# Denied everywhere; the only exception is FFI in platform-windows, allowed per module with SAFETY comments.
+unsafe_code = "deny"
 missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
