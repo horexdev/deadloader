@@ -18,6 +18,15 @@ pub trait FileOps {
     /// Renames without replacing: fails with `AlreadyExists` if `to` exists.
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
     fn exists(&self, path: &Path) -> io::Result<bool>;
+    /// The entries directly inside `dir`; `NotFound` if it doesn't exist.
+    fn list_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub len: u64,
 }
 
 pub fn sha256(bytes: &[u8]) -> [u8; 32] {
@@ -75,6 +84,20 @@ impl FileOps for Disk {
 
     fn exists(&self, path: &Path) -> io::Result<bool> {
         path.try_exists()
+    }
+
+    fn list_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>> {
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let meta = entry.metadata()?;
+            out.push(DirEntry {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                is_dir: meta.is_dir(),
+                len: meta.len(),
+            });
+        }
+        Ok(out)
     }
 }
 
@@ -249,6 +272,42 @@ pub mod fake {
 
         fn exists(&self, path: &Path) -> io::Result<bool> {
             Ok(self.files.borrow().contains_key(&key(path)))
+        }
+
+        fn list_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>> {
+            let prefix = format!("{}\\", key(dir).trim_end_matches('\\'));
+            let mut entries: BTreeMap<String, DirEntry> = BTreeMap::new();
+            for (k, data) in self.files.borrow().iter() {
+                let Some(rest) = k.strip_prefix(&prefix) else {
+                    continue;
+                };
+                match rest.split_once('\\') {
+                    Some((sub, _)) => {
+                        entries.insert(
+                            sub.to_owned(),
+                            DirEntry {
+                                name: sub.to_owned(),
+                                is_dir: true,
+                                len: 0,
+                            },
+                        );
+                    }
+                    None => {
+                        entries.insert(
+                            rest.to_owned(),
+                            DirEntry {
+                                name: rest.to_owned(),
+                                is_dir: false,
+                                len: data.len() as u64,
+                            },
+                        );
+                    }
+                }
+            }
+            if entries.is_empty() {
+                return Err(io::Error::from(io::ErrorKind::NotFound));
+            }
+            Ok(entries.into_values().collect())
         }
     }
 }
