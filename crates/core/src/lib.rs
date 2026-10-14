@@ -9,6 +9,7 @@ pub mod fs;
 pub mod gamedir;
 pub mod gameinfo;
 mod hex;
+pub mod import;
 pub mod journal;
 pub mod library;
 pub mod log;
