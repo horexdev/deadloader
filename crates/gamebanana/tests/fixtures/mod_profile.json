@@ -1,0 +1,207 @@
+{
+    "_idRow": 700001,
+    "_nStatus": "0",
+    "_bIsPrivate": false,
+    "_bAccessorIsSubmitter": false,
+    "_bIsTrashed": false,
+    "_bIsWithheld": false,
+    "_sName": "Copper Coat for Wraith",
+    "_sCommentsMode": "open",
+    "_tsDateModified": 1761000000,
+    "_tsDateAdded": 1760000000,
+    "_tsDateUpdated": 1761000100,
+    "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/700001",
+    "_aPreviewMedia": {
+        "_aImages": [
+            {
+                "_sType": "screenshot",
+                "_sBaseUrl": "https:\/\/images.gamebanana.com\/img\/ss\/mods",
+                "_sFile": "aaaa0001.jpg",
+                "_sFile220": "220-90_aaaa0001.jpg",
+                "_hFile220": 124,
+                "_wFile220": 220,
+                "_sFile530": "530-90_aaaa0001.jpg",
+                "_hFile530": 298,
+                "_wFile530": 530,
+                "_sFile100": "100-90_aaaa0001.jpg",
+                "_hFile100": 56,
+                "_wFile100": 100
+            },
+            {
+                "_sType": "screenshot",
+                "_sBaseUrl": "https:\/\/images.gamebanana.com\/img\/ss\/mods",
+                "_sCaption": "back view",
+                "_sFile": "aaaa0002.jpg",
+                "_sFile100": "100-90_aaaa0002.jpg",
+                "_hFile100": 56,
+                "_wFile100": 100
+            },
+            {
+                "_sType": "screenshot",
+                "_sCaption": "broken entry without a file"
+            }
+        ]
+    },
+    "_nUpdatesCount": 1,
+    "_bHasUpdates": true,
+    "_nPostCount": 7,
+    "_aTags": [
+        {
+            "_sTitle": "Software Used",
+            "_sValue": "Blender"
+        }
+    ],
+    "_bCreatedBySubmitter": true,
+    "_bIsPorted": false,
+    "_nThanksCount": 2,
+    "_sInitialVisibility": "warn",
+    "_sDownloadUrl": "https:\/\/gamebanana.com\/mods\/download\/700001",
+    "_nDownloadCount": 5120,
+    "_aArchivedFiles": [
+        {
+            "_idRow": 1800001,
+            "_sFile": "copper_coat_v1.zip",
+            "_nFilesize": 9000000,
+            "_tsDateAdded": 1760000000,
+            "_nDownloadCount": 800,
+            "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1800001",
+            "_sMd5Checksum": "0123456789abcdef0123456789abcdef",
+            "_sAnalysisState": "done",
+            "_sAnalysisResult": "ok",
+            "_sAnalysisResultVerbose": "File passed preliminary analysis",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_bIsArchived": true,
+            "_bHasContents": true,
+            "_sDescription": "First release"
+        }
+    ],
+    "_aFiles": [
+        {
+            "_idRow": 1800002,
+            "_sFile": "copper_coat.7z",
+            "_nFilesize": 12345678,
+            "_tsDateAdded": 1761000000,
+            "_nDownloadCount": 4320,
+            "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1800002",
+            "_sMd5Checksum": "fedcba9876543210fedcba9876543210",
+            "_sAnalysisState": "done",
+            "_sAnalysisResult": "ok",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_bIsArchived": false,
+            "_bHasContents": true,
+            "_sVersion": "1.2",
+            "_aModManagerIntegrations": [
+                {
+                    "_idToolRow": 1,
+                    "_sInstallerName": "Some Other Manager",
+                    "_sDownloadUrl": "other-manager:https:\/\/gamebanana.com\/mmdl\/1800002,Mod,700001"
+                }
+            ]
+        },
+        {
+            "_idRow": 1800003,
+            "_sFile": "copper_coat_gloves_only.zip",
+            "_nFilesize": 2048,
+            "_nDownloadCount": 0,
+            "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1800003",
+            "_sMd5Checksum": "",
+            "_sAvState": "pending",
+            "_sDescription": "  "
+        },
+        {
+            "_idRow": 1800004,
+            "_sFile": "copper_coat_extra.rar",
+            "_nFilesize": 4096,
+            "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1800004",
+            "_sAvState": "done",
+            "_sAvResult": "suspicious"
+        },
+        {
+            "_idRow": 1800005,
+            "_sFile": "copper_coat_readme.zip",
+            "_nFilesize": 100,
+            "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1800005"
+        }
+    ],
+    "_nSubscriberCount": 3,
+    "_aContributingStudios": [],
+    "_sLicense": "<p>Ask before reusing the textures.<\/p>",
+    "_aLicenseChecklist": {
+        "yes": ["Download and install this Mod"],
+        "ask": [],
+        "no": []
+    },
+    "_sDescription": "A copper-toned coat with brass buttons.",
+    "_bGenerateTableOfContents": false,
+    "_sText": "Swaps the coat for a <b>copper<\/b> one.<br><a href=\"https:\/\/example.org\/notes\">notes<\/a>",
+    "_bIsObsolete": false,
+    "_nLikeCount": 42,
+    "_nViewCount": 3100,
+    "_sVersion": "1.2",
+    "_bAcceptsDonations": false,
+    "_aSubmitter": {
+        "_idRow": 9000001,
+        "_sName": "tinker_fox",
+        "_sUserTitle": "Member",
+        "_sProfileUrl": "https:\/\/gamebanana.com\/members\/9000001"
+    },
+    "_bFollowLinks": true,
+    "_aGame": {
+        "_idRow": 20948,
+        "_sName": "Deadlock",
+        "_sAbbreviation": "DL"
+    },
+    "_aCategory": {
+        "_idRow": 33320,
+        "_sName": "Wraith",
+        "_sModelName": "ModCategory",
+        "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/cats\/33320",
+        "_bIsObsolete": false
+    },
+    "_aSuperCategory": {
+        "_idRow": 33295,
+        "_sName": "Skins",
+        "_sModelName": "ModCategory",
+        "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/cats\/33295"
+    },
+    "_aContentRatings": {
+        "sa": "Skimpy Attire",
+        "st": "Sexual Themes",
+        "xx": "Something New"
+    },
+    "_aCredits": [
+        {
+            "_sGroupName": "Key Authors",
+            "_aAuthors": [
+                {
+                    "_sRole": "Modeller",
+                    "_idRow": 9000001,
+                    "_sName": "tinker_fox",
+                    "_sProfileUrl": "https:\/\/gamebanana.com\/members\/9000001"
+                }
+            ]
+        },
+        {
+            "_sGroupName": "Special Thanks",
+            "_aAuthors": [
+                {
+                    "_sName": "a friend without an account"
+                }
+            ]
+        }
+    ],
+    "_aEmbeddedMedia": [
+        "https:\/\/www.youtube.com\/watch?v=abcdefghijk"
+    ],
+    "_aAlternateFileSources": [
+        {
+            "url": "https:\/\/example.org\/copper-coat"
+        },
+        {
+            "url": "https:\/\/example.org\/copper-coat\/mirror",
+            "description": "Project page"
+        }
+    ]
+}
