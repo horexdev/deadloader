@@ -4,6 +4,7 @@
 
 pub mod fs;
 pub mod gameinfo;
+pub mod place;
 pub mod steam;
 pub mod vdf;
 pub mod vpk;
