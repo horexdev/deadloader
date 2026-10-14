@@ -1,0 +1,63 @@
+{
+    "_idRow": 95001,
+    "_nStatus": "0",
+    "_bIsPrivate": false,
+    "_bIsTrashed": false,
+    "_bIsWithheld": false,
+    "_sName": "Softer Bell Chime",
+    "_tsDateModified": 1762000000,
+    "_tsDateAdded": 1762000000,
+    "_sProfileUrl": "https:\/\/gamebanana.com\/sounds\/95001",
+    "_aPreviewMedia": {
+        "_aMetadata": {
+            "_sAudioUrl": "https:\/\/files.gamebanana.com\/preview\/sounds\/bell_chime.mp3"
+        }
+    },
+    "_nPostCount": 0,
+    "_aTags": [],
+    "_sInitialVisibility": "show",
+    "_nDownloadCount": 9,
+    "_aFiles": [
+        {
+            "_idRow": 1900001,
+            "_sFile": "bell_chime.zip",
+            "_nFilesize": 879337,
+            "_tsDateAdded": 1762000000,
+            "_nDownloadCount": 9,
+            "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1900001",
+            "_sMd5Checksum": "00112233445566778899aabbccddeeff",
+            "_sAvState": "done",
+            "_sAvResult": "clean"
+        }
+    ],
+    "_sLicense": "",
+    "_sText": "",
+    "_bIsObsolete": false,
+    "_nLikeCount": 0,
+    "_nViewCount": 12,
+    "_aSubmitter": {
+        "_idRow": 9000003,
+        "_sName": "echo_maker"
+    },
+    "_aGame": {
+        "_idRow": 20948,
+        "_sName": "Deadlock"
+    },
+    "_aCategory": {
+        "_idRow": 6270,
+        "_sName": "Abilities",
+        "_sModelName": "SoundCategory",
+        "_sProfileUrl": "https:\/\/gamebanana.com\/sounds\/cats\/6270"
+    },
+    "_aCredits": [
+        {
+            "_sGroupName": "Creator",
+            "_aAuthors": [
+                {
+                    "_sRole": "Creator",
+                    "_sName": "echo_maker"
+                }
+            ]
+        }
+    ]
+}
