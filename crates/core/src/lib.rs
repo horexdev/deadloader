@@ -7,6 +7,7 @@ pub mod apply;
 pub mod fs;
 pub mod gameinfo;
 pub mod journal;
+pub mod log;
 pub mod place;
 pub mod steam;
 pub mod vdf;
