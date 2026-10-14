@@ -20,6 +20,11 @@ pub trait FileOps {
     fn exists(&self, path: &Path) -> io::Result<bool>;
     /// The entries directly inside `dir`; `NotFound` if it doesn't exist.
     fn list_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>>;
+    fn create_dir_all(&self, dir: &Path) -> io::Result<()>;
+    /// Creates a new file (never overwrites) with `bytes` and flushes it to disk.
+    fn write_new(&self, path: &Path, bytes: &[u8]) -> io::Result<()>;
+    /// Atomically puts `from` in place of `to`, replacing it. For files we fully rewrite, like gameinfo.gi.
+    fn replace(&self, from: &Path, to: &Path) -> io::Result<()>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +103,24 @@ impl FileOps for Disk {
             });
         }
         Ok(out)
+    }
+
+    fn create_dir_all(&self, dir: &Path) -> io::Result<()> {
+        std::fs::create_dir_all(dir)
+    }
+
+    fn write_new(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        f.write_all(bytes)?;
+        f.sync_all()
+    }
+
+    fn replace(&self, from: &Path, to: &Path) -> io::Result<()> {
+        // On Windows this is MoveFileEx with MOVEFILE_REPLACE_EXISTING: the target is swapped in one step.
+        std::fs::rename(from, to)
     }
 }
 
@@ -309,5 +332,89 @@ pub mod fake {
             }
             Ok(entries.into_values().collect())
         }
+
+        fn create_dir_all(&self, _dir: &Path) -> io::Result<()> {
+            // Folders are implicit in this fake: a file's path is enough.
+            Ok(())
+        }
+
+        fn write_new(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+            self.power.spend()?;
+            self.check_writable(path)?;
+            self.files
+                .borrow_mut()
+                .insert(key(path), Rc::new(bytes.to_vec()));
+            Ok(())
+        }
+
+        fn replace(&self, from: &Path, to: &Path) -> io::Result<()> {
+            self.power.spend()?;
+            let k = key(to);
+            if self.denied.iter().any(|d| k.starts_with(d.as_str())) {
+                return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+            }
+            let data = self
+                .files
+                .borrow_mut()
+                .remove(&key(from))
+                .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+            self.files.borrow_mut().insert(k, data);
+            Ok(())
+        }
+    }
+
+    impl ReadText for MemFs {
+        fn read_text(&self, path: &Path) -> io::Result<String> {
+            let data = self.source(path)?;
+            String::from_utf8(data.to_vec())
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("deadloader-fs-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn creating_folders_is_idempotent() {
+        let root = temp_dir("mkdir");
+        let dir = root.join("a").join("b");
+        Disk.create_dir_all(&dir).expect("create");
+        Disk.create_dir_all(&dir).expect("again");
+        assert!(dir.is_dir());
+        std::fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    #[test]
+    fn writing_a_new_file_never_overwrites() {
+        let dir = temp_dir("write");
+        Disk.create_dir_all(&dir).expect("dir");
+        let file = dir.join("x.tmp");
+        Disk.write_new(&file, b"first").expect("write");
+        let err = Disk.write_new(&file, b"second").expect_err("exists");
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(&file).expect("read"), b"first");
+        std::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    #[test]
+    fn replacing_swaps_in_the_new_content() {
+        let dir = temp_dir("replace");
+        Disk.create_dir_all(&dir).expect("dir");
+        let target = dir.join("gameinfo.gi");
+        let staged = dir.join("gameinfo.gi.tmp");
+        std::fs::write(&target, b"old").expect("old");
+        Disk.write_new(&staged, b"new").expect("staged");
+        Disk.replace(&staged, &target).expect("replace");
+        assert_eq!(std::fs::read(&target).expect("read"), b"new");
+        assert!(!staged.exists());
+        std::fs::remove_dir_all(&dir).expect("cleanup");
     }
 }

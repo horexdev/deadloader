@@ -32,9 +32,20 @@ pub enum Step {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "rec", rename_all = "snake_case")]
 enum Record {
-    Begin { tx: u64, steps: Vec<Step> },
-    Done { tx: u64, step: usize },
-    Commit { tx: u64 },
+    Begin {
+        tx: u64,
+        steps: Vec<Step>,
+        /// What the change achieves (e.g. the new slot layout), handed back by recovery so the caller can record it.
+        #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+        meta: serde_json::Value,
+    },
+    Done {
+        tx: u64,
+        step: usize,
+    },
+    Commit {
+        tx: u64,
+    },
 }
 
 /// Durable, line-oriented storage of journal records.
@@ -125,12 +136,27 @@ pub fn run(
     tx: u64,
     steps: &[Step],
 ) -> Result<(), TxError> {
+    run_with(fs, store, tx, steps, serde_json::Value::Null, || Ok(()))
+}
+
+/// Runs `steps` as one transaction, storing `meta` with it and calling `on_commit` once the commit record is durable
+/// and before the journal is cleared — the place to record the result (e.g. save the manifest). If `on_commit` fails,
+/// the journal stays and [`recover_with_meta`] hands `meta` back on the next start.
+pub fn run_with(
+    fs: &impl FileOps,
+    store: &impl JournalStore,
+    tx: u64,
+    steps: &[Step],
+    meta: serde_json::Value,
+    on_commit: impl FnOnce() -> io::Result<()>,
+) -> Result<(), TxError> {
     let split = deletions_start(steps).ok_or(TxError::Invalid)?;
     append(
         store,
         &Record::Begin {
             tx,
             steps: steps.to_vec(),
+            meta,
         },
     )
     .map_err(TxError::Journal)?;
@@ -148,18 +174,28 @@ pub fn run(
         abort(fs, store, &steps[..split]);
         return Err(TxError::Journal(e));
     }
+    on_commit().map_err(TxError::Cleanup)?;
     cleanup(fs, &steps[split..]).map_err(TxError::Cleanup)?;
     store.clear().map_err(TxError::Cleanup)
 }
 
 /// Finishes or undoes a transaction interrupted by a crash. Run before anything else touches the game folder.
 pub fn recover(fs: &impl FileOps, store: &impl JournalStore) -> io::Result<Recovery> {
+    recover_with_meta(fs, store).map(|(outcome, _)| outcome)
+}
+
+/// Like [`recover`], also returning the transaction's `meta` when its changes are now in place (completed or rolled
+/// forward), so the caller can record the result it may have missed.
+pub fn recover_with_meta(
+    fs: &impl FileOps,
+    store: &impl JournalStore,
+) -> io::Result<(Recovery, Option<serde_json::Value>)> {
     let text = store.read_all()?;
     let Some(open) = last_transaction(&text)? else {
         if !text.trim().is_empty() {
             store.clear()?;
         }
-        return Ok(Recovery::Clean);
+        return Ok((Recovery::Clean, None));
     };
     let split = deletions_start(&open.steps)
         .ok_or_else(|| io::Error::other("journal holds an invalid plan"))?;
@@ -167,7 +203,7 @@ pub fn recover(fs: &impl FileOps, store: &impl JournalStore) -> io::Result<Recov
     if open.committed {
         cleanup(fs, &open.steps[split..])?;
         store.clear()?;
-        return Ok(Recovery::Completed);
+        return Ok((Recovery::Completed, meta(open.meta)));
     }
 
     let remaining: Vec<usize> = (0..split).filter(|i| !open.done.contains(i)).collect();
@@ -177,7 +213,7 @@ pub fn recover(fs: &impl FileOps, store: &impl JournalStore) -> io::Result<Recov
         append(store, &Record::Commit { tx: open.tx })?;
         cleanup(fs, &open.steps[split..])?;
         store.clear()?;
-        return Ok(Recovery::RolledForward);
+        return Ok((Recovery::RolledForward, meta(open.meta)));
     }
 
     if split > 0 {
@@ -188,12 +224,17 @@ pub fn recover(fs: &impl FileOps, store: &impl JournalStore) -> io::Result<Recov
         }
     }
     store.clear()?;
-    Ok(Recovery::RolledBack)
+    Ok((Recovery::RolledBack, None))
+}
+
+fn meta(value: serde_json::Value) -> Option<serde_json::Value> {
+    (!value.is_null()).then_some(value)
 }
 
 struct Open {
     tx: u64,
     steps: Vec<Step>,
+    meta: serde_json::Value,
     done: BTreeSet<usize>,
     committed: bool,
 }
@@ -209,10 +250,11 @@ fn last_transaction(text: &str) -> io::Result<Option<Open>> {
             Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
         };
         match record {
-            Record::Begin { tx, steps } => {
+            Record::Begin { tx, steps, meta } => {
                 open = Some(Open {
                     tx,
                     steps,
+                    meta,
                     done: BTreeSet::new(),
                     committed: false,
                 })
@@ -596,6 +638,74 @@ mod tests {
             "hash as hex: {line}"
         );
         assert!(!line.contains('\n'));
+    }
+
+    #[test]
+    fn the_commit_hook_runs_after_the_commit_record_and_before_clearing() {
+        let (fs, store, steps) = scenario();
+        let seen = RefCell::new(Vec::new());
+        run_with(&fs, &store, 1, &steps, serde_json::json!({"k": 1}), || {
+            seen.borrow_mut()
+                .extend(store.lines.borrow().iter().cloned());
+            Ok(())
+        })
+        .expect("applied");
+        let lines = seen.borrow();
+        assert!(
+            lines
+                .last()
+                .expect("records")
+                .contains("\"rec\":\"commit\""),
+            "{lines:?}"
+        );
+        assert!(
+            store.read_all().expect("read").is_empty(),
+            "cleared after the hook"
+        );
+    }
+
+    #[test]
+    fn a_failing_commit_hook_leaves_the_result_for_recovery() {
+        let (fs, store, steps) = scenario();
+        let meta = serde_json::json!({"layout": [[1, "b"], [2, "a"]]});
+        let err = run_with(&fs, &store, 1, &steps, meta.clone(), || {
+            Err(io::Error::other("disk full"))
+        })
+        .expect_err("hook failed");
+        assert!(matches!(err, TxError::Cleanup(_)), "{err:?}");
+        // The game-visible files are in place; the trashed file waits for the cleanup that recovery finishes.
+        assert_eq!(
+            fs.read(r"D:\addons\pak01_dir.vpk").as_deref(),
+            Some(&b"mod B"[..])
+        );
+        assert_eq!(
+            fs.read(r"D:\addons\pak02_dir.vpk").as_deref(),
+            Some(&b"mod A"[..])
+        );
+        let r = recover_with_meta(&fs, &store).expect("recovery");
+        assert_eq!(r, (Recovery::Completed, Some(meta)));
+        assert_eq!(fs.snapshot(), after_state());
+        assert!(store.read_all().expect("read").is_empty());
+    }
+
+    #[test]
+    fn recovery_hands_back_the_result_when_it_goes_forward() {
+        let meta = serde_json::json!({"layout": "after"});
+        for cut in 0..40 {
+            let (fs, store, steps) = scenario();
+            fs.power().cut_after(cut);
+            let completed = run_with(&fs, &store, 7, &steps, meta.clone(), || Ok(())).is_ok();
+            fs.power().restore();
+            let (outcome, got) = recover_with_meta(&fs, &store).expect("recovery");
+            match outcome {
+                Recovery::RolledForward | Recovery::Completed => {
+                    assert_eq!(got.as_ref(), Some(&meta), "cut {cut}");
+                    assert_eq!(fs.snapshot(), after_state(), "cut {cut}");
+                }
+                Recovery::RolledBack => assert_eq!(got, None, "cut {cut}"),
+                Recovery::Clean => assert!(completed || got.is_none(), "cut {cut}"),
+            }
+        }
     }
 
     #[test]
