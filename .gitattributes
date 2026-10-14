@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+# Test fixtures must keep their exact bytes (e.g. CRLF or mixed line endings in gameinfo.gi samples).
+**/tests/fixtures/** -text
+*.vpk binary
+*.ico binary
+*.png binary
+*.woff2 binary
