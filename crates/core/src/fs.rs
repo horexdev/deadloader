@@ -15,6 +15,9 @@ pub trait FileOps {
     /// Copies `from` to the new file `to`, flushes it to disk and returns its size and SHA-256.
     fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])>;
     fn remove_file(&self, path: &Path) -> io::Result<()>;
+    /// Renames without replacing: fails with `AlreadyExists` if `to` exists.
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
+    fn exists(&self, path: &Path) -> io::Result<bool>;
 }
 
 pub fn sha256(bytes: &[u8]) -> [u8; 32] {
@@ -61,17 +64,55 @@ impl FileOps for Disk {
     fn remove_file(&self, path: &Path) -> io::Result<()> {
         std::fs::remove_file(path)
     }
+
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        // std::fs::rename replaces an existing target on Windows; we never want that.
+        if to.try_exists()? {
+            return Err(io::Error::from(io::ErrorKind::AlreadyExists));
+        }
+        std::fs::rename(from, to)
+    }
+
+    fn exists(&self, path: &Path) -> io::Result<bool> {
+        path.try_exists()
+    }
 }
 
 #[cfg(test)]
 pub mod fake {
-    //! An in-memory filesystem with volumes (to provoke cross-volume links), filesystems without hard links and
-    //! write-protected folders. Paths are compared like on Windows: case-insensitively.
+    //! An in-memory filesystem with volumes (to provoke cross-volume links), filesystems without hard links,
+    //! write-protected folders and a simulated power cut. Paths are compared like on Windows: case-insensitively.
 
     use super::*;
-    use std::cell::RefCell;
-    use std::collections::HashMap;
+    use std::cell::{Cell, RefCell};
+    use std::collections::{BTreeMap, HashMap};
     use std::rc::Rc;
+
+    /// Shared budget of operations before the "power" goes out; every later operation fails.
+    #[derive(Debug, Clone, Default)]
+    pub struct Power(Rc<Cell<Option<usize>>>);
+
+    impl Power {
+        pub fn cut_after(&self, operations: usize) {
+            self.0.set(Some(operations));
+        }
+
+        pub fn restore(&self) {
+            self.0.set(None);
+        }
+
+        /// Spends one operation, or fails if the power is out.
+        pub fn spend(&self) -> io::Result<()> {
+            match self.0.get() {
+                Some(0) => Err(io::Error::other("power cut")),
+                Some(n) => {
+                    self.0.set(Some(n - 1));
+                    Ok(())
+                }
+                None => Ok(()),
+            }
+        }
+    }
 
     #[derive(Debug, Default)]
     pub struct MemFs {
@@ -79,6 +120,7 @@ pub mod fake {
         volumes: Vec<(String, bool)>,
         files: RefCell<HashMap<String, Rc<Vec<u8>>>>,
         denied: Vec<String>,
+        power: Power,
     }
 
     fn key(path: impl AsRef<Path>) -> String {
@@ -101,6 +143,19 @@ pub mod fake {
         pub fn deny_writes_under(mut self, prefix: &str) -> Self {
             self.denied.push(prefix.to_ascii_lowercase());
             self
+        }
+
+        pub fn power(&self) -> Power {
+            self.power.clone()
+        }
+
+        /// Every file and its content, for comparing whole states.
+        pub fn snapshot(&self) -> BTreeMap<String, Vec<u8>> {
+            self.files
+                .borrow()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_vec()))
+                .collect()
         }
 
         pub fn read(&self, path: &str) -> Option<Vec<u8>> {
@@ -145,6 +200,7 @@ pub mod fake {
 
     impl FileOps for MemFs {
         fn hard_link(&self, original: &Path, link: &Path) -> io::Result<()> {
+            self.power.spend()?;
             self.check_writable(link)?;
             let data = self.source(original)?;
             match (self.volume_of(original), self.volume_of(link)) {
@@ -159,6 +215,7 @@ pub mod fake {
         }
 
         fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])> {
+            self.power.spend()?;
             self.check_writable(to)?;
             let data = self.source(from)?;
             let hash = sha256(&data);
@@ -170,11 +227,28 @@ pub mod fake {
         }
 
         fn remove_file(&self, path: &Path) -> io::Result<()> {
+            self.power.spend()?;
             self.files
                 .borrow_mut()
                 .remove(&key(path))
                 .map(|_| ())
                 .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))
+        }
+
+        fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+            self.power.spend()?;
+            self.check_writable(to)?;
+            let data = self
+                .files
+                .borrow_mut()
+                .remove(&key(from))
+                .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+            self.files.borrow_mut().insert(key(to), data);
+            Ok(())
+        }
+
+        fn exists(&self, path: &Path) -> io::Result<bool> {
+            Ok(self.files.borrow().contains_key(&key(path)))
         }
     }
 }
