@@ -5,6 +5,7 @@
 pub mod addons;
 pub mod apply;
 pub mod fs;
+pub mod gamedir;
 pub mod gameinfo;
 mod hex;
 pub mod journal;
