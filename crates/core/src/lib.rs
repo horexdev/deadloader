@@ -10,6 +10,7 @@ mod hex;
 pub mod journal;
 pub mod library;
 pub mod log;
+pub mod overlap;
 pub mod place;
 pub mod steam;
 pub mod vdf;
