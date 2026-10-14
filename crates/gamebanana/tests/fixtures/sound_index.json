@@ -1,0 +1,53 @@
+{
+    "_aMetadata": {
+        "_nRecordCount": 2,
+        "_bIsComplete": true,
+        "_nPerpage": 50
+    },
+    "_aRecords": [
+        {
+            "_idRow": 95001,
+            "_sModelName": "Sound",
+            "_sSingularTitle": "Sound",
+            "_sIconClasses": "SubmissionType Sound",
+            "_sName": "Softer Bell Chime",
+            "_sProfileUrl": "https:\/\/gamebanana.com\/sounds\/95001",
+            "_tsDateAdded": 1762000000,
+            "_tsDateModified": 1762000000,
+            "_bHasFiles": true,
+            "_aTags": [],
+            "_aPreviewMedia": {
+                "_aMetadata": {
+                    "_sAudioUrl": "https:\/\/files.gamebanana.com\/preview\/sounds\/bell_chime.mp3"
+                }
+            },
+            "_aSubmitter": {
+                "_idRow": 9000003,
+                "_sName": "echo_maker"
+            },
+            "_aRootCategory": {
+                "_sName": "Abilities",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/sounds\/cats\/6270",
+                "_sIconUrl": ""
+            },
+            "_bIsObsolete": false,
+            "_sInitialVisibility": "show",
+            "_bHasContentRatings": false,
+            "_bWasFeatured": false,
+            "_nViewCount": 12
+        },
+        {
+            "_idRow": 95002,
+            "_sModelName": "Sound",
+            "_sName": "Quiet Footsteps",
+            "_aPreviewMedia": {
+                "_aMetadata": []
+            },
+            "_aRootCategory": {
+                "_sName": "Gameplay Events",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/sounds\/cats\/6310"
+            },
+            "_nLikeCount": 3
+        }
+    ]
+}
