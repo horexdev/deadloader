@@ -1,0 +1,37 @@
+{
+    "_aMetadata": {
+        "_nRecordCount": 31,
+        "_nPerpage": 15,
+        "_bIsComplete": false
+    },
+    "_aRecords": [
+        {
+            "_idRow": 700004,
+            "_sModelName": "Mod",
+            "_sName": "Haze in Teal",
+            "_tsDateAdded": 1755000000,
+            "_tsDateModified": 1755000000,
+            "_bHasFiles": true,
+            "_aSubmitter": {
+                "_sName": "palette_cat"
+            },
+            "_aRootCategory": {
+                "_sName": "Skins",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/cats\/33295"
+            },
+            "_aSubCategory": {
+                "_sName": "Haze",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/cats\/33310"
+            },
+            "_sInitialVisibility": "show",
+            "_bHasContentRatings": false,
+            "_nLikeCount": 5,
+            "_nViewCount": 400
+        },
+        {
+            "_idRow": 20001,
+            "_sModelName": "Tool",
+            "_sName": "Some Packing Tool"
+        }
+    ]
+}
