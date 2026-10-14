@@ -7,6 +7,7 @@ pub mod apply;
 pub mod fs;
 pub mod gameinfo;
 mod hex;
+pub mod import;
 pub mod journal;
 pub mod library;
 pub mod log;
