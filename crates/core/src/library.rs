@@ -96,8 +96,8 @@ pub struct Profile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfileEntry {
     pub mod_id: String,
-    /// The chosen variant's file id when the mod has variants.
-    pub variant: Option<String>,
+    /// The chosen file of each variant group of the mod (files that change the same game files; one per group).
+    pub variants: Vec<String>,
     /// Add-on files enabled together with the mod.
     pub add_ons: Vec<String>,
 }
@@ -452,12 +452,12 @@ mod tests {
             entries: vec![
                 ProfileEntry {
                     mod_id: "b".to_owned(),
-                    variant: Some("b-2".to_owned()),
+                    variants: vec!["b-2".to_owned()],
                     add_ons: vec![],
                 },
                 ProfileEntry {
                     mod_id: "a".to_owned(),
-                    variant: None,
+                    variants: vec![],
                     add_ons: vec!["a-9".to_owned()],
                 },
             ],
