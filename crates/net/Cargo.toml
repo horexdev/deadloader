@@ -9,3 +9,9 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+# native-tls = SChannel on Windows: the system trust store, so antivirus/corporate HTTPS interception keeps working
+# (ADR 0007). The full `native-tls` feature is required: in ureq 3.4 `native-tls-no-default` does not compile the
+# connector in. It also brings `webpki-root-certs`, which stays unused (we select the platform roots).
+ureq = { version = "3.4", default-features = false, features = ["native-tls"] }

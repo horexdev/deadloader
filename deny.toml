@@ -26,6 +26,11 @@ allow = [
 confidence-threshold = 0.93
 # The allow-list is a policy, not an inventory: entries may be unused at times.
 unused-allowed-license = "allow"
+# Mozilla's root certificate list as data; pulled in by ureq's `native-tls` feature and never selected at runtime
+# (the Windows trust store is used). Scoped to this crate rather than allowed globally.
+exceptions = [
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-root-certs" },
+]
 
 [licenses.private]
 ignore = true
