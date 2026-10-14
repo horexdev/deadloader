@@ -238,34 +238,22 @@ pub enum Outcome {
     Failed,
 }
 
+/// [`crate::hex`] for an optional digest.
 mod opt_hex {
-    use serde::de::Error as _;
     use serde::{Deserialize, Deserializer, Serializer};
+
+    #[derive(Deserialize)]
+    struct Digest(#[serde(with = "crate::hex")] [u8; 32]);
 
     pub fn serialize<S: Serializer>(value: &Option<[u8; 32]>, s: S) -> Result<S::Ok, S::Error> {
         match value {
-            Some(bytes) => {
-                s.serialize_str(&bytes.iter().map(|b| format!("{b:02x}")).collect::<String>())
-            }
+            Some(bytes) => crate::hex::serialize(bytes, s),
             None => s.serialize_none(),
         }
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<[u8; 32]>, D::Error> {
-        let Some(text) = Option::<String>::deserialize(d)? else {
-            return Ok(None);
-        };
-        let mut out = [0u8; 32];
-        if text.len() != 64 {
-            return Err(D::Error::custom("expected 64 hex digits"));
-        }
-        for (i, byte) in out.iter_mut().enumerate() {
-            let pair = text
-                .get(2 * i..2 * i + 2)
-                .ok_or_else(|| D::Error::custom("expected 64 hex digits"))?;
-            *byte = u8::from_str_radix(pair, 16).map_err(D::Error::custom)?;
-        }
-        Ok(Some(out))
+        Ok(Option::<Digest>::deserialize(d)?.map(|Digest(bytes)| bytes))
     }
 }
 
