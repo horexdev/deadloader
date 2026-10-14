@@ -81,10 +81,12 @@ dependencies = [
 name = "deadloader-core"
 version = "0.1.0"
 dependencies = [
+ "deadloader-archive",
  "serde",
  "serde_json",
  "sha2",
  "time",
+ "zip",
 ]
 
 [[package]]
