@@ -50,6 +50,31 @@ describe('CatalogCard', () => {
     expect(one(failing.card, '.dl-card__thumb-missing')).toBeTruthy();
   });
 
+  it('shows a skeleton and a spinner under the thumbnail until it has loaded', () => {
+    const { card, props } = setup();
+    const thumb = one(card, '.dl-card__thumb');
+    expect(thumb.getAttribute('aria-busy')).toBe('true');
+    expect(one(thumb, '.dl-skel.dl-skel--thumb')).toBeTruthy();
+    expect(one(thumb, '.dl-spinner')).toBeTruthy();
+    // The placeholder comes first, so the picture covers it as soon as it has pixels.
+    expect(thumb.firstElementChild?.classList).toContain('dl-skel');
+    fire(one(thumb, 'img'), 'load', { bubbles: false });
+    expect(thumb.hasAttribute('aria-busy')).toBe(false);
+    expect(thumb.querySelector('.dl-skel, .dl-spinner')).toBeNull();
+    // Another picture (a larger variant after a resize) loads again.
+    props.thumb = 'thumbs/00-530.jpg';
+    flushSync();
+    expect(one(thumb, '.dl-spinner')).toBeTruthy();
+  });
+
+  it('keeps the missing-image placeholder, without a spinner, when the thumbnail fails', () => {
+    const { card } = setup();
+    fire(one(card, '.dl-card__thumb img'), 'error', { bubbles: false });
+    expect(one(card, '.dl-card__thumb-missing')).toBeTruthy();
+    expect(card.querySelector('.dl-spinner, .dl-skel')).toBeNull();
+    expect(one(card, '.dl-card__thumb').hasAttribute('aria-busy')).toBe(false);
+  });
+
   it('tells the page when its thumbnail failed, so the page can be fetched again', () => {
     const onthumberror = vi.fn();
     const { card } = setup({ onthumberror });

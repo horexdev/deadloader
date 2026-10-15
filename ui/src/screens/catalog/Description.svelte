@@ -246,6 +246,39 @@
     background: var(--surface-sunken);
   }
 
+  /* Loading: the placeholder's 16:9 box as a skeleton with the spinner in its middle, the picture drawn over both. */
+  .prose :global(.dl-image__frame) {
+    display: block;
+  }
+
+  .prose :global(.dl-image__frame[aria-busy='true']) {
+    position: relative;
+    width: 100%;
+    max-width: 530px;
+    aspect-ratio: 16 / 9;
+  }
+
+  .prose :global(.dl-image__frame[aria-busy='true'] .dl-skel) {
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+  }
+
+  .prose :global(.dl-image__frame[aria-busy='true'] .dl-spinner) {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    color: var(--ink-subtle);
+  }
+
+  .prose :global(.dl-image__frame[aria-busy='true'] img) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+  }
+
   .prose :global(.dl-image__figure figcaption) {
     font: var(--type-caption);
     color: var(--ink-subtle);
