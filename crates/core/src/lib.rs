@@ -6,6 +6,7 @@ pub mod addons;
 pub mod apply;
 pub mod cache;
 pub mod engine;
+pub mod favourites;
 pub mod fs;
 pub mod gamedir;
 pub mod gameinfo;
