@@ -27,6 +27,8 @@ mod meta {
     pub const VERSION: &str = "version";
     /// The GameBanana file this download replaces (an update, D5).
     pub const REPLACES: &str = "replaces";
+    /// The catalog's id of the mod's picture, which the row shows (`https://dl.localhost/img/<id>`).
+    pub const THUMBNAIL: &str = "thumbnail";
 }
 
 /// The mod a file belongs to, as the UI shows it.
@@ -36,6 +38,8 @@ pub struct ModRef {
     pub mod_id: u64,
     pub name: String,
     pub author: Option<String>,
+    /// The catalog's id of the mod's picture (`Catalog::download_thumbnail`); never an address.
+    pub thumbnail: Option<String>,
 }
 
 /// A task for one file of a GameBanana mod; the URL never leaves the core.
@@ -62,7 +66,29 @@ pub fn task_for(file: &RemoteFile, of: &ModRef) -> NewTask {
     if let Some(version) = &file.version {
         task = task.meta(meta::VERSION, version);
     }
+    if let Some(thumbnail) = &of.thumbnail {
+        task = task.meta(meta::THUMBNAIL, thumbnail);
+    }
     task
+}
+
+/// The mods whose pictures queued downloads show, once each. The catalog forgets its picture ids when deadloader
+/// closes; asking it for these again after a start makes the ids in the tasks valid again.
+pub fn with_thumbnails(tasks: &[TaskInfo]) -> Vec<(Section, u64)> {
+    let mut mods = Vec::new();
+    for task in tasks
+        .iter()
+        .filter(|t| t.meta.contains_key(meta::THUMBNAIL))
+    {
+        let Ok(download) = download_of(task) else {
+            continue;
+        };
+        let target = (download.section, download.mod_id);
+        if !mods.contains(&target) {
+            mods.push(target);
+        }
+    }
+    mods
 }
 
 /// A mod an imported profile names but the library lacks (D9), with the GameBanana files it used.
@@ -82,24 +108,32 @@ pub struct NotStarted {
 }
 
 /// "Download missing" in D9: a task per listed file. `find` gives a file with its download URL (fetching the mod
-/// page when it isn't saved); a file GameBanana no longer lists is E24 for its mod.
+/// page when it isn't saved); a file GameBanana no longer lists is E24 for its mod. `thumbnail` gives the mod's
+/// picture id, asked after `find`.
 pub fn tasks_for_missing(
     mods: &[MissingMod],
     mut find: impl FnMut(Section, u64, u64) -> Result<Option<RemoteFile>, UserMessage>,
+    mut thumbnail: impl FnMut(Section, u64) -> Option<String>,
 ) -> (Vec<NewTask>, Vec<NotStarted>) {
     let mut tasks = Vec::new();
     let mut failed = Vec::new();
     for m in mods {
-        let of = ModRef {
+        let mut of = ModRef {
             section: m.section,
             mod_id: m.mod_id,
             name: m.name.clone(),
             author: None,
+            thumbnail: None,
         };
         let mut problem = None;
         for &file_id in &m.file_ids {
             match find(m.section, m.mod_id, file_id) {
-                Ok(Some(file)) => tasks.push(task_for(&file, &of)),
+                Ok(Some(file)) => {
+                    if of.thumbnail.is_none() {
+                        of.thumbnail = thumbnail(m.section, m.mod_id);
+                    }
+                    tasks.push(task_for(&file, &of));
+                }
                 Ok(None) => {
                     problem = Some(
                         UserMessage::new(MessageId::E24)
@@ -271,7 +305,38 @@ mod tests {
             mod_id: 655_209,
             name: "Haze V2".to_owned(),
             author: Some("Nyx".to_owned()),
+            thumbnail: Some("0123456789abcdef0123456789abcdef".to_owned()),
         }
+    }
+
+    #[test]
+    fn pictures_of_queued_downloads_are_named_again_once_per_mod_after_a_restart() {
+        let mut one = info(&task_for(&haze_file(), &haze()));
+        one.id = TaskId(1);
+        let mut same_mod = one.clone();
+        same_mod.id = TaskId(2);
+        let mut sound = info(&task_for(
+            &haze_file(),
+            &ModRef {
+                section: Section::Sound,
+                mod_id: 9,
+                ..haze()
+            },
+        ));
+        sound.id = TaskId(3);
+        let mut without = info(&task_for(
+            &haze_file(),
+            &ModRef {
+                mod_id: 5,
+                thumbnail: None,
+                ..haze()
+            },
+        ));
+        without.id = TaskId(4);
+        assert_eq!(
+            with_thumbnails(&[one, same_mod, sound, without]),
+            [(Section::Mod, 655_209), (Section::Sound, 9)]
+        );
     }
 
     fn info(new: &NewTask) -> TaskInfo {
@@ -309,18 +374,23 @@ mod tests {
             },
         ];
         let mut asked = Vec::new();
-        let (tasks, failed) = tasks_for_missing(&missing, |section, mod_id, file_id| {
-            asked.push((section, mod_id, file_id));
-            match mod_id {
-                655_209 => Ok(Some(haze_file())),
-                1 => Err(UserMessage::new(MessageId::E24)),
-                _ => Ok(None),
-            }
-        });
+        let (tasks, failed) = tasks_for_missing(
+            &missing,
+            |section, mod_id, file_id| {
+                asked.push((section, mod_id, file_id));
+                match mod_id {
+                    655_209 => Ok(Some(haze_file())),
+                    1 => Err(UserMessage::new(MessageId::E24)),
+                    _ => Ok(None),
+                }
+            },
+            |_, mod_id| (mod_id == 655_209).then(|| "ab".repeat(16)),
+        );
         assert_eq!(asked.len(), 3);
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].meta["mod_name"], "Haze V2");
         assert_eq!(tasks[0].meta["file_id"], "1480331");
+        assert_eq!(tasks[0].meta["thumbnail"], "ab".repeat(16));
         let named: Vec<(&str, MessageId)> = failed
             .iter()
             .map(|f| (f.name.as_str(), f.message.id))
@@ -346,6 +416,18 @@ mod tests {
             Some("Haze V2 - haze_v2.vpk"),
             "174"
         );
+        assert_eq!(
+            task.meta["thumbnail"], "0123456789abcdef0123456789abcdef",
+            "the row shows the mod's picture"
+        );
+        let without = task_for(
+            &haze_file(),
+            &ModRef {
+                thumbnail: None,
+                ..haze()
+            },
+        );
+        assert!(!without.meta.contains_key("thumbnail"));
         let download = download_of(&info(&task)).expect("ours");
         assert_eq!(
             download,

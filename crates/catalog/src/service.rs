@@ -543,6 +543,26 @@ where
             .find(|f| f.id == file_id)
     }
 
+    /// The picture a download of this mod shows in its row: the first picture of its saved page at card size
+    /// (220 px), under the same id as the card's own. Nothing is requested; `None` when the page isn't saved, has no
+    /// pictures, or the mod is NSFW and NSFW isn't shown (a row has no blur).
+    pub fn download_thumbnail(&self, section: Section, mod_id: u64) -> Option<ImageId> {
+        let card = self.saved_details(section, mod_id)?;
+        let d = &card.value;
+        let nsfw = is_nsfw(!d.content_ratings.is_empty(), d.initial_visibility);
+        if nsfw && self.config().nsfw != NsfwMode::Shown {
+            return None;
+        }
+        let image = d.gallery.first()?;
+        let mut registry = lock(&self.inner.registry);
+        register_gamebanana(
+            &mut registry,
+            Kind::Thumbnail,
+            image.thumbnail_url(220, 1.0),
+            Initiator::Auto,
+        )
+    }
+
     // ---- update checks (decision 164)
 
     /// What an update check needs about one mod: its listed files, or why it is gone. Asked every time (a check is

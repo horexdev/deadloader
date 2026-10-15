@@ -24,6 +24,7 @@ import {
   card,
   libraryMod,
   modPage,
+  pictureId,
   settings as defaultSettings,
   soundCard,
   soundPage,
@@ -529,7 +530,14 @@ function startDownload(modId: number, fileId: number, name: string): number {
     md5: null,
     size: total,
     initiator: 'user',
-    meta: { section: 'mod', mod_id: String(modId), file_id: String(fileId), mod_name: name },
+    meta: {
+      section: 'mod',
+      mod_id: String(modId),
+      file_id: String(fileId),
+      mod_name: name,
+      // The core names the picture of the saved mod page.
+      thumbnail: pictureId(modId, 'small'),
+    },
     state: { state: 'queued' },
     bytes: 0,
     total,

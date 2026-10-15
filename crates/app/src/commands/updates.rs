@@ -94,10 +94,7 @@ fn update_download(
     file: u64,
 ) -> Result<deadloader_downloads::NewTask, UserMessage> {
     let catalog = c.wait()?;
-    let section = match target.section {
-        deadloader_core::library::Section::Mod => Section::Mod,
-        deadloader_core::library::Section::Sound => Section::Sound,
-    };
+    let section = catalog_section(target.section);
     if catalog.remote_file(section, target.mod_id, file).is_none() {
         catalog
             .details(
@@ -116,8 +113,19 @@ fn update_download(
         mod_id: target.mod_id,
         name: target.name.clone(),
         author: target.author.clone(),
+        thumbnail: catalog
+            .download_thumbnail(section, target.mod_id)
+            .map(|id| id.to_string()),
     };
     Ok(crate::downloads::update_task_for(&remote, &of, replaced))
+}
+
+/// The library's section as the catalog names it.
+pub(crate) fn catalog_section(section: deadloader_core::library::Section) -> Section {
+    match section {
+        deadloader_core::library::Section::Mod => Section::Mod,
+        deadloader_core::library::Section::Sound => Section::Sound,
+    }
 }
 
 /// A catalog answer as the message a download-like action shows.

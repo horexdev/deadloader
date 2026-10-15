@@ -124,19 +124,23 @@ pub async fn profile_download_missing(
     let downloads = Arc::clone(downloads.inner());
     on_catalog(slot, move |c| {
         let catalog = c.wait()?;
-        let (tasks, mut failed) =
-            crate::downloads::tasks_for_missing(&mods, |section, mod_id, file_id| {
-                let section = match section {
-                    deadloader_core::library::Section::Mod => Section::Mod,
-                    deadloader_core::library::Section::Sound => Section::Sound,
-                };
+        let (tasks, mut failed) = crate::downloads::tasks_for_missing(
+            &mods,
+            |section, mod_id, file_id| {
+                let section = super::updates::catalog_section(section);
                 if catalog.remote_file(section, mod_id, file_id).is_none() {
                     catalog
                         .details(section, mod_id, None, deadloader_catalog::Initiator::User)
                         .map_err(|e| super::updates::catalog_message(&e))?;
                 }
                 Ok(catalog.remote_file(section, mod_id, file_id))
-            });
+            },
+            |section, mod_id| {
+                catalog
+                    .download_thumbnail(super::updates::catalog_section(section), mod_id)
+                    .map(|id| id.to_string())
+            },
+        );
         let mut started = Vec::new();
         for task in tasks {
             let name = task.meta.get("mod_name").cloned().unwrap_or_default();
