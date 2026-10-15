@@ -260,6 +260,25 @@ pub async fn catalog_grant(
     on_catalog(slot, move |c| catalog::grant(c, &id, scope)).await
 }
 
+/// "Check for updates" (38): every GameBanana mod of the library against its file list on GameBanana.
+#[tauri::command]
+pub async fn updates_check(
+    slot: Slot<'_>,
+    backend: Shared<'_>,
+) -> Reply<crate::updates::UpdateReport> {
+    let backend = Arc::clone(backend.inner());
+    on_catalog(slot, move |c| {
+        let catalog = c.wait()?;
+        let manifest = backend.manifest()?;
+        Ok(crate::updates::check_all(
+            &manifest,
+            &catalog,
+            deadloader_catalog::Initiator::User,
+        ))
+    })
+    .await
+}
+
 /// Install (F2): the file of a mod page the UI showed becomes a download. `name` and `author` are what the page showed.
 #[tauri::command]
 pub async fn download_install(

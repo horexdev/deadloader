@@ -140,7 +140,8 @@ export type UiEvent =
   | { event: 'notice'; data: Notice }
   | { event: 'catalog'; data: CatalogEvent }
   | { event: 'download'; data: DownloadEvent }
-  | { event: 'installed'; data: { task: TaskId; installed: Installed } };
+  | { event: 'installed'; data: { task: TaskId; installed: Installed } }
+  | { event: 'updates'; data: UpdateReport };
 
 /**
  * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.
@@ -419,6 +420,67 @@ export const downloads = {
     call<TaskId>('download_install', { section, modId, fileId, name, author }),
   list: () => call<TaskSnapshot[]>('downloads'),
   control: (id: TaskId, action: DownloadAction) => call<null>('download_control', { id, action }),
+};
+
+// ---- mod updates (crates/core/src/updates.rs; crates/app/src/updates.rs)
+
+export interface RemoteModFile {
+  id: number;
+  file_name: string;
+  size_bytes: number;
+  date_added: number | null;
+  version: string | null;
+  description: string | null;
+}
+
+export interface UpdatePost {
+  id: number;
+  title: string;
+  version: string | null;
+  date_added: number | null;
+  changelog: { category: string | null; text: string }[];
+  file_ids: number[];
+  /** Untrusted HTML: never render it as is. */
+  text_html: string;
+}
+
+export type RemovedReason = 'deleted' | 'trashed' | 'withheld' | 'private' | 'no_files';
+
+export interface Replaced {
+  remote_file_id: number;
+  archive_name: string;
+  files: string[];
+  candidate: { file: RemoteModFile; matched_by: 'same' | 'without_suffix'; in_library: string[] } | null;
+}
+
+export type UpdateStatus =
+  | { kind: 'local' }
+  | { kind: 'not_checked' }
+  | { kind: 'untracked' }
+  | { kind: 'up_to_date' }
+  | { kind: 'new_files'; files: RemoteModFile[] }
+  | {
+      kind: 'update_available';
+      version: string | null;
+      date_updated: number | null;
+      replaced: Replaced[];
+      kept: number[];
+      others: RemoteModFile[];
+      posts: UpdatePost[];
+    }
+  | { kind: 'removed'; reason: RemovedReason };
+
+export interface UpdateReport {
+  checks: { mod_id: string; status: UpdateStatus }[];
+  /** N3. */
+  available: number;
+  /** Why the check stopped early; the mods not asked are `not_checked`. */
+  stopped: CatalogError | null;
+}
+
+export const updates = {
+  /** "Check for updates" (38). */
+  check: () => callCatalog<UpdateReport>('updates_check'),
 };
 
 export function isUserMessage(value: unknown): value is UserMessage {

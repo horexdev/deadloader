@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   Channel: FakeChannel,
 }));
 
-const { api, catalog, downloads, imageUrl, isUserMessage, subscribe } = await import('./api');
+const { api, catalog, downloads, imageUrl, isUserMessage, subscribe, updates } = await import('./api');
 
 describe('api', () => {
   beforeEach(() => {
@@ -147,6 +147,14 @@ describe('api', () => {
       ['download_control', { id: 17, action: 'pause' }],
       ['download_control', { id: 17, action: 'cancel' }],
     ]);
+  });
+
+  it('checks for mod updates through the catalog failure path', async () => {
+    invoke.mockResolvedValue({ checks: [], available: 0, stopped: null });
+    await updates.check();
+    expect(invoke.mock.calls).toEqual([['updates_check', {}]]);
+    invoke.mockRejectedValue({ id: 'E1', args: {} });
+    await expect(updates.check()).rejects.toEqual({ id: 'E1', args: {} });
   });
 
   it('builds picture addresses on the image protocol only', () => {

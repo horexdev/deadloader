@@ -42,6 +42,8 @@ pub enum UiEvent {
     Catalog(deadloader_catalog::Event),
     /// A download was added, moved on, made progress or left the queue.
     Download(deadloader_downloads::Event),
+    /// The result of a mod update check (N3 and the badges); after the automatic check at start too.
+    Updates(crate::updates::UpdateReport),
     /// A finished download is in the library (F2); with `changed` it is enabled, otherwise D4 asks for variants.
     Installed {
         task: deadloader_downloads::TaskId,

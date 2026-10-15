@@ -74,6 +74,11 @@ impl Reply {
         self.headers.push((name.to_owned(), value.to_owned()));
         self
     }
+
+    pub fn body(mut self, body: &[u8]) -> Self {
+        self.body = body.to_vec();
+        self
+    }
 }
 
 /// Answers by URL. A URL with several replies uses them in turn and repeats the last one; an unscripted URL fails

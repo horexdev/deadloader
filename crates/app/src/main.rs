@@ -15,6 +15,7 @@ mod policy;
 mod protocol;
 mod push;
 mod startup;
+mod updates;
 mod webview;
 
 use std::process::ExitCode;

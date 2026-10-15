@@ -14,6 +14,7 @@ use crate::library::{
 use crate::overlap::FileIndex;
 use crate::overlap::game_path;
 use crate::selection;
+use serde::Serialize;
 use std::collections::HashMap;
 
 /// What GameBanana says about one mod now.
@@ -34,7 +35,7 @@ pub struct ListedMod {
 }
 
 /// A file listed on the mod page.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RemoteFile {
     pub id: u64,
     pub file_name: String,
@@ -44,7 +45,7 @@ pub struct RemoteFile {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UpdatePost {
     pub id: u64,
     pub title: String,
@@ -57,14 +58,15 @@ pub struct UpdatePost {
     pub text_html: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChangeEntry {
     pub category: Option<String>,
     pub text: String,
 }
 
 /// Why a mod can't be updated from GameBanana any more.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RemovedReason {
     /// GameBanana has no such mod.
     Deleted,
@@ -78,13 +80,14 @@ pub enum RemovedReason {
 }
 
 /// The result for one library mod.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModCheck {
     pub mod_id: String,
     pub status: Status,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Status {
     /// Imported from disk without a GameBanana link: never checked.
     Local,
@@ -104,7 +107,7 @@ pub enum Status {
 }
 
 /// What D5 shows for a mod with replaced files.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Update {
     pub version: Option<String>,
     pub date_updated: Option<i64>,
@@ -118,7 +121,7 @@ pub struct Update {
     pub posts: Vec<UpdatePost>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Replaced {
     /// The GameBanana file our library files came from.
     pub remote_file_id: u64,
@@ -129,7 +132,7 @@ pub struct Replaced {
     pub candidate: Option<Candidate>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Candidate {
     pub file: RemoteFile,
     pub matched_by: NameMatch,
@@ -137,7 +140,8 @@ pub struct Candidate {
     pub in_library: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum NameMatch {
     /// The same name, ignoring letter case.
     Same,
@@ -654,6 +658,33 @@ mod tests {
 
     // Ids, names and dates from the recorded GameBanana answers for Manhattan Cafe (638388) and Sabrina (633086),
     // unless a comment says otherwise.
+
+    /// The shape the UI reads (`ui/src/lib/api.ts`).
+    #[test]
+    fn results_are_tagged_for_the_ui() {
+        let removed = ModCheck {
+            mod_id: "gb-1".to_owned(),
+            status: Status::Removed {
+                reason: RemovedReason::Withheld,
+            },
+        };
+        assert_eq!(
+            serde_json::to_value(&removed).expect("json"),
+            serde_json::json!({"mod_id": "gb-1", "status": {"kind": "removed", "reason": "withheld"}})
+        );
+        let update = Status::UpdateAvailable(Update {
+            version: Some("v5.3".to_owned()),
+            date_updated: None,
+            replaced: Vec::new(),
+            kept: vec![7],
+            others: Vec::new(),
+            posts: Vec::new(),
+        });
+        let json = serde_json::to_value(&update).expect("json");
+        assert_eq!(json["kind"], "update_available");
+        assert_eq!(json["version"], "v5.3");
+        assert_eq!(json["kept"], serde_json::json!([7]));
+    }
 
     fn lib_file(id: &str, remote: Option<u64>, archive: &str) -> ModFile {
         ModFile {

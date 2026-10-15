@@ -113,6 +113,7 @@ pub fn run() -> Result<(), StartError> {
             commands::download_install,
             commands::downloads,
             commands::download_control,
+            commands::updates_check,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
@@ -223,8 +224,9 @@ fn open_catalog(app: AppHandle, slot: Arc<CatalogSlot>, parts: CatalogParts, log
                 Arc::clone(&log) as deadloader_core::session::SharedLog,
                 Arc::clone(&log) as Arc<dyn deadloader_catalog::AppLog>,
                 &backend,
-                parts.outbox,
+                Arc::clone(&parts.outbox),
             );
+            let outbox = parts.outbox;
             match &opened {
                 Ok(catalog) => {
                     let follow = catalog.clone();
@@ -242,7 +244,11 @@ fn open_catalog(app: AppHandle, slot: Arc<CatalogSlot>, parts: CatalogParts, log
                     [("message", serde_json::to_value(message).unwrap_or_default())],
                 ),
             }
-            slot.set(opened);
+            // Open for the UI first: the update check can take a while with many mods.
+            slot.set(opened.clone());
+            if let Ok(catalog) = &opened {
+                check_updates_at_start(&backend, catalog, &outbox, &log);
+            }
         });
     if let Err(e) = spawned {
         write(
@@ -252,6 +258,36 @@ fn open_catalog(app: AppHandle, slot: Arc<CatalogSlot>, parts: CatalogParts, log
             [("error", e.to_string().into())],
         );
     }
+}
+
+/// Decision 38: the automatic check at every start, unless it is turned off or the catalog is (local mode).
+fn check_updates_at_start(
+    backend: &Backend,
+    catalog: &catalog::AppCatalog,
+    outbox: &Outbox,
+    log: &Log,
+) {
+    let Ok(settings) = backend.settings() else {
+        return;
+    };
+    if !settings.library.check_updates_at_start || settings.is_local_mode() {
+        return;
+    }
+    let Ok(manifest) = backend.manifest() else {
+        return;
+    };
+    let report = crate::updates::check_all(&manifest, catalog, deadloader_catalog::Initiator::Auto);
+    write(
+        log,
+        Level::Info,
+        "mod update check at start",
+        [
+            ("mods", report.checks.len().into()),
+            ("updates_available", report.available.into()),
+            ("stopped", report.stopped.is_some().into()),
+        ],
+    );
+    outbox.send(UiEvent::Updates(report));
 }
 
 /// Decision 143's watcher: looks for the game every [`push::GAME_POLL`] on its own thread, for the life of the process.

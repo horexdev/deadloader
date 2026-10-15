@@ -130,6 +130,11 @@ impl Backend {
         }))
     }
 
+    /// A copy of the library's manifest, for the update check.
+    pub fn manifest(&self) -> Result<deadloader_core::library::Manifest, UserMessage> {
+        self.with(|s| Ok(s.manifest().clone()))
+    }
+
     pub fn library(&self) -> Result<LibraryView, UserMessage> {
         self.with(|s| Ok(s.library()))
     }
