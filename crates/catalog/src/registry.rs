@@ -14,7 +14,7 @@ pub(crate) const CAPACITY: usize = 20_000;
 pub(crate) enum Kind {
     /// A catalog card's picture (220 or 530 px).
     Thumbnail,
-    /// A mod page's gallery picture (530 px).
+    /// A mod page's gallery picture, shown with the page at the size the display needs.
     Gallery,
     /// A gallery picture at full size, on demand.
     Original,

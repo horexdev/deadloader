@@ -43,7 +43,7 @@
   import { describe, formatDate, formatList, formatNumber, formatSize, t } from '../../i18n';
   import Description from './Description.svelte';
   import { browser, type BrowseError } from './browse.svelte';
-  import { exactTime, fileAction, installedVersion, isActive, libraryModOf, relativeTime } from './model';
+  import { exactTime, fileAction, galleryPicture, installedVersion, isActive, libraryModOf, relativeTime } from './model';
 
   interface Props {
     section: Section;
@@ -59,6 +59,8 @@
   let original = $state(false);
   let revealed = $state(false);
   let busyFile = $state<number | null>(null);
+  /** The gallery's width in CSS pixels (0 until measured). */
+  let galleryWidth = $state(0);
 
   const mod = $derived(libraryModOf(app.library, section, id));
   const offline = $derived(app.network.kind === 'offline');
@@ -393,9 +395,9 @@
     <div class="columns">
       <div class="column">
         {#if image && !current.nsfw_hidden}
-          <figure class="gallery">
+          <figure class="gallery" bind:clientWidth={galleryWidth}>
             <img
-              src={imageUrl(original ? image.original : image.preview)}
+              src={imageUrl(original ? image.original : galleryPicture(image, galleryWidth, window.devicePixelRatio))}
               alt={image.caption ?? t('catalog-gallery-alt', { name: current.name, index: picture + 1 })}
               class={[blurred && 'blurred']}
             />
