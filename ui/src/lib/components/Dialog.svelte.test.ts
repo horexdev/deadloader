@@ -102,6 +102,18 @@ describe('Dialog', () => {
     expect(document.activeElement).toBe(button);
   });
 
+  it('has a close button in the head when it is given a label', () => {
+    const oncancel = vi.fn();
+    const plain = render(Dialog, { title: 'Open?', children: body, footer: plainFooter, oncancel });
+    expect(plain.target.querySelector('.dl-dialog__head button')).toBeNull();
+    const { target } = render(Dialog, { title: 'x', children: body, footer, oncancel, closeLabel: 'Close (Esc)' });
+    const close = one<HTMLButtonElement>(target, '.dl-dialog__head button');
+    expect(close.getAttribute('aria-label')).toBe('Close (Esc)');
+    expect(close.title).toBe('Close (Esc)');
+    close.click();
+    expect(oncancel).toHaveBeenCalledOnce();
+  });
+
   it('puts secondary actions at the start of the footer', () => {
     const footerStart = createRawSnippet(() => ({ render: () => '<button class="folder">Open folder</button>' }));
     const { target } = render(Dialog, { title: 'x', children: body, footer, footerStart, oncancel: vi.fn() });
