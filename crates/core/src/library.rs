@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::io::{self, Write};
+use std::io;
 use std::path::Path;
 
 pub const SCHEMA: u32 = 1;
@@ -290,17 +290,7 @@ pub fn profile_file_name(name: &str) -> Result<String, ModelError> {
 /// Writes atomically: temp file, flushed, previous version kept as `.bak`, then renamed into place.
 pub fn save_manifest(path: &Path, manifest: &Manifest) -> Result<(), ModelError> {
     manifest.validate()?;
-    let text = to_json(manifest)?;
-    let tmp = path.with_extension("json.tmp");
-    {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        f.sync_all()?;
-    }
-    if path.exists() {
-        std::fs::copy(path, path.with_extension("json.bak"))?;
-    }
-    std::fs::rename(&tmp, path)?;
+    crate::fs::write_atomic(path, &to_json(manifest)?)?;
     Ok(())
 }
 

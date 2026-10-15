@@ -26,7 +26,7 @@ use serde::de::{self, DeserializeOwned, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::fmt;
-use std::io::{self, Write};
+use std::io;
 use std::path::Path;
 use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
 
@@ -1301,17 +1301,7 @@ pub fn to_json(settings: &Settings) -> Result<String, SettingsError> {
 
 /// Writes atomically: temp file, flushed, previous version kept as `.bak`, then renamed into place.
 pub fn save(path: &Path, settings: &Settings) -> Result<(), SettingsError> {
-    let text = to_json(settings)?;
-    let tmp = path.with_extension("json.tmp");
-    {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        f.sync_all()?;
-    }
-    if path.exists() {
-        std::fs::copy(path, path.with_extension("json.bak"))?;
-    }
-    std::fs::rename(&tmp, path)?;
+    crate::fs::write_atomic(path, &to_json(settings)?)?;
     Ok(())
 }
 
