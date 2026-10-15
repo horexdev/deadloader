@@ -30,6 +30,10 @@
     item: Snippet<[T, number, { active: boolean }]>;
     /** The rendered item range changed (start inclusive, end exclusive), e.g. to fetch the next page early. */
     onrangechange?: (start: number, end: number) => void;
+    /** Where to start scrolled to, e.g. the position the user left the list at. */
+    initialScrollTop?: number;
+    /** The list was scrolled (to remember the position). */
+    onscroll?: (top: number) => void;
   }
 
   let {
@@ -44,6 +48,8 @@
     activeIndex = $bindable(0),
     item,
     onrangechange,
+    initialScrollTop = 0,
+    onscroll,
   }: Props = $props();
 
   let viewport: HTMLElement | undefined = $state();
@@ -108,6 +114,11 @@
     };
     // Measure once now without making this effect depend on the size it writes.
     untrack(measure);
+    untrack(() => {
+      if (initialScrollTop > 0) {
+        setScrollTop(initialScrollTop);
+      }
+    });
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
@@ -186,7 +197,10 @@
   data-virtual-viewport
   role="list"
   aria-label={label}
-  onscroll={() => (scrollTop = viewport?.scrollTop ?? 0)}
+  onscroll={() => {
+    scrollTop = viewport?.scrollTop ?? 0;
+    onscroll?.(scrollTop);
+  }}
   onkeydown={handleKeydown}
   onfocusin={handleFocusin}
   onfocusout={handleFocusout}

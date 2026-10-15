@@ -153,6 +153,31 @@ export function formatTime(moment: Date | number): string {
   }).format(moment);
 }
 
+/** The time of day to the second ("14:32:09"), for log entries. */
+export function formatClock(moment: Date | number): string {
+  return new Intl.DateTimeFormat(language(), {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: regionHourCycle,
+  }).format(moment);
+}
+
+/** Weekday, date and time to the millisecond ("Thu, 15 Oct 2026, 14:32:09.601"): a log entry's exact time. */
+export function formatInstant(moment: Date | number): string {
+  return new Intl.DateTimeFormat(language(), {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,
+    hourCycle: regionHourCycle,
+  }).format(moment);
+}
+
 /**
  * Day and month, plus the year when it is not the current one. The month is written out: abbreviations end with a
  * dot in many of our languages ("12. Okt."), which reads badly at the end of a sentence.

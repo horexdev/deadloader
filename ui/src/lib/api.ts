@@ -15,6 +15,8 @@ export type Source =
 
 export interface FileView {
   id: string;
+  /** The GameBanana file it came from (or was linked to); the mod page tells installed files by it. */
+  remote_file_id: number | null;
   archive_name: string;
   inner_path: string;
   version: string | null;
@@ -150,7 +152,8 @@ export type UiEvent =
   | { event: 'download'; data: DownloadEvent }
   | { event: 'installed'; data: { task: TaskId; installed: Installed } }
   | { event: 'updates'; data: UpdateReport }
-  | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } };
+  | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } }
+  | { event: 'log'; data: { kinds: LogKind[] } };
 
 /**
  * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.
@@ -227,10 +230,40 @@ export interface Listing {
   origin: Origin;
 }
 
+/** A category of a section; under Skins the subcategories are the heroes (131). */
+export interface Category {
+  id: number;
+  name: string;
+  item_count: number;
+  subcategory_count: number;
+}
+
 export interface Categories {
-  items: Record<string, unknown>[];
+  items: Category[];
   origin: Origin;
 }
+
+export interface CreditGroup {
+  name: string;
+  authors: { name: string; role: string | null }[];
+}
+
+/** A specific rating; unknown ones keep GameBanana's code and English label. */
+export type ContentRating =
+  | 'sexual_themes'
+  | 'sexual_content'
+  | 'skimpy_attire'
+  | 'lewd_angles_and_poses'
+  | 'full_nudity'
+  | { other: { code: string; label: string } };
+
+export interface AlternateSource {
+  url: string;
+  description: string | null;
+}
+
+/** GameBanana's own antivirus scan of a file (131). */
+export type Antivirus = 'clean' | 'not_reported' | { flagged: string } | { unfinished: string };
 
 export interface GalleryImage {
   preview: ImageId;
@@ -247,7 +280,7 @@ export interface CatalogFile {
   description: string | null;
   version: string | null;
   md5: string | null;
-  antivirus: unknown;
+  antivirus: Antivirus;
 }
 
 export type Access = 'load' | 'click' | 'consent';
@@ -274,7 +307,7 @@ export interface ModPage {
   name: string;
   version: string | null;
   author: string | null;
-  credits: unknown[];
+  credits: CreditGroup[];
   category_path: CategoryRef[];
   gallery: GalleryImage[];
   has_audio_preview: boolean;
@@ -289,10 +322,10 @@ export interface ModPage {
   date_updated: number | null;
   nsfw: boolean;
   nsfw_hidden: boolean;
-  content_ratings: unknown[];
+  content_ratings: ContentRating[];
   obsolete: boolean;
   embedded_media: string[];
-  alternate_sources: unknown[];
+  alternate_sources: AlternateSource[];
   files: CatalogFile[];
   archived_files: CatalogFile[];
   origin: Origin;
@@ -378,6 +411,26 @@ export const catalog = {
   activate: (id: ImageId) => callCatalog<null>('catalog_activate', { id }),
   consentPrompt: (id: ImageId) => callCatalog<ConsentPrompt>('catalog_consent_prompt', { id }),
   grant: (id: ImageId, scope: Scope) => callCatalog<Granted>('catalog_grant', { id, scope }),
+};
+
+/** A mod marked with the heart (34), with what its card showed, so "favourites only" works without GameBanana. */
+export interface Favourite {
+  section: Section;
+  id: number;
+  name: string;
+  author: string | null;
+  root_category: CategoryRef | null;
+  subcategory: CategoryRef | null;
+  nsfw: boolean;
+  /** Unix seconds; lets the catalog serve a saved mod page as current. */
+  date_updated: number | null;
+}
+
+export const favourites = {
+  /** Newest first. */
+  list: () => call<Favourite[]>('favourites'),
+  /** Marks (`on`) or unmarks a mod; the whole list comes back. */
+  set: (favourite: Favourite, on: boolean) => call<Favourite[]>('set_favourite', { favourite, on }),
 };
 
 // ---- downloads (crates/downloads/src/task.rs; crates/app/src/downloads.rs)
@@ -634,6 +687,128 @@ export const api = {
   addFromDisk: (text: DialogText) => call<ImportResult[]>('add_from_disk', { text }),
   exportProfileDialog: (name: string, text: DialogText) => call<boolean>('export_profile_dialog', { name, text }),
   importProfileDialog: (text: DialogText) => call<ProfileImported | null>('import_profile_dialog', { text }),
+  /** D3 (109): the user confirmed legal age; the saved settings come back. */
+  confirmAge: () => call<Settings>('confirm_age'),
+  /** D1's Open (31): the page in the user's browser; only https pages are opened. */
+  openLink: (url: string) => call<null>('open_link', { url }),
+};
+
+// ---- Activity: the logs (crates/core/src/log.rs, activity.rs; crates/app/src/commands/activity.rs)
+
+export type LogKind = 'network' | 'files' | 'app';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogRange = 'hour' | 'today' | '7d' | '30d';
+export type LogResults = 'all' | 'ok' | 'error';
+export type HostSource = 'builtin' | 'github' | 'user' | 'user-image';
+export type Purpose = 'catalog' | 'thumbnail' | 'description-image' | 'download' | 'update-check';
+export type FileOp = 'hardlink' | 'copy' | 'rename' | 'delete' | 'write' | 'backup' | 'restore';
+
+/** The fields every log line starts with; `ts` is RFC 3339 with the local offset and milliseconds. */
+export interface LogLine {
+  ts: string;
+  id: string;
+  lvl: LogLevel;
+  msg: string;
+}
+
+/** One hop or try of a request (`network-*.jsonl`). */
+export interface NetworkLine extends LogLine {
+  req: string;
+  hop: number;
+  /** Written only for retries; 1 when missing. */
+  attempt?: number;
+  method: string;
+  url: string;
+  host_source?: HostSource;
+  initiator: 'auto' | 'user';
+  purpose: Purpose;
+  status?: number;
+  /** The announced `Content-Length`. */
+  bytes?: number;
+  ms: number;
+  range?: string;
+  error?: string;
+  /** Refused before any byte left the machine: `host-not-listed`, `local-mode`, `not-https`… */
+  blocked?: string;
+}
+
+export interface FileLine extends LogLine {
+  op: FileOp;
+  src?: string;
+  dst?: string;
+  bytes?: number;
+  sha256?: string;
+  /** The change (journal transaction) it belonged to. */
+  txn?: number;
+  result: 'ok' | 'failed';
+  error?: string;
+}
+
+export interface AppLine extends LogLine {
+  fields?: Record<string, unknown>;
+}
+
+/** A row of the list with its full record: a request with every hop and try (oldest first), or one line. */
+export type LogEntry =
+  | { kind: 'network'; req: string; lines: NetworkLine[] }
+  | { kind: 'files'; record: FileLine }
+  | { kind: 'app'; record: AppLine };
+
+/** Where a page ended; hand it back as it came. */
+export interface LogCursor {
+  file: string;
+  offset: number;
+  skip: string[];
+}
+
+export interface LogQuery {
+  kind: LogKind;
+  range: LogRange;
+  purpose?: Purpose | null;
+  op?: FileOp | null;
+  level?: LogLevel | null;
+  result?: LogResults;
+  host?: string | null;
+  text?: string;
+  cursor?: LogCursor | null;
+  limit?: number;
+}
+
+export interface LogPage {
+  entries: LogEntry[];
+  /** `null`: nothing older in the range. */
+  cursor: LogCursor | null;
+}
+
+export interface LogCounts {
+  network: { requests: number; failed: number; purposes: Partial<Record<Purpose, number>>; hosts: Record<string, number> };
+  files: { operations: number; failed: number; ops: Partial<Record<FileOp, number>> };
+  app: { events: number; errors: number; levels: Partial<Record<LogLevel, number>> };
+}
+
+export interface LogSummary {
+  contacted: { host: string; requests: number; source: HostSource | null }[];
+  blocked: { host: string; requests: number; last: string }[];
+  game: {
+    changes: number;
+    ops: Partial<Record<FileOp, number>>;
+    gameinfo: number;
+    failed: number;
+    batches: number;
+    folders: string[];
+  };
+  /** Nothing in the network or files log at all: a fresh install. */
+  empty: boolean;
+}
+
+export const activity = {
+  page: (query: LogQuery) => call<LogPage>('log_page', { query }),
+  /** One entry by line id or request id; a network line gives its whole request. */
+  entry: (id: string) => call<LogEntry | null>('log_entry', { id }),
+  counts: (range: LogRange) => call<LogCounts>('log_counts', { range }),
+  summary: () => call<LogSummary>('log_summary'),
+  /** Opens deadloader's logs folder in File Explorer; resolves to the folder as it may be shown. */
+  openFolder: () => call<string>('open_logs_folder'),
 };
 
 // ---- Settings, the first-run wizard and maintenance (S8, S1, D7, D8; crates/app/src/commands/settings.rs)

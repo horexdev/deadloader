@@ -50,6 +50,13 @@ describe('CatalogCard', () => {
     expect(one(failing.card, '.dl-card__thumb-missing')).toBeTruthy();
   });
 
+  it('tells the page when its thumbnail failed, so the page can be fetched again', () => {
+    const onthumberror = vi.fn();
+    const { card } = setup({ onthumberror });
+    fire(one(card, '.dl-card__thumb img'), 'error', { bubbles: false });
+    expect(onthumberror).toHaveBeenCalledTimes(1);
+  });
+
   it('shows state badges on the thumbnail', () => {
     const { card } = setup({
       badges: [
