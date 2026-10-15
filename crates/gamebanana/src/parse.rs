@@ -1164,4 +1164,51 @@ mod tests {
             None
         );
     }
+
+    /// The catalog keeps pages and mod pages in its on-disk cache as JSON; what comes back must be what went in.
+    #[test]
+    fn mapped_types_survive_a_json_round_trip() {
+        let page = parse_list(Section::Mod, fixture!("mod_index.json")).expect("parses");
+        let json = serde_json::to_vec(&page).expect("serialises");
+        assert_eq!(
+            serde_json::from_slice::<CatalogPage>(&json).expect("deserialises"),
+            page
+        );
+
+        let details = parse_details(Section::Mod, fixture!("mod_profile.json")).expect("parses");
+        let json = serde_json::to_vec(&details).expect("serialises");
+        assert_eq!(
+            serde_json::from_slice::<ModDetails>(&json).expect("deserialises"),
+            details
+        );
+
+        let sounds = parse_details(Section::Sound, fixture!("sound_profile.json")).expect("parses");
+        let json = serde_json::to_vec(&sounds).expect("serialises");
+        assert_eq!(
+            serde_json::from_slice::<ModDetails>(&json).expect("deserialises"),
+            sounds
+        );
+
+        let categories =
+            parse_categories(Section::Mod, fixture!("categories_root.json")).expect("parses");
+        let json = serde_json::to_vec(&categories).expect("serialises");
+        assert_eq!(
+            serde_json::from_slice::<Vec<Category>>(&json).expect("deserialises"),
+            categories
+        );
+    }
+
+    #[test]
+    fn enums_have_stable_snake_case_names() {
+        assert_eq!(serde_json::to_value(Section::Sound).expect("json"), "sound");
+        assert_eq!(
+            serde_json::to_value(Visibility::Warn).expect("json"),
+            "warn"
+        );
+        assert_eq!(
+            serde_json::to_value(crate::Sort::MostDownloaded).expect("json"),
+            "most_downloaded"
+        );
+        assert_eq!(serde_json::to_value(ImageSize::W220).expect("json"), "w220");
+    }
 }

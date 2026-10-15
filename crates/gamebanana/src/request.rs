@@ -5,6 +5,7 @@
 //! is fixed, which keeps URLs stable in the network log and lets tests compare them as plain strings.
 
 use crate::types::Section;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// GameBanana's id for Deadlock.
@@ -21,7 +22,8 @@ pub const SEARCH_MAX_BYTES: usize = 100;
 const BASE: &str = "https://gamebanana.com/apiv11";
 
 /// Catalog orderings GameBanana supports. There is no alphabetical order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Sort {
     Newest,
     LatestUpdated,

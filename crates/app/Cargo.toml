@@ -15,6 +15,7 @@ workspace = true
 tauri-build = { version = "=2.7.1" }
 
 [dependencies]
+deadloader-catalog = { path = "../catalog" }
 deadloader-core = { path = "../core" }
 deadloader-platform-windows = { path = "../platform-windows" }
 serde = { version = "1", features = ["derive"] }

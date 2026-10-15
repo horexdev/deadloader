@@ -1,0 +1,20 @@
+[package]
+name = "deadloader-catalog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+deadloader-core = { path = "../core" }
+deadloader-gamebanana = { path = "../gamebanana" }
+deadloader-html = { path = "../html" }
+deadloader-net = { path = "../net" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3.55", default-features = false, features = ["std"] }
