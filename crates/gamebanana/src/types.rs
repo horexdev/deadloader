@@ -170,7 +170,8 @@ pub struct ModDetails {
 
 /// Whether GameBanana still shows a submission to everyone. A submission that is gone entirely is
 /// [`crate::Error::NotFound`] instead.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Availability {
     Public,
     /// Hidden by GameBanana's moderators, usually until the author fixes something.
