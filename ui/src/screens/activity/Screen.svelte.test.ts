@@ -112,6 +112,11 @@ describe('the Activity screen', () => {
     expect(all(root, '.act-row')).toHaveLength(0);
     // The filters stay, so a longer range can show requests made before local mode (185).
     expect(one<HTMLInputElement>(root, 'input[type="search"]').disabled).toBe(false);
+    // F13: Enable catalog opens the wizard's network step.
+    const { notice } = await import('../../lib/notice.svelte');
+    click(all<HTMLButtonElement>(root, 'button').find((b) => b.textContent?.includes('Enable catalog')) as HTMLElement);
+    expect(notice.current).toEqual({ mode: 'catalog' });
+    notice.close();
   });
 
   it('keeps the requests made before local mode in view, under the local-mode banner (185)', async () => {
@@ -121,6 +126,10 @@ describe('the Activity screen', () => {
     expect(text(banner)).toContain('made before local mode was turned on');
     expect(all(root, '.act-row').length).toBeGreaterThan(0);
     expect(one(root, '[role="tab"]').textContent).not.toContain('off');
+    const { notice } = await import('../../lib/notice.svelte');
+    click(all<HTMLButtonElement>(banner, 'button').find((b) => b.textContent?.includes('Enable catalog')) as HTMLElement);
+    expect(notice.current).toEqual({ mode: 'catalog' });
+    notice.close();
     // Today's summary counts them too instead of saying there were none.
     expect(text(one(root, '.act-sum'))).toContain('images.gamebanana.com');
     expect(text(one(root, '.act-sum'))).not.toContain('No requests today');

@@ -118,8 +118,13 @@ describe('the catalog (S2)', () => {
     flushSync();
     expect(target.textContent).toContain('The catalog is off (local mode)');
     expect(target.querySelector('input[type="search"]')).toBeNull();
+    const before = location.hash;
     r.click(button(target, 'Enable catalog'));
-    expect(location.hash).toBe('#/settings/catalog');
+    // F13: the wizard's network step over the window, not a detour through Settings.
+    const { notice } = await import('../../lib/notice.svelte');
+    expect(notice.current).toEqual({ mode: 'catalog' });
+    expect(location.hash).toBe(before);
+    notice.close();
   });
 
   it('shows the API-changed state with the log entry (E4)', async () => {
