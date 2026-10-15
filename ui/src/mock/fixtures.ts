@@ -104,6 +104,7 @@ export function libraryMod(i: number, enabled: boolean, local = false): ModView 
   const id = local ? `local-${i}` : `gb-${700_000 + i}`;
   const files = [0, 1].map((n) => ({
     id: `${id}-1-${n}`,
+    remote_file_id: local ? null : 1_800_000 + i * 10 + n,
     archive_name: `${pick(HEROES, i).toLowerCase().replace(' ', '_')}.zip`,
     inner_path: `${pick(['pink', 'blue'], n)}/pak01_dir.vpk`,
     version: '1.2',
