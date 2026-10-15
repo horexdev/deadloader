@@ -97,11 +97,18 @@ pub enum Successor {
 }
 
 /// What we placed in one game installation's addons folder.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstallationState {
     pub game_root: String,
     pub applied_profile: Option<String>,
     pub applied: Vec<AppliedRecord>,
+    /// Foreign items of its addons folder the user chose to leave as they are (F9): still listed, never reported again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub left_foreign: Vec<String>,
+    /// Whether the last apply that placed files had to copy them instead of hard-linking (another drive, or a
+    /// filesystem without hard links; 124). `None` until something was placed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copies: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -403,6 +410,7 @@ mod tests {
                     file: "gb-655209-1".to_owned(),
                     len: 5_975_061,
                 }],
+                ..InstallationState::default()
             }],
             ..Manifest::default()
         }

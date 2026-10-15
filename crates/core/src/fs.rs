@@ -277,6 +277,93 @@ impl<F: ReadText, L: ?Sized> ReadText for Logged<'_, F, L> {
     }
 }
 
+/// Counts the hard links and copies made through it, so an apply can tell whether the game's files take extra disk
+/// space (decision 124's copy fallback, the library's "copied" badge).
+pub struct Counted<'a, F> {
+    fs: &'a F,
+    linked: std::cell::Cell<usize>,
+    copied: std::cell::Cell<usize>,
+}
+
+impl<F> std::fmt::Debug for Counted<'_, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Counted")
+            .field("linked", &self.linked.get())
+            .field("copied", &self.copied.get())
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a, F> Counted<'a, F> {
+    pub fn new(fs: &'a F) -> Self {
+        Self {
+            fs,
+            linked: std::cell::Cell::new(0),
+            copied: std::cell::Cell::new(0),
+        }
+    }
+
+    pub fn linked(&self) -> usize {
+        self.linked.get()
+    }
+
+    pub fn copied(&self) -> usize {
+        self.copied.get()
+    }
+}
+
+impl<F: FileOps> FileOps for Counted<'_, F> {
+    fn hard_link(&self, original: &Path, link: &Path) -> io::Result<()> {
+        let result = self.fs.hard_link(original, link);
+        if result.is_ok() {
+            self.linked.set(self.linked.get() + 1);
+        }
+        result
+    }
+
+    fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])> {
+        let result = self.fs.copy_verified(from, to);
+        if result.is_ok() {
+            self.copied.set(self.copied.get() + 1);
+        }
+        result
+    }
+
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        self.fs.remove_file(path)
+    }
+
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        self.fs.rename(from, to)
+    }
+
+    fn exists(&self, path: &Path) -> io::Result<bool> {
+        self.fs.exists(path)
+    }
+
+    fn list_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>> {
+        self.fs.list_dir(dir)
+    }
+
+    fn create_dir_all(&self, dir: &Path) -> io::Result<()> {
+        self.fs.create_dir_all(dir)
+    }
+
+    fn write_new(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        self.fs.write_new(path, bytes)
+    }
+
+    fn replace(&self, from: &Path, to: &Path) -> io::Result<()> {
+        self.fs.replace(from, to)
+    }
+}
+
+impl<F: ReadText> ReadText for Counted<'_, F> {
+    fn read_text(&self, path: &Path) -> io::Result<String> {
+        self.fs.read_text(path)
+    }
+}
+
 /// Replaces `path` with `text` so a crash leaves either version: a flushed `<name>.tmp`, the current file copied to
 /// `<name>.bak`, then a rename over it. For the JSON files users may read and edit (manifest, profiles, settings).
 pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
@@ -295,6 +382,38 @@ pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
         std::fs::copy(path, with_suffix(".bak"))?;
     }
     std::fs::rename(&tmp, path)
+}
+
+#[cfg(test)]
+mod counted_tests {
+    use super::fake::MemFs;
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn links_and_copies_made_through_it_are_counted() {
+        let fs = MemFs::default()
+            .volume(r"C:\", true)
+            .volume(r"E:\", false)
+            .with(r"C:\lib\a.vpk", b"aaa")
+            .with(r"C:\lib\b.vpk", b"bbb");
+        let counted = Counted::new(&fs);
+        crate::place::place(
+            &counted,
+            Path::new(r"C:\lib\a.vpk"),
+            Path::new(r"C:\game\a.vpk"),
+            &sha256(b"aaa"),
+        )
+        .expect("linked");
+        crate::place::place(
+            &counted,
+            Path::new(r"C:\lib\b.vpk"),
+            Path::new(r"E:\game\b.vpk"),
+            &sha256(b"bbb"),
+        )
+        .expect("copied");
+        assert_eq!((counted.linked(), counted.copied()), (1, 1));
+    }
 }
 
 #[cfg(test)]

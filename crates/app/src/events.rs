@@ -77,6 +77,8 @@ pub enum Notice {
     BrokenProfiles { names: Vec<String> },
     /// Library files that are missing or no longer readable (E14).
     DamagedFiles { files: Vec<String> },
+    /// Items in the game's mod folder deadloader didn't put there and the user hasn't left as they are (N6, F9).
+    Foreign { files: usize },
 }
 
 impl From<&session::Notice> for Notice {
