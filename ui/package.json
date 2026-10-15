@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "vite build",
+    "dev:mock": "vite --mode mock --port 5199 --strictPort",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "lint": "eslint --max-warnings 0 .",
     "test": "vitest run"

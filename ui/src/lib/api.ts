@@ -343,7 +343,8 @@ export type CatalogEvent =
 
 /** Where a catalog picture is loaded from: the core's image protocol, never the internet (ADR 0001). */
 export function imageUrl(id: ImageId): string {
-  return `https://dl.localhost/img/${id}`;
+  // `.env.mock` points the browser preview at placeholder pictures; the app always uses the image protocol.
+  return `${import.meta.env.VITE_IMAGE_ORIGIN ?? 'https://dl.localhost'}/img/${id}`;
 }
 
 function isCatalogAnswer(value: unknown): boolean {
