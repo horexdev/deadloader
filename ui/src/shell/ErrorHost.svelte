@@ -32,7 +32,7 @@
     logId={shown.message.args.log_id}
     actions={shown.actions}
     {labels}
-    activityHref="#/activity"
+    activityHref={shown.message.args.log_id ? `#/activity/${encodeURIComponent(shown.message.args.log_id)}` : undefined}
     onclose={() => app.closeError()}
   />
 {/if}

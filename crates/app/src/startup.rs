@@ -223,6 +223,7 @@ pub fn run() -> Result<(), StartError> {
         Box::new(crate::game::SteamGame),
         Arc::clone(&log) as deadloader_core::session::SharedLog,
     ));
+    backend.log_errors_to(Arc::clone(&log) as Arc<dyn deadloader_catalog::AppLog>);
     let outbox = Arc::new(Outbox::new());
     wire_activity(&app, &log, &layout, &backend, &outbox);
     // Nothing is requested until the catalog or a download asks; local mode until the first-run choice (108).
