@@ -1,7 +1,8 @@
 //! What the UI's commands call: the open session and the game on this PC, with no domain logic of its own beyond
 //! decision 138 (edits to the applied profile take effect at once while the game is closed).
 
-use deadloader_core::message::{MessageId, ToUserMessage, UserMessage};
+use deadloader_core::log::{FileEvent, FileOp, Outcome};
+use deadloader_core::message::{Area, MessageId, ToUserMessage, UserMessage, from_io};
 use deadloader_core::profiles::ProfileError;
 use deadloader_core::remove::{Delete, Permanently, RemovalPlan, RemoveError, Removed, Target};
 use deadloader_core::session::{
@@ -33,6 +34,7 @@ pub struct Backend {
     /// Why the session could not be opened (the UI shows it instead of the library).
     start_error: Option<UserMessage>,
     game: Box<dyn Game>,
+    log: SharedLog,
 }
 
 /// The result of a change in the library.
@@ -55,16 +57,18 @@ pub struct ApplyResult {
 
 impl Backend {
     pub fn start(data_dir: &Path, game: Box<dyn Game>, log: SharedLog) -> Self {
-        match Session::open(data_dir, log) {
+        match Session::open(data_dir, log.clone()) {
             Ok(opened) => Self {
                 session: Mutex::new(Some(opened.session)),
                 start_error: None,
                 game,
+                log,
             },
             Err(e) => Self {
                 session: Mutex::new(None),
                 start_error: Some(e.user_message()),
                 game,
+                log,
             },
         }
     }
@@ -213,6 +217,34 @@ impl Backend {
 
     pub fn import_profile(&self, text: &str) -> Result<ProfileImported, UserMessage> {
         self.with(|s| Ok(s.import_profile(text)?))
+    }
+
+    /// Profiles → Export: the shareable JSON written where the user chose (F14).
+    pub fn export_profile_to(&self, name: &str, path: &Path) -> Result<(), UserMessage> {
+        let text = self.export_profile(name)?;
+        let result = std::fs::write(path, text.as_bytes());
+        let mut event = FileEvent {
+            dst: Some(path.display().to_string()),
+            bytes: Some(text.len() as u64),
+            ..FileEvent::new(FileOp::Write)
+        };
+        if let Err(e) = &result {
+            event.result = Outcome::Failed;
+            event.error = Some(e.to_string());
+        }
+        self.log.record("profile exported", &event);
+        result.map_err(|e| from_io(&e, Area::Data))
+    }
+
+    /// Profiles → Import from a file the user chose.
+    pub fn import_profile_from(&self, path: &Path) -> Result<ProfileImported, UserMessage> {
+        let text = std::fs::read_to_string(path).map_err(|e| {
+            UserMessage::new(MessageId::E17)
+                .arg("reason", "unreadable")
+                .arg("file", path.display())
+                .arg("detail", e)
+        })?;
+        self.import_profile(&text)
     }
 
     pub fn settings(&self) -> Result<Settings, UserMessage> {
@@ -655,6 +687,40 @@ mod tests {
         backend.update_settings(settings).expect("saved");
         backend.remove(&id, None).expect("removed");
         assert_eq!(game.recycled.lock().expect("lock").len(), 1);
+    }
+
+    #[test]
+    fn a_profile_travels_through_a_file() {
+        let f = Fixture::new("profilefile");
+        let backend = f.backend(&FakeGame::default());
+        let file = f.dir.join("shared").join("Default.json");
+        std::fs::create_dir_all(file.parent().expect("parent")).expect("dir");
+        backend
+            .export_profile_to("Default", &file)
+            .expect("exported");
+        let text = std::fs::read_to_string(&file).expect("written");
+        assert!(text.contains("deadloader_profile"));
+        let imported = backend.import_profile_from(&file).expect("imported");
+        assert_eq!(imported.name, "Default (2)");
+    }
+
+    #[test]
+    fn a_profile_file_that_is_not_one_is_refused_plainly() {
+        let f = Fixture::new("profilebad");
+        let backend = f.backend(&FakeGame::default());
+        let file = f.dir.join("notes.json");
+        std::fs::write(&file, "[1, 2, 3]").expect("write");
+        assert_eq!(
+            backend.import_profile_from(&file).expect_err("refused").id,
+            MessageId::E17
+        );
+        assert_eq!(
+            backend
+                .import_profile_from(&f.dir.join("missing.json"))
+                .expect_err("missing")
+                .id,
+            MessageId::E17
+        );
     }
 
     #[test]

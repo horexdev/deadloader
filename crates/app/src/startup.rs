@@ -89,6 +89,9 @@ pub fn run() -> Result<(), StartError> {
             commands::import_profile,
             commands::settings,
             commands::update_settings,
+            commands::add_from_disk,
+            commands::export_profile_dialog,
+            commands::import_profile_dialog,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
