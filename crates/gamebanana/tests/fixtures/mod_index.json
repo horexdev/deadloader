@@ -1,0 +1,134 @@
+{
+    "_aMetadata": {
+        "_nRecordCount": 1234,
+        "_bIsComplete": false,
+        "_nPerpage": 50
+    },
+    "_aRecords": [
+        {
+            "_idRow": 700001,
+            "_sModelName": "Mod",
+            "_sSingularTitle": "Mod",
+            "_sIconClasses": "SubmissionType Mod",
+            "_sName": "Copper Coat for Wraith",
+            "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/700001",
+            "_tsDateAdded": 1760000000,
+            "_tsDateModified": 1761000000,
+            "_bHasFiles": true,
+            "_aTags": ["Software Used: Blender"],
+            "_aPreviewMedia": {
+                "_aImages": [
+                    {
+                        "_sType": "screenshot",
+                        "_sBaseUrl": "https:\/\/images.gamebanana.com\/img\/ss\/mods",
+                        "_sFile": "aaaa0001.jpg",
+                        "_sFile220": "220-90_aaaa0001.jpg",
+                        "_hFile220": 124,
+                        "_wFile220": 220,
+                        "_sFile530": "530-90_aaaa0001.jpg",
+                        "_hFile530": 298,
+                        "_wFile530": 530,
+                        "_sFile100": "100-90_aaaa0001.jpg",
+                        "_hFile100": 56,
+                        "_wFile100": 100
+                    },
+                    {
+                        "_sType": "screenshot",
+                        "_sBaseUrl": "https:\/\/images.gamebanana.com\/img\/ss\/mods",
+                        "_sFile": "aaaa0002.jpg",
+                        "_sFile100": "100-90_aaaa0002.jpg",
+                        "_hFile100": 56,
+                        "_wFile100": 100
+                    }
+                ]
+            },
+            "_aSubmitter": {
+                "_idRow": 9000001,
+                "_sName": "tinker_fox",
+                "_bIsOnline": false,
+                "_bHasRipe": false,
+                "_sProfileUrl": "https:\/\/gamebanana.com\/members\/9000001",
+                "_sAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/0001.png"
+            },
+            "_aGame": {
+                "_idRow": 20948,
+                "_sName": "Deadlock",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/games\/20948",
+                "_sIconUrl": "https:\/\/images.gamebanana.com\/img\/ico\/games\/0001.png"
+            },
+            "_aRootCategory": {
+                "_sName": "Skins",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/cats\/33295",
+                "_sIconUrl": ""
+            },
+            "_aSubCategory": {
+                "_sName": "Wraith",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/cats\/33320",
+                "_sIconUrl": "https:\/\/images.gamebanana.com\/img\/ico\/ModCategory\/0001.png"
+            },
+            "_sVersion": "1.2",
+            "_tsDateUpdated": 1761000100,
+            "_bIsObsolete": false,
+            "_sInitialVisibility": "show",
+            "_bHasContentRatings": false,
+            "_nLikeCount": 42,
+            "_nPostCount": 7,
+            "_bWasFeatured": true,
+            "_nViewCount": 3100,
+            "_bIsOwnedByAccessor": false,
+            "_aStudio": {
+                "_sName": "Example Studio",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/studios\/1"
+            }
+        },
+        {
+            "_idRow": 700002,
+            "_sModelName": "Mod",
+            "_sSingularTitle": "Mod",
+            "_sIconClasses": "SubmissionType Mod",
+            "_sName": "Night Market HUD",
+            "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/700002",
+            "_tsDateAdded": 1750000000,
+            "_tsDateModified": 1750000000,
+            "_bHasFiles": true,
+            "_aTags": [],
+            "_aPreviewMedia": [],
+            "_aSubmitter": {
+                "_idRow": 9000002,
+                "_sName": "quiet_owl"
+            },
+            "_aRootCategory": {
+                "_sName": "HUD",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/cats\/31713",
+                "_sIconUrl": ""
+            },
+            "_sVersion": "",
+            "_bIsObsolete": true,
+            "_sInitialVisibility": "hide",
+            "_bHasContentRatings": true,
+            "_nLikeCount": 0,
+            "_bWasFeatured": false,
+            "_nViewCount": 15
+        },
+        {
+            "_idRow": 700003,
+            "_sModelName": "Mod",
+            "_sName": "Lantern Glow Particles",
+            "_aPreviewMedia": {
+                "_aImages": [
+                    {
+                        "_sType": "screenshot",
+                        "_sBaseUrl": "https:\/\/images.gamebanana.com\/img\/ss\/mods\/",
+                        "_sFile": "aaaa0003.png",
+                        "_sFile100": "100-90_aaaa0003.png",
+                        "_sFile800": "800-90_aaaa0003.png",
+                        "_wFile800": 800,
+                        "_hFile800": 450
+                    }
+                ]
+            },
+            "_sInitialVisibility": "warn",
+            "_bHasContentRatings": true
+        }
+    ]
+}

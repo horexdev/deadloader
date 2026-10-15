@@ -9,3 +9,15 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+sha2 = "0.11"
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+sevenz-rust2 = { version = "=0.23.0", default-features = false, features = ["deflate"] }
+
+[build-dependencies]
+# Compiles the vendored libarchive RAR readers (build.rs).
+cc = "=1.5.1"
+
+[dev-dependencies]
+sevenz-rust2 = { version = "=0.23.0", default-features = false, features = ["deflate", "compress"] }

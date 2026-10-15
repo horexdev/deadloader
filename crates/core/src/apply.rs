@@ -72,25 +72,10 @@ pub fn plan(
     if let Some(dup) = wanted.iter().find(|w| !seen.insert(w.id.as_str())) {
         return Err(PlanError::Duplicate(dup.id.clone()));
     }
-    let free: Vec<u8> = (1..=MAX_SLOT)
-        .filter(|s| !foreign_slots.contains(s))
-        .collect();
-    if wanted.len() > free.len() {
-        return Err(PlanError::TooManyMods {
-            wanted: wanted.len(),
-            free: free.len(),
-        });
-    }
-    let target: HashMap<&str, u8> = wanted
+    let slots = layout(foreign_slots, wanted, direction)?;
+    let target: HashMap<&str, u8> = slots
         .iter()
-        .enumerate()
-        .map(|(i, w)| {
-            let slot = match direction {
-                Direction::LowerNumberWins => free[i],
-                Direction::HigherNumberWins => free[wanted.len() - 1 - i],
-            };
-            (w.id.as_str(), slot)
-        })
+        .map(|(slot, id)| (id.as_str(), *slot))
         .collect();
 
     let mut temp_counter = 0usize;
@@ -144,6 +129,34 @@ pub fn plan(
         .chain(places)
         .chain(finals)
         .chain(deletes)
+        .collect())
+}
+
+/// Which slot each wanted file gets: our slots numbered in list order around the foreign ones.
+pub fn layout(
+    foreign_slots: &[u8],
+    wanted: &[Wanted],
+    direction: Direction,
+) -> Result<Vec<(u8, String)>, PlanError> {
+    let free: Vec<u8> = (1..=MAX_SLOT)
+        .filter(|s| !foreign_slots.contains(s))
+        .collect();
+    if wanted.len() > free.len() {
+        return Err(PlanError::TooManyMods {
+            wanted: wanted.len(),
+            free: free.len(),
+        });
+    }
+    Ok(wanted
+        .iter()
+        .enumerate()
+        .map(|(i, w)| {
+            let slot = match direction {
+                Direction::LowerNumberWins => free[i],
+                Direction::HigherNumberWins => free[wanted.len() - 1 - i],
+            };
+            (slot, w.id.clone())
+        })
         .collect())
 }
 
@@ -415,6 +428,24 @@ mod tests {
         )
         .expect_err("duplicate");
         assert_eq!(err, PlanError::Duplicate("a".to_owned()));
+    }
+
+    #[test]
+    fn the_layout_lists_each_file_with_its_slot() {
+        let l = layout(
+            &[2],
+            &[wanted("a"), wanted("b")],
+            Direction::LowerNumberWins,
+        )
+        .expect("layout");
+        assert_eq!(l, [(1, "a".to_owned()), (3, "b".to_owned())]);
+        let l = layout(
+            &[],
+            &[wanted("a"), wanted("b")],
+            Direction::HigherNumberWins,
+        )
+        .expect("layout");
+        assert_eq!(l, [(2, "a".to_owned()), (1, "b".to_owned())]);
     }
 
     #[test]
