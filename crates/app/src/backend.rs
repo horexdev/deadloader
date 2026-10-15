@@ -679,16 +679,21 @@ impl Backend {
         self.with(|s| Ok(s.removal_plan(&target)?))
     }
 
-    /// Deletes a mod or some of its files the way the settings say (permanently or to the recycle bin). A whole mod
-    /// that the selected, applied profile has in the game is taken out of the game first; that waits while the game
-    /// runs.
-    pub fn remove(&self, mod_id: &str, files: Option<Vec<String>>) -> Result<Removed, UserMessage> {
+    /// Deletes a mod or some of its files the way the settings say (permanently or to the recycle bin), or the way
+    /// `deletion` says for this deletion only (D6, "switchable here"). A whole mod that the selected, applied profile
+    /// has in the game is taken out of the game first; that waits while the game runs.
+    pub fn remove(
+        &self,
+        mod_id: &str,
+        files: Option<Vec<String>>,
+        deletion: Option<Deletion>,
+    ) -> Result<Removed, UserMessage> {
         let target = target(mod_id, files);
         let running = self.game.running();
         let game = self.game.as_ref();
         self.with(|s| {
             let recycle = RecycleBin(game);
-            let deleter: &dyn Delete = match s.settings().library.deletion {
+            let deleter: &dyn Delete = match deletion.unwrap_or(s.settings().library.deletion) {
                 Deletion::Permanent => &Permanently,
                 Deletion::RecycleBin => &recycle,
             };
@@ -1639,7 +1644,7 @@ pub(crate) mod tests {
         let id = backend.apply().expect("applied").library.mods[0].id.clone();
         assert!(f.addons().join("pak01_dir.vpk").exists());
 
-        let removed = backend.remove(&id, None).expect("removed");
+        let removed = backend.remove(&id, None, None).expect("removed");
         assert_eq!(removed.files.len(), 1);
         assert!(!f.addons().join("pak01_dir.vpk").exists());
         assert!(backend.library().expect("library").mods.is_empty());
@@ -1659,7 +1664,7 @@ pub(crate) mod tests {
         let id = backend.apply().expect("applied").library.mods[0].id.clone();
         game.running.store(true, Ordering::Relaxed);
         assert_eq!(
-            backend.remove(&id, None).expect_err("refused").id,
+            backend.remove(&id, None, None).expect_err("refused").id,
             MessageId::E13
         );
         assert_eq!(backend.library().expect("library").mods.len(), 1);
@@ -1677,8 +1682,27 @@ pub(crate) mod tests {
         let mut settings = backend.settings().expect("settings");
         settings.library.deletion = deadloader_core::settings::Deletion::RecycleBin;
         backend.update_settings(settings).expect("saved");
-        backend.remove(&id, None).expect("removed");
+        backend.remove(&id, None, None).expect("removed");
         assert_eq!(game.recycled.lock().expect("lock").len(), 1);
+    }
+
+    #[test]
+    fn d6_can_send_one_deletion_to_the_recycle_bin_without_changing_the_setting() {
+        let f = Fixture::new("recycleonce");
+        let game = FakeGame::default();
+        let backend = f.backend(&game);
+        let outcomes = backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = outcomes[0].as_ref().expect("ok").mod_id.clone();
+        backend
+            .remove(&id, None, Some(Deletion::RecycleBin))
+            .expect("removed");
+        assert_eq!(game.recycled.lock().expect("lock").len(), 1);
+        assert_eq!(
+            backend.settings().expect("settings").library.deletion,
+            Deletion::Permanent
+        );
     }
 
     #[test]

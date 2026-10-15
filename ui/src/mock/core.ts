@@ -31,6 +31,7 @@ import {
 import * as downloadsPreview from './downloads';
 import * as profilesPreview from './profiles';
 import * as activity from './activity';
+import { LibraryMock, libraryConflicts, libraryMods } from './library';
 
 /** Tauri's `Channel`: the UI sets `onmessage`; the mock calls it. */
 export class Channel<T> {
@@ -53,12 +54,16 @@ interface State {
   /** The Profiles screen's data: game folders, last applied, mods of the other profiles. */
   profileData: profilesPreview.ProfilesMock;
   logs: activity.MockLogs;
+  /** The game folder Steam knows; null: Deadlock wasn't found. */
+  gameRoot: string | null;
+  /** The Library's part (mock/library.ts). */
+  libraryMock: LibraryMock;
 }
 
 let state: State;
 
 function fresh(): State {
-  return {
+  const s: Omit<State, 'libraryMock'> = {
     library: {
       selected_profile: 'Default',
       applied_profile: 'Default',
@@ -86,7 +91,47 @@ function fresh(): State {
     catalogStatus: null,
     profileData: { info: {}, applied: {} },
     logs: activity.mockLogs(new Date(), scenario()),
+    gameRoot: String.raw`D:\SteamLibrary\steamapps\common\Deadlock`,
   };
+  // The Library's boards have their own invented library (mock/library.ts); the other screens keep the shared one.
+  if (onLibrary()) {
+    s.library.mods = libraryMods();
+    s.library.conflicts = libraryConflicts();
+  }
+  return withLibrary(s);
+}
+
+function onLibrary(): boolean {
+  const hash = typeof location === 'undefined' ? '' : location.hash;
+  return hash.startsWith('#/library') || (scenario() ?? '').startsWith('library');
+}
+
+/** The library mock reads and changes the shared state through this host. */
+function withLibrary(s: Omit<State, 'libraryMock'>): State {
+  const full = s as State;
+  full.libraryMock = new LibraryMock({
+    get library() {
+      return full.library;
+    },
+    set library(value) {
+      full.library = value;
+    },
+    get gameRunning() {
+      return full.gameRunning;
+    },
+    set gameRunning(value) {
+      full.gameRunning = value;
+    },
+    get gameRoot() {
+      return full.gameRoot;
+    },
+    set gameRoot(value) {
+      full.gameRoot = value;
+    },
+    catalogEnabled: () => full.settings.catalog?.enabled === true,
+    push: (event) => full.listener?.onmessage(event),
+  });
+  return full;
 }
 
 /** What the heart saves for a card (the core keeps it in favourites.json). */
@@ -126,6 +171,7 @@ function applyScenario(s: State): State {
       break;
     case 'local':
     case 'activity-local':
+    case 'library-local':
       s.settings.catalog = { ...s.settings.catalog, enabled: false };
       break;
     // Downloads (S6): the board `Downloads` and its states; `downloads-empty` is the first start.
@@ -154,6 +200,9 @@ function applyScenario(s: State): State {
       }
       break;
     }
+  }
+  if (scenario?.startsWith('library-')) {
+    s.libraryMock.scenario(scenario);
   }
   return s;
 }
@@ -487,6 +536,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
     for (const event of state.onSubscribe) {
       push(structuredClone(event));
     }
+    state.libraryMock.subscribed();
     return null;
   },
   system_locale: () => ({ languages: [...navigator.languages], region: null }),
@@ -555,8 +605,8 @@ const handlers: Record<string, (args: Args) => unknown> = {
   updates_check: () => ({ checks: [], available: 0, stopped: null }),
   game_status: () => ({
     running: state.gameRunning,
-    root: String.raw`D:\SteamLibrary\steamapps\common\Deadlock`,
-    installations: 2,
+    root: state.gameRoot,
+    installations: state.gameRoot ? 2 : 0,
   }),
   apply_preview: () => {
     const switched = state.library.selected_profile !== state.library.applied_profile;
@@ -643,7 +693,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */
 export async function invoke<T>(command: string, args: Args = {}): Promise<T> {
-  const handler = handlers[command];
+  const handler = state.libraryMock.handlers()[command] ?? handlers[command];
   if (!handler) {
     throw { id: 'Internal', args: { detail: `mock: ${command} is not implemented` } };
   }
@@ -660,6 +710,9 @@ export const devtools = {
   setGameRunning(running: boolean): void {
     state.gameRunning = running;
     push({ event: 'game', data: { running } });
+    if (!running) {
+      state.libraryMock.gameClosed();
+    }
   },
   /** A new network request in the log, pushed like the core does (Activity's live view). */
   addLogRequest(): void {

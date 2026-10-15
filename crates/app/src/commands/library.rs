@@ -54,8 +54,9 @@ pub async fn remove(
     backend: Shared<'_>,
     mod_id: String,
     files: Option<Vec<String>>,
+    deletion: Option<deadloader_core::settings::Deletion>,
 ) -> Reply<Removed> {
-    blocking(backend, move |b| b.remove(&mod_id, files)).await
+    blocking(backend, move |b| b.remove(&mod_id, files, deletion)).await
 }
 
 /// F10 + 171: the GameBanana page address pasted for a mod imported from disk.
