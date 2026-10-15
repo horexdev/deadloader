@@ -1492,6 +1492,16 @@ impl Session {
     /// Puts the selected profile into the game folder `game_root` (F3/F6): our line in `gameinfo.gi` if it is
     /// vanilla, then the files. Nothing is touched while the game runs.
     pub fn apply(&mut self, game_root: &Path, game_running: bool) -> Result<Applied, SessionError> {
+        self.apply_reporting(game_root, game_running, &mut |_| {})
+    }
+
+    /// [`Session::apply`], telling `on_progress` how far the change to the game folder is (the applying banner).
+    pub fn apply_reporting(
+        &mut self,
+        game_root: &Path,
+        game_running: bool,
+        on_progress: &mut dyn FnMut(&crate::engine::ApplyProgress),
+    ) -> Result<Applied, SessionError> {
         if game_running {
             return Err(SessionError::Engine(EngineError::GameRunning));
         }
@@ -1533,9 +1543,15 @@ impl Session {
         };
         let manifest_path = self.manifest_path();
         let report = engine
-            .apply(&mut self.manifest, &profile, game_root, false, tx, |m| {
-                save_io(&manifest_path, m)
-            })
+            .apply_reporting(
+                &mut self.manifest,
+                &profile,
+                game_root,
+                false,
+                tx,
+                |m| save_io(&manifest_path, m),
+                on_progress,
+            )
             .map_err(SessionError::Engine)?;
         let root = game_root.display().to_string();
         if counted.linked() + counted.copied() > 0 {

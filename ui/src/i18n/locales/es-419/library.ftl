@@ -34,6 +34,27 @@ library-switch-why-first = Aplica { $name } ahora o presiona Jugar: deadloader l
 library-review-switch = Revisar el cambio
 library-applying-what = Aplicando el perfil { $name }…
 library-applying-why = Puedes seguir navegando; Jugar vuelve cuando termine.
+library-applying-step = Paso { $done } de { $total }
+library-applying-linked =
+    { $count ->
+        [one] { $count } archivo enlazado
+       *[other] { $count } archivos enlazados
+    }
+library-applying-copied =
+    { $count ->
+        [one] { $count } archivo copiado
+       *[other] { $count } archivos copiados
+    }
+library-applying-both =
+    { $linked ->
+        [one] { $linked } archivo enlazado
+       *[other] { $linked } archivos enlazados
+    }, { $copied ->
+        [one] { $copied } copiado
+       *[other] { $copied } copiados
+    }
+library-applying-left-seconds = Quedan unos { $seconds } s
+library-applying-left-minutes = Quedan unos { $minutes } min { $seconds } s
 library-show = Mostrar
 library-tab-all = Todos
 library-tab-enabled = Activados

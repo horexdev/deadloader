@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Changed, ForeignReport, GameinfoStatus, LibraryView, Pending, UiEvent } from '../lib/api';
 import { devtools, invoke, resetMock } from './core';
 import { LibraryMock, libraryMods } from './library';
@@ -69,6 +69,26 @@ describe('the library mock', () => {
     ]);
     expect(mock.changes()).toEqual([]);
     expect(mock.auto?.changes).toHaveLength(4);
+  });
+
+  it('sets up the applying board: an apply reports its progress once the UI listens, then ends', () => {
+    vi.useFakeTimers();
+    try {
+      const pushed: UiEvent[] = [];
+      const mock = new LibraryMock({ ...host(), push: (event) => pushed.push(event) });
+      mock.scenario('library-applying');
+      mock.subscribed();
+      vi.advanceTimersByTime(60_000);
+      const reports = pushed.flatMap((e) => (e.event === 'applying' ? [e.data] : []));
+      expect(reports.length).toBeGreaterThan(5);
+      expect(reports.at(-1)?.finished).toBe(true);
+      const running = reports.slice(0, -1);
+      expect(running.every((r) => !r.finished && r.done <= r.total)).toBe(true);
+      // The board's moment: every file linked but one, copied, with the time left.
+      expect(running.some((r) => r.linked === 9 && r.copied === 1 && r.left_ms !== null)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('takes a foreign file under management and fixes gameinfo after Steam checked the files', async () => {

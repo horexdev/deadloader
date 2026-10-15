@@ -63,6 +63,9 @@ pub enum UiEvent {
     Log {
         kinds: Vec<deadloader_core::log::Kind>,
     },
+    /// How far a running apply is (the Library's applying banner), and a last report with `finished` when it ends.
+    /// Sent only while the UI listens.
+    Applying(crate::progress::Applying),
 }
 
 /// What the start found, for a toast or a banner.
@@ -277,6 +280,23 @@ pub(crate) mod tests {
             serde_json::to_value(ui.take()).expect("json"),
             serde_json::json!([{"event": "log", "data": {"kinds": ["files"]}}])
         );
+    }
+
+    #[test]
+    fn apply_progress_is_tagged_for_the_ui() {
+        let event = UiEvent::Applying(crate::progress::Applying {
+            progress: deadloader_core::engine::ApplyProgress {
+                done: 3,
+                total: 4,
+                ..Default::default()
+            },
+            left_ms: Some(5000),
+            finished: false,
+        });
+        let json = serde_json::to_value(&event).expect("json");
+        assert_eq!(json["event"], "applying");
+        assert_eq!(json["data"]["done"], 3);
+        assert_eq!(json["data"]["left_ms"], 5000);
     }
 
     /// The shape `ui/src/lib/api.ts` relies on.

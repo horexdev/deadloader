@@ -176,9 +176,14 @@ pub struct Backend {
     undoing: Mutex<Option<i64>>,
     /// N6 was looked for (once per start).
     foreign_told: std::sync::atomic::AtomicBool,
+    /// Told how far a running apply is (the applying banner), thinned out by [`crate::progress::Throttle`].
+    apply_listener: Mutex<Option<ApplyListener>>,
+    /// The throttle's quiet start and spacing.
+    progress_timing: Mutex<(std::time::Duration, std::time::Duration)>,
 }
 
 pub type SettingsListener = Box<dyn Fn(&Settings) + Send + Sync>;
+pub type ApplyListener = Box<dyn Fn(&crate::progress::Applying) + Send + Sync>;
 
 /// The result of a change in the library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -265,6 +270,8 @@ impl Backend {
                 error_log: std::sync::OnceLock::new(),
                 undoing: Mutex::new(None),
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
+                apply_listener: Mutex::new(None),
+                progress_timing: Mutex::new((crate::progress::QUIET, crate::progress::EVERY)),
             },
             Err(e) => Self {
                 session: Mutex::new(None),
@@ -278,6 +285,8 @@ impl Backend {
                 error_log: std::sync::OnceLock::new(),
                 undoing: Mutex::new(None),
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
+                apply_listener: Mutex::new(None),
+                progress_timing: Mutex::new((crate::progress::QUIET, crate::progress::EVERY)),
             },
         }
     }
@@ -770,7 +779,7 @@ impl Backend {
                     match (&target, live, only_here, root) {
                         (Target::Mod(id), true, true, Some(root)) => {
                             s.set_enabled(id, false)?;
-                            s.apply(&root, false)?;
+                            self.apply_session(s, &root, false)?;
                             Ok(s.remove(&target, deleter)?)
                         }
                         _ => Err(SessionError::Remove(RemoveError::StillInGame(roots)).into()),
@@ -945,6 +954,42 @@ impl Backend {
         self.with(|s| Ok(s.set_favourite(favourite, on)?))
     }
 
+    /// `listener` hears how far every apply from now on is (Apply, Play, an edit, the apply after the game closed).
+    pub fn on_apply_progress(&self, listener: ApplyListener) {
+        *lock(&self.apply_listener) = Some(listener);
+    }
+
+    /// How long an apply stays quiet and how far apart its reports are.
+    #[cfg(test)]
+    pub fn set_progress_timing(&self, quiet: std::time::Duration, every: std::time::Duration) {
+        *lock(&self.progress_timing) = (quiet, every);
+    }
+
+    /// [`Session::apply`] with its progress told to the listener.
+    fn apply_session(
+        &self,
+        s: &mut Session,
+        root: &Path,
+        running: bool,
+    ) -> Result<deadloader_core::session::Applied, SessionError> {
+        let listener = lock(&self.apply_listener);
+        let Some(listener) = listener.as_ref() else {
+            return s.apply(root, running);
+        };
+        let (quiet, every) = *lock(&self.progress_timing);
+        let mut throttle = crate::progress::Throttle::new(quiet, every);
+        let started = std::time::Instant::now();
+        let result = s.apply_reporting(root, running, &mut |p| {
+            if let Some(a) = throttle.report(p, started.elapsed()) {
+                listener(&a);
+            }
+        });
+        if let Some(a) = throttle.finish() {
+            listener(&a);
+        }
+        result
+    }
+
     /// `listener` hears every saved settings change from now on.
     pub fn on_settings(&self, listener: SettingsListener) {
         self.lock_listeners().push(listener);
@@ -999,7 +1044,7 @@ impl Backend {
                 .game_root()
                 .or_else(|| installations.first().cloned())
                 .ok_or_else(|| UserMessage::new(MessageId::E2))?;
-            let applied = s.apply(&root, running)?;
+            let applied = self.apply_session(s, &root, running)?;
             self.edits_waiting.store(0, Ordering::Relaxed);
             *lock(&self.undoing) = None;
             Ok(ApplyResult {
@@ -1051,7 +1096,7 @@ impl Backend {
                     waiting_for_game: true,
                 }),
                 (true, Some(root)) => {
-                    s.apply(&root, false)?;
+                    self.apply_session(s, &root, false)?;
                     self.edits_waiting.store(0, Ordering::Relaxed);
                     Ok(Changed {
                         library: s.library(),
@@ -1780,6 +1825,78 @@ pub(crate) mod tests {
             status.root.as_deref(),
             Some(f.game().display().to_string().as_str())
         );
+    }
+
+    /// Every progress report the backend lets through, with no quiet start and no spacing.
+    fn every_report(backend: &Backend) -> Arc<std::sync::Mutex<Vec<crate::progress::Applying>>> {
+        let heard = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = Arc::clone(&heard);
+        backend.on_apply_progress(Box::new(move |a| sink.lock().expect("lock").push(*a)));
+        backend.set_progress_timing(std::time::Duration::ZERO, std::time::Duration::ZERO);
+        heard
+    }
+
+    #[test]
+    fn apply_reports_its_progress_and_its_end() {
+        let f = Fixture::new("progress");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[
+                f.mod_file("haze.vpk", "models/haze/body.vmdl_c"),
+                f.mod_file("wraith.vpk", "models/wraith/body.vmdl_c"),
+            ])
+            .expect("imported");
+        let heard = every_report(&backend);
+        backend.apply().expect("applied");
+        let heard = heard.lock().expect("lock").clone();
+        let (last, running) = heard.split_last().expect("reports");
+        assert!(last.finished);
+        assert_eq!(last.progress.done, last.progress.total);
+        assert_eq!(last.progress.linked + last.progress.copied, 2);
+        assert!(running.iter().all(|a| !a.finished));
+        assert_eq!(running.first().map(|a| a.progress.done), Some(0));
+    }
+
+    #[test]
+    fn the_apply_after_the_game_closed_reports_its_progress_too() {
+        let f = Fixture::new("progressafter");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = backend.apply().expect("applied").library.mods[0].id.clone();
+        game.running.store(true, Ordering::Relaxed);
+        backend.set_enabled(&id, false).expect("waits");
+        let heard = every_report(&backend);
+        game.running.store(false, Ordering::Relaxed);
+        backend
+            .game_closed()
+            .expect("applied")
+            .expect("something applied");
+        let heard = heard.lock().expect("lock").clone();
+        assert!(heard.last().is_some_and(|a| a.finished), "{heard:?}");
+    }
+
+    #[test]
+    fn an_apply_without_a_listener_works_as_before() {
+        let f = Fixture::new("progressnone");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        assert!(backend.apply().expect("applied").changed);
     }
 
     #[test]
