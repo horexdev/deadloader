@@ -19,6 +19,7 @@ pub mod overlap;
 pub mod place;
 pub mod profiles;
 pub mod remove;
+pub mod selection;
 pub mod settings;
 pub mod steam;
 pub mod vdf;
