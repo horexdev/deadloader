@@ -8,6 +8,7 @@ export { default as Checkbox } from './Checkbox.svelte';
 export { default as Count } from './Count.svelte';
 export { default as Dialog } from './Dialog.svelte';
 export { default as EmptyState } from './EmptyState.svelte';
+export { default as ErrorDialog } from './ErrorDialog.svelte';
 export { default as LibraryRow } from './LibraryRow.svelte';
 export { default as PathTooltip } from './PathTooltip.svelte';
 export { default as ProgressBar } from './ProgressBar.svelte';
