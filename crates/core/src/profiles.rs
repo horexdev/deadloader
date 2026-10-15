@@ -288,6 +288,8 @@ struct Exported {
 struct ExportedMod {
     name: String,
     source: Source,
+    #[serde(default = "yes")]
+    enabled: bool,
     files: Vec<ExportedFile>,
 }
 
@@ -367,6 +369,7 @@ pub fn export(profile: &Profile, manifest: &Manifest) -> Result<String, ProfileE
         mods.push(ExportedMod {
             name: m.name.clone(),
             source,
+            enabled: entry.enabled,
             files,
         });
     }
@@ -414,6 +417,7 @@ pub fn import(text: &str, manifest: &Manifest) -> Result<ImportedProfile, Profil
             mod_id: m.id.clone(),
             variants: Vec::new(),
             add_ons: Vec::new(),
+            enabled: em.enabled,
         };
         let mut lost = Vec::new();
         for ef in &em.files {
@@ -474,6 +478,10 @@ fn find_file<'a>(m: &'a Mod, ef: &ExportedFile) -> Option<&'a ModFile> {
         })
 }
 
+fn yes() -> bool {
+    true
+}
+
 fn missing_file(ef: &ExportedFile) -> MissingFile {
     MissingFile {
         archive: ef.archive.clone(),
@@ -514,6 +522,7 @@ mod tests {
             mod_id: mod_id.into(),
             variants: variants.iter().map(|s| s.to_string()).collect(),
             add_ons: add_ons.iter().map(|s| s.to_string()).collect(),
+            enabled: true,
         }
     }
 
@@ -836,6 +845,16 @@ mod tests {
             export(&p, &library_a()),
             Err(ProfileError::Model(_))
         ));
+    }
+
+    #[test]
+    fn disabled_mods_travel_with_the_export() {
+        let mut p = shared_profile();
+        p.entries[0].enabled = false;
+        let text = export(&p, &library_a()).expect("exported");
+        let imported = import(&text, &library_a()).expect("imported");
+        assert!(!imported.profile.entries[0].enabled);
+        assert!(imported.profile.entries[1].enabled);
     }
 
     #[test]

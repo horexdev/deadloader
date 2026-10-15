@@ -100,6 +100,13 @@ pub struct ProfileEntry {
     pub variants: Vec<String>,
     /// Add-on files enabled together with the mod.
     pub add_ons: Vec<String>,
+    /// A disabled mod keeps its place in the order and its choices, but is not put into the game.
+    #[serde(default = "enabled_by_default")]
+    pub enabled: bool,
+}
+
+fn enabled_by_default() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -444,16 +451,25 @@ mod tests {
                     mod_id: "b".to_owned(),
                     variants: vec!["b-2".to_owned()],
                     add_ons: vec![],
+                    enabled: false,
                 },
                 ProfileEntry {
                     mod_id: "a".to_owned(),
                     variants: vec![],
                     add_ons: vec!["a-9".to_owned()],
+                    enabled: true,
                 },
             ],
         };
         let text = profile_to_json(&p).expect("serialise");
         assert_eq!(profile_from_json(&text).expect("parse"), p);
+    }
+
+    #[test]
+    fn a_profile_written_before_the_enabled_flag_has_its_mods_on() {
+        let text = r#"{"schema": 1, "name": "Old", "game_root": null,
+            "entries": [{"mod_id": "a", "variants": [], "add_ons": ["a-1"]}]}"#;
+        assert!(profile_from_json(text).expect("parse").entries[0].enabled);
     }
 
     #[test]

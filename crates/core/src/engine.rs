@@ -198,7 +198,7 @@ fn resolve(
     data_dir: &Path,
 ) -> Result<Vec<Wanted>, EngineError> {
     let mut wanted = Vec::new();
-    for entry in &profile.entries {
+    for entry in profile.entries.iter().filter(|e| e.enabled) {
         let m = manifest
             .mods
             .iter()
@@ -355,6 +355,7 @@ mod tests {
                     mod_id: (*m).into(),
                     variants: v.iter().map(|s| (*s).to_owned()).collect(),
                     add_ons: vec![],
+                    enabled: true,
                 })
                 .collect(),
         }
@@ -415,6 +416,23 @@ mod tests {
         assert_eq!(saves, 1);
         assert!(report.changed);
         assert!(store.read_all().expect("read").is_empty());
+    }
+
+    #[test]
+    fn disabled_mods_keep_their_place_but_are_not_placed() {
+        let (fs, store) = (fs(), MemStore::default());
+        let mut m = manifest();
+        let mut p = profile(&[("b", &["b2"]), ("a", &["a1"]), ("gone", &["x"])]);
+        p.entries[0].enabled = false;
+        p.entries[2].enabled = false; // a disabled entry for a mod no longer in the library is ignored
+        engine(&fs, &store)
+            .apply(&mut m, &p, Path::new(ROOT), false, 1, |_| Ok(()))
+            .expect("applied");
+        assert_eq!(
+            fs.read(&addons("pak01_dir.vpk")).as_deref(),
+            Some(&b"a1"[..])
+        );
+        assert!(fs.read(&addons("pak02_dir.vpk")).is_none());
     }
 
     #[test]
