@@ -190,8 +190,6 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    min-width: var(--window-min-w);
-    min-height: var(--window-min-h);
     background: var(--bg-app);
   }
 
