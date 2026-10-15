@@ -471,6 +471,32 @@ impl Backend {
         Ok(saved)
     }
 
+    /// D3 (109): the user confirmed legal age; saved with the settings and heard by every settings listener.
+    pub fn confirm_age(&self) -> Result<Settings, UserMessage> {
+        let saved = self.with(|s| {
+            s.confirm_age()?;
+            Ok(s.settings().clone())
+        })?;
+        for listener in self.lock_listeners().iter() {
+            listener(&saved);
+        }
+        Ok(saved)
+    }
+
+    /// The catalog's favourites (34), newest first.
+    pub fn favourites(&self) -> Result<Vec<deadloader_core::favourites::Favourite>, UserMessage> {
+        self.with(|s| Ok(s.favourites()?))
+    }
+
+    /// The heart on a card or the mod page: marks or unmarks a mod; the whole list comes back.
+    pub fn set_favourite(
+        &self,
+        favourite: deadloader_core::favourites::Favourite,
+        on: bool,
+    ) -> Result<Vec<deadloader_core::favourites::Favourite>, UserMessage> {
+        self.with(|s| Ok(s.set_favourite(favourite, on)?))
+    }
+
     /// `listener` hears every saved settings change from now on.
     pub fn on_settings(&self, listener: SettingsListener) {
         self.lock_listeners().push(listener);
@@ -860,6 +886,7 @@ pub(crate) mod tests {
                 "inner_path",
                 "len",
                 "newer_in_library",
+                "remote_file_id",
                 "version"
             ]
         );
@@ -1321,5 +1348,55 @@ pub(crate) mod tests {
         assert_eq!(outcomes[0].as_ref().expect_err("refused").id, MessageId::E8);
         assert!(outcomes[1].is_ok());
         assert_eq!(backend.library().expect("library").mods.len(), 1);
+    }
+
+    #[test]
+    fn favourites_are_kept_between_starts() {
+        let f = Fixture::new("favourites");
+        let backend = f.backend(&FakeGame::default());
+        let haze = deadloader_core::favourites::Favourite {
+            section: deadloader_core::library::Section::Mod,
+            id: 655_209,
+            name: "Haze V2".to_owned(),
+            author: Some("Nyx".to_owned()),
+            root_category: None,
+            subcategory: None,
+            nsfw: false,
+            date_updated: None,
+        };
+        assert_eq!(backend.favourites().expect("none"), []);
+        assert_eq!(
+            backend.set_favourite(haze.clone(), true).expect("marked"),
+            std::slice::from_ref(&haze)
+        );
+        drop(backend);
+        let backend = f.backend(&FakeGame::default());
+        assert_eq!(
+            backend.favourites().expect("kept"),
+            std::slice::from_ref(&haze)
+        );
+        assert!(
+            backend
+                .set_favourite(haze, false)
+                .expect("unmarked")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn the_age_confirmation_is_saved_and_heard_by_the_listeners() {
+        let f = Fixture::new("age");
+        let backend = f.backend(&FakeGame::default());
+        let heard = Arc::new(AtomicBool::new(false));
+        let record = Arc::clone(&heard);
+        backend.on_settings(Box::new(move |s: &Settings| {
+            record.store(
+                s.acknowledgements.age_confirmed_at.is_some(),
+                Ordering::Relaxed,
+            );
+        }));
+        let saved = backend.confirm_age().expect("saved");
+        assert!(saved.acknowledgements.age_confirmed_at.is_some());
+        assert!(heard.load(Ordering::Relaxed));
     }
 }
