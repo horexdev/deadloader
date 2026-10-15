@@ -30,7 +30,8 @@ const CHANNEL: usize = 8;
 
 pub(crate) enum Msg {
     Head(Result<Head, NetError>),
-    Data(Vec<u8>),
+    /// Bytes and when they arrived: the worker may get to them later, and the clock may have moved on by then.
+    Data(Vec<u8>, Instant),
     End,
     BodyError(io::Error),
     /// Look at the control request.
@@ -539,7 +540,7 @@ impl<'a> Worker<'a> {
                 }
             };
             match msg {
-                Msg::Data(bytes) => {
+                Msg::Data(bytes, at) => {
                     let after = part.len + bytes.len() as u64;
                     if let Some(total) = self.total
                         && after > total
@@ -558,7 +559,7 @@ impl<'a> Worker<'a> {
                         return Err(self.fail_keeping(part, DownloadError::Disk(e)));
                     }
                     hasher.update(&bytes);
-                    self.report(part.len, false);
+                    self.report_at(at, part.len, false);
                     if self
                         .shared
                         .now()
@@ -714,9 +715,12 @@ impl<'a> Worker<'a> {
     }
 
     fn report(&mut self, bytes: u64, always: bool) {
-        let now = self.shared.now();
-        if self.throttle.ready(now) || always {
-            let speed = self.meter.sample(now, bytes);
+        self.report_at(self.shared.now(), bytes, always);
+    }
+
+    fn report_at(&mut self, at: Instant, bytes: u64, always: bool) {
+        if self.throttle.ready(at) || always {
+            let speed = self.meter.sample(at, bytes);
             self.shared.progress(self.id(), bytes, self.total, speed);
         }
     }
@@ -747,7 +751,8 @@ fn lost(detail: &str) -> DownloadError {
     }
 }
 
-/// The fetch thread: the request, then the body in rate-limited chunks.
+/// The fetch thread: the request, then the body in rate-limited chunks. When the response ends or fails, the
+/// connection is closed before the worker hears of it, so the next download never runs alongside it.
 fn fetch(
     shared: &Shared,
     request: &Request,
@@ -766,7 +771,12 @@ fn fetch(
         status,
         headers: response.headers.clone(),
     };
-    if tx.send(Msg::Head(Ok(head))).is_err() || !matches!(status, 200 | 206) {
+    if !matches!(status, 200 | 206) {
+        drop(response);
+        let _ = tx.send(Msg::Head(Ok(head)));
+        return;
+    }
+    if tx.send(Msg::Head(Ok(head))).is_err() {
         return;
     }
     let mut body = response.into_body();
@@ -779,18 +789,21 @@ fn fetch(
         match body.read(&mut buf) {
             Ok(0) => {
                 shared.limiter.refund(grant);
+                drop(body);
                 let _ = tx.send(Msg::End);
                 return;
             }
             Ok(n) => {
+                let at = shared.now();
                 shared.limiter.refund(grant - n);
                 buf.truncate(n);
-                if tx.send(Msg::Data(buf)).is_err() {
+                if tx.send(Msg::Data(buf, at)).is_err() {
                     return;
                 }
             }
             Err(e) if e.kind() == io::ErrorKind::Interrupted => shared.limiter.refund(grant),
             Err(e) => {
+                drop(body);
                 let _ = tx.send(Msg::BodyError(e));
                 return;
             }
