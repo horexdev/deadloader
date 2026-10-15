@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Changed, LibraryView, Listing, TaskSnapshot, UiEvent } from '../lib/api';
+import type { Changed, LibraryView, Listing, LogCounts, LogPage, LogSummary, TaskSnapshot, UiEvent } from '../lib/api';
 import { Channel, invoke, resetMock } from './core';
 
 beforeEach(() => {
@@ -48,6 +48,22 @@ describe('the mock core (pnpm dev:mock)', () => {
     expect(kinds).toContain('download:progress');
     expect(kinds).toContain('installed');
     expect(await invoke<TaskSnapshot[]>('downloads')).toEqual([]);
+  });
+
+  it('pages through invented logs, filters them and sums them up', async () => {
+    const first = await invoke<LogPage>('log_page', { query: { kind: 'network', range: 'today', limit: 50 } });
+    expect(first.entries).toHaveLength(50);
+    const second = await invoke<LogPage>('log_page', {
+      query: { kind: 'network', range: 'today', limit: 50, cursor: first.cursor },
+    });
+    expect(second.entries[0]).not.toEqual(first.entries[0]);
+    const blocked = await invoke<LogPage>('log_page', { query: { kind: 'network', range: 'today', result: 'error', text: 'FASTMIRROR' } });
+    expect(blocked.entries).toHaveLength(1);
+    const counts = await invoke<LogCounts>('log_counts', { range: '7d' });
+    expect(counts.files.operations).toBeGreaterThan(10);
+    const summary = await invoke<LogSummary>('log_summary');
+    expect(summary.game.changes).toBeGreaterThan(0);
+    expect(summary.empty).toBe(false);
   });
 
   it('says which command it does not know yet', async () => {

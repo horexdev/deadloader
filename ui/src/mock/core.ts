@@ -10,10 +10,12 @@ import type {
   Listing,
   Query,
   Settings,
+  LogQuery,
   TaskSnapshot,
   UiEvent,
 } from '../lib/api';
 import { card, libraryMod, modPage, settings as defaultSettings } from './fixtures';
+import * as activity from './activity';
 
 /** Tauri's `Channel`: the UI sets `onmessage`; the mock calls it. */
 export class Channel<T> {
@@ -28,6 +30,7 @@ interface State {
   nextTask: number;
   listener: Channel<UiEvent> | null;
   gameRunning: boolean;
+  logs: activity.MockLogs;
 }
 
 let state: State;
@@ -55,12 +58,19 @@ function fresh(): State {
     nextTask: 1,
     listener: null,
     gameRunning: false,
+    logs: activity.mockLogs(new Date(), scenario()),
   };
+}
+
+function scenario(): string | null {
+  return typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('scenario');
 }
 
 /**
  * Preview scenarios from the address, e.g. `http://localhost:5199/?scenario=switched#/library`:
- * `switched` (another profile selected than applied), `running` (the game runs), `local` (local mode).
+ * `switched` (another profile selected than applied), `running` (the game runs), `local` (local mode),
+ * `activity-empty` (no logs yet), `activity-local` (logs of local mode), `activity-blocked` (the newest request was
+ * blocked; open `#/activity/r-blocked` for its details).
  * Screens add their own when they need a state.
  */
 function applyScenario(s: State): State {
@@ -74,6 +84,7 @@ function applyScenario(s: State): State {
       s.gameRunning = true;
       break;
     case 'local':
+    case 'activity-local':
       s.settings.catalog = { ...s.settings.catalog, enabled: false };
       break;
   }
@@ -275,6 +286,11 @@ const handlers: Record<string, (args: Args) => unknown> = {
   window_toggle_maximize: () => null,
   window_close: () => null,
   window_start_drag: () => null,
+  log_page: (args) => activity.page(state.logs, args.query as LogQuery, new Date()),
+  log_entry: (args) => activity.entry(state.logs, String(args.id)),
+  log_counts: (args) => activity.counts(state.logs, args.range as LogQuery['range'], new Date()),
+  log_summary: () => activity.summary(state.logs, new Date()),
+  open_logs_folder: () => String.raw`D:\Games\deadloader\deadloader-data\logs`,
 };
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */
@@ -296,6 +312,11 @@ export const devtools = {
   setGameRunning(running: boolean): void {
     state.gameRunning = running;
     push({ event: 'game', data: { running } });
+  },
+  /** A new network request in the log, pushed like the core does (Activity's live view). */
+  addLogRequest(): void {
+    activity.addRequest(state.logs, new Date());
+    push({ event: 'log', data: { kinds: ['network'] } });
   },
 };
 

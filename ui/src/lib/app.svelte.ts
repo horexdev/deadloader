@@ -14,6 +14,7 @@ import {
   type CatalogStatus,
   type GameStatus,
   type LibraryView,
+  type LogKind,
   type Settings,
   type TaskSnapshot,
   type UiEvent,
@@ -37,6 +38,8 @@ export class AppState {
   confirm: PlayConfirmation | null = $state(null);
   toasts: ToastData[] = $state([]);
   #toastId = 0;
+  /** Who hears of new log lines (Activity's live view). */
+  #logListeners: ((kinds: LogKind[]) => void)[] = [];
 
   /** Running downloads, for the sidebar. */
   get downloads(): number {
@@ -99,6 +102,11 @@ export class AppState {
       case 'drop_failed':
         this.fail(event.data.message);
         break;
+      case 'log':
+        for (const listener of this.#logListeners) {
+          listener(event.data.kinds);
+        }
+        break;
       default:
         break;
     }
@@ -121,6 +129,14 @@ export class AppState {
         this.tasks = this.tasks.filter((t) => t.id !== event.id);
         break;
     }
+  }
+
+  /** `listener` hears which logs got new lines; returns the function that stops it. */
+  onLog(listener: (kinds: LogKind[]) => void): () => void {
+    this.#logListeners = [...this.#logListeners, listener];
+    return () => {
+      this.#logListeners = this.#logListeners.filter((l) => l !== listener);
+    };
   }
 
   async reloadLibrary(): Promise<void> {
