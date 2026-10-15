@@ -29,7 +29,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use time::{Date, Month, OffsetDateTime};
 
 /// Which of the three logs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Kind {
     App,
     Network,
@@ -85,7 +86,7 @@ impl Kind {
 /// `mv9fkgpf-000042`. Unique per run and increasing within it; runs started later sort after earlier ones.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LogId(String);
+pub struct LogId(pub(crate) String);
 
 impl LogId {
     pub fn as_str(&self) -> &str {
@@ -191,7 +192,7 @@ pub enum Initiator {
     User,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Purpose {
     Catalog,
@@ -238,7 +239,7 @@ impl FileEvent {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FileOp {
     Hardlink,
@@ -306,6 +307,24 @@ pub trait LogDir {
     fn list(&self) -> io::Result<Vec<DirEntry>>;
     fn remove(&self, name: &str) -> io::Result<()>;
     fn read(&self, name: &str) -> io::Result<Vec<u8>>;
+
+    /// The file's current size; `NotFound` if it doesn't exist.
+    fn file_len(&self, name: &str) -> io::Result<u64> {
+        self.read(name).map(|bytes| bytes.len() as u64)
+    }
+
+    /// Up to `len` bytes from `start`; fewer at the end of the file. The Activity screen reads logs of up to the size
+    /// cap this way, a part at a time, instead of the whole file.
+    fn read_range(&self, name: &str, start: u64, len: u64) -> io::Result<Vec<u8>> {
+        let bytes = self.read(name)?;
+        let from = usize::try_from(start)
+            .unwrap_or(usize::MAX)
+            .min(bytes.len());
+        let to = from
+            .saturating_add(usize::try_from(len).unwrap_or(usize::MAX))
+            .min(bytes.len());
+        Ok(bytes[from..to].to_vec())
+    }
 }
 
 impl<T: LogDir + ?Sized> LogDir for &T {
@@ -323,6 +342,14 @@ impl<T: LogDir + ?Sized> LogDir for &T {
 
     fn read(&self, name: &str) -> io::Result<Vec<u8>> {
         (**self).read(name)
+    }
+
+    fn file_len(&self, name: &str) -> io::Result<u64> {
+        (**self).file_len(name)
+    }
+
+    fn read_range(&self, name: &str, start: u64, len: u64) -> io::Result<Vec<u8>> {
+        (**self).read_range(name, start, len)
     }
 }
 
@@ -429,6 +456,20 @@ impl LogDir for DiskLogDir {
     fn read(&self, name: &str) -> io::Result<Vec<u8>> {
         std::fs::read(self.dir.join(name))
     }
+
+    fn file_len(&self, name: &str) -> io::Result<u64> {
+        // The file's own size, not the directory's, which lags behind for files we keep open.
+        std::fs::metadata(self.dir.join(name)).map(|m| m.len())
+    }
+
+    fn read_range(&self, name: &str, start: u64, len: u64) -> io::Result<Vec<u8>> {
+        // Opened for reading only; the writer's handle shares reading and writing, so lines keep being appended.
+        let mut file = File::open(self.dir.join(name))?;
+        file.seek(SeekFrom::Start(start))?;
+        let mut out = Vec::with_capacity(usize::try_from(len.min(1 << 20)).unwrap_or(0));
+        file.take(len).read_to_end(&mut out)?;
+        Ok(out)
+    }
 }
 
 /// How much history to keep (decision 51).
@@ -514,6 +555,24 @@ impl<C: Clock, D: LogDir> FileLog for Logger<C, D> {
     }
 }
 
+/// The file operations of one change to the game folder: every event carries the change's intent-journal transaction,
+/// so the Activity screen can show which change an operation belonged to.
+#[derive(Debug)]
+pub struct InChange<L> {
+    pub log: L,
+    pub txn: u64,
+}
+
+impl<L: FileLog> FileLog for InChange<L> {
+    fn record(&self, msg: &str, event: &FileEvent) {
+        let event = FileEvent {
+            txn: Some(self.txn),
+            ..event.clone()
+        };
+        self.log.record(msg, &event);
+    }
+}
+
 /// Keeps the events in memory, for tests.
 #[derive(Debug, Default)]
 pub struct MemFileLog(pub Mutex<Vec<(String, FileEvent)>>);
@@ -536,6 +595,13 @@ impl FileLog for MemFileLog {
     }
 }
 
+/// `msg` of a network line whose response will be retried (429/5xx): not the request's last word.
+pub const RETRYING_MSG: &str = "response; retrying";
+
+/// Told the log of every line written, for the Activity screen's live view. Called while the logger is locked, so it
+/// must return at once and must not log.
+pub type Watcher = Box<dyn Fn(Kind) + Send + Sync>;
+
 /// Writes the three logs. Safe to share between threads; lines are written in id order.
 #[derive(Debug)]
 pub struct Logger<C, D> {
@@ -543,6 +609,16 @@ pub struct Logger<C, D> {
     dir: D,
     run: String,
     state: Mutex<State>,
+    watcher: Watching,
+}
+
+#[derive(Default)]
+struct Watching(Mutex<Option<Watcher>>);
+
+impl fmt::Debug for Watching {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Watching")
+    }
 }
 
 #[derive(Debug)]
@@ -580,6 +656,7 @@ impl<C: Clock, D: LogDir> Logger<C, D> {
                 masker,
                 limits,
             }),
+            watcher: Watching::default(),
         };
         logger.rotate();
         logger
@@ -587,6 +664,11 @@ impl<C: Clock, D: LogDir> Logger<C, D> {
 
     pub fn dir(&self) -> &D {
         &self.dir
+    }
+
+    /// The clock the lines are stamped with: readers of the logs use it for "today".
+    pub fn clock(&self) -> &C {
+        &self.clock
     }
 
     pub fn app(
@@ -623,6 +705,15 @@ impl<C: Clock, D: LogDir> Logger<C, D> {
     pub fn request_id(&self) -> LogId {
         let mut state = self.lock();
         self.next_id(&mut state)
+    }
+
+    /// `watcher` hears of every line written from now on (it replaces an earlier one).
+    pub fn watch(&self, watcher: Watcher) {
+        *self
+            .watcher
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(watcher);
     }
 
     /// Switches user-path masking for the lines written from now on.
@@ -682,7 +773,18 @@ impl<C: Clock, D: LogDir> Logger<C, D> {
             Err(error) => return Err(LogError::Encode { id, error }),
         };
         match self.dir.append_line(&kind.file_name(now.date()), &line) {
-            Ok(()) => Ok(id),
+            Ok(()) => {
+                if let Some(watcher) = self
+                    .watcher
+                    .0
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .as_ref()
+                {
+                    watcher(kind);
+                }
+                Ok(id)
+            }
             Err(error) => Err(LogError::Write { id, error }),
         }
     }
@@ -2218,6 +2320,100 @@ mod tests {
             .expect("append");
         assert_eq!(dir.read("app-2026-10-15.jsonl").expect("read"), b"two\n");
         std::fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    #[test]
+    fn disk_dir_reads_part_of_a_file_and_its_length() {
+        let root = temp_dir("range");
+        let dir = DiskLogDir::new(root.clone());
+        dir.append_line("app-2026-10-15.jsonl", "one")
+            .expect("append");
+        dir.append_line("app-2026-10-15.jsonl", "two")
+            .expect("append");
+        assert_eq!(dir.file_len("app-2026-10-15.jsonl").expect("len"), 8);
+        assert_eq!(
+            dir.read_range("app-2026-10-15.jsonl", 4, 3).expect("range"),
+            b"two"
+        );
+        // Past the end: what is there.
+        assert_eq!(
+            dir.read_range("app-2026-10-15.jsonl", 6, 100)
+                .expect("range"),
+            b"o\n"
+        );
+        assert_eq!(
+            dir.file_len("files-2026-10-15.jsonl")
+                .map_err(|e| e.kind())
+                .err(),
+            Some(io::ErrorKind::NotFound)
+        );
+        std::fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    #[test]
+    fn any_log_dir_can_read_ranges_through_the_whole_file() {
+        let dir = MemDir::default();
+        dir.append_line("app-2026-10-15.jsonl", "abcdef")
+            .expect("append");
+        assert_eq!(dir.file_len("app-2026-10-15.jsonl").expect("len"), 7);
+        assert_eq!(
+            dir.read_range("app-2026-10-15.jsonl", 2, 3).expect("range"),
+            b"cde"
+        );
+        assert_eq!(
+            dir.read_range("app-2026-10-15.jsonl", 9, 3).expect("range"),
+            b""
+        );
+    }
+
+    #[test]
+    fn a_watcher_hears_every_written_line() {
+        let (clock, dir) = (TestClock::at(start()), MemDir::default());
+        let log = logger(&clock, &dir);
+        let heard = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let sink = std::sync::Arc::clone(&heard);
+        log.watch(Box::new(move |kind| sink.lock().expect("heard").push(kind)));
+        log.app(Level::Info, "a", Map::new()).expect("written");
+        let req = log.request_id();
+        log.network("n", &download_hop(req)).expect("written");
+        log.file("f", &FileEvent::new(FileOp::Write))
+            .expect("written");
+        assert_eq!(
+            *heard.lock().expect("heard"),
+            [Kind::App, Kind::Network, Kind::Files]
+        );
+    }
+
+    #[test]
+    fn a_failed_write_is_not_reported_to_the_watcher() {
+        let clock = TestClock::at(start());
+        let dir = MemDir {
+            fail_writes: true,
+            ..MemDir::default()
+        };
+        let log = logger(&clock, &dir);
+        let heard = std::sync::Arc::new(Mutex::new(0));
+        let sink = std::sync::Arc::clone(&heard);
+        log.watch(Box::new(move |_| *sink.lock().expect("heard") += 1));
+        let _ = log.app(Level::Info, "a", Map::new());
+        assert_eq!(*heard.lock().expect("heard"), 0);
+    }
+
+    #[test]
+    fn file_operations_of_one_change_carry_its_transaction() {
+        let mem = MemFileLog::default();
+        let change = InChange { log: &mem, txn: 42 };
+        change.record("placed", &FileEvent::new(FileOp::Hardlink));
+        assert_eq!(mem.events()[0].1.txn, Some(42));
+        assert_eq!(mem.events()[0].0, "placed");
+    }
+
+    #[test]
+    fn kinds_are_named_like_their_files() {
+        assert_eq!(
+            serde_json::to_value(Kind::ALL).expect("json"),
+            json!(["app", "network", "files"])
+        );
     }
 
     #[test]
