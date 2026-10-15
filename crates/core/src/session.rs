@@ -100,6 +100,13 @@ fn match_listed(
     unique(hits).map(|id| (id, LinkMatch::Name))
 }
 
+/// What applying the selected profile changes in the game folder, by mod name (D13).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ApplyPreview {
+    pub turned_off: Vec<String>,
+    pub turned_on: Vec<String>,
+}
+
 /// Where a file of a replaced download goes (D5).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UpdateProposal {
@@ -912,6 +919,38 @@ impl Session {
         save_manifest(&self.manifest_path(), &updated)?;
         self.manifest = updated;
         Ok(())
+    }
+
+    /// D13: which mods applying the selected profile takes out of the game folder and which it brings in (by name,
+    /// in library order). Play asks first when the selected profile isn't the applied one and mods would go (146).
+    /// `fallback_root` is where Apply goes for a profile that has no game folder yet (the first one Steam knows).
+    pub fn apply_preview(&self, fallback_root: Option<&Path>) -> ApplyPreview {
+        let Some(root) = self
+            .game_root()
+            .or_else(|| fallback_root.map(Path::to_path_buf))
+        else {
+            return ApplyPreview::default();
+        };
+        let root = root.display().to_string();
+        let in_game: HashSet<&str> = self
+            .manifest
+            .installations
+            .iter()
+            .find(|i| i.game_root == root)
+            .map(|i| i.applied.iter().map(|r| r.file.as_str()).collect())
+            .unwrap_or_default();
+        let wanted: HashSet<String> = self.wanted_files().into_iter().collect();
+        let mut preview = ApplyPreview::default();
+        for m in &self.manifest.mods {
+            let now = m.files.iter().any(|f| in_game.contains(f.id.as_str()));
+            let then = m.files.iter().any(|f| wanted.contains(&f.id));
+            if now && !then {
+                preview.turned_off.push(m.name.clone());
+            } else if then && !now {
+                preview.turned_on.push(m.name.clone());
+            }
+        }
+        preview
     }
 
     /// "Hide" on "new files available" (168): these GameBanana files of the mod are not reported again.
@@ -1752,6 +1791,52 @@ mod tests {
     }
 
     const HAZE: (crate::library::Section, u64) = (crate::library::Section::Mod, 655_209);
+
+    #[test]
+    fn applying_a_switched_profile_says_which_mods_leave_the_game() {
+        let f = Fixture::new("turnoff");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("haze");
+        s.import_file(
+            &f.source("seven.vpk", &[("models/seven/body.vmdl_c", 1)]),
+            "Seven",
+        )
+        .expect("seven");
+        let game = f.game();
+        s.apply(&game, false).expect("applied");
+        assert_eq!(
+            s.apply_preview(Some(&game)),
+            ApplyPreview::default(),
+            "nothing waits"
+        );
+
+        // D13: another profile keeps Seven, adds Wraith and leaves Haze out.
+        s.create_profile("Evening").expect("created");
+        s.select_profile("Evening").expect("selected");
+        s.set_enabled("local-2", true).expect("seven on");
+        s.import_file(
+            &f.source("wraith.vpk", &[("models/wraith/body.vmdl_c", 1)]),
+            "Wraith",
+        )
+        .expect("wraith");
+        // The new profile has no game folder yet: Apply would use the one Steam knows.
+        assert_eq!(
+            s.apply_preview(Some(&game)),
+            ApplyPreview {
+                turned_off: vec!["Haze".to_owned()],
+                turned_on: vec!["Wraith".to_owned()],
+            }
+        );
+        assert_eq!(
+            s.apply_preview(None),
+            ApplyPreview::default(),
+            "no game folder at all"
+        );
+    }
 
     #[test]
     fn a_local_mod_is_linked_by_the_md5_of_its_archive() {

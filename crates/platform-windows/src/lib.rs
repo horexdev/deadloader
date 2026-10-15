@@ -12,6 +12,8 @@ pub mod proxy;
 #[cfg(windows)]
 pub mod recycle;
 #[cfg(windows)]
+pub mod shell;
+#[cfg(windows)]
 pub mod steam;
 #[cfg(windows)]
 pub mod webview2;

@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   Channel: FakeChannel,
 }));
 
-const { api, catalog, downloads, imageUrl, isUserMessage, links, subscribe, updates } = await import('./api');
+const { api, catalog, downloads, imageUrl, isUserMessage, links, shell, subscribe, updates } = await import('./api');
 
 describe('api', () => {
   beforeEach(() => {
@@ -186,6 +186,24 @@ describe('api', () => {
     ]);
     invoke.mockRejectedValue({ kind: 'not_a_page' });
     await expect(links.link('local-1', 'nope')).rejects.toEqual({ kind: 'not_a_page' });
+  });
+
+  it('calls the window and Play commands by their Rust names', async () => {
+    invoke.mockResolvedValue({});
+    await shell.play();
+    await shell.applyPreview();
+    await shell.minimize();
+    await shell.toggleMaximize();
+    await shell.close();
+    await shell.startDrag();
+    expect(invoke.mock.calls.map(([name]) => name)).toEqual([
+      'play',
+      'apply_preview',
+      'window_minimize',
+      'window_toggle_maximize',
+      'window_close',
+      'window_start_drag',
+    ]);
   });
 
   it('builds picture addresses on the image protocol only', () => {

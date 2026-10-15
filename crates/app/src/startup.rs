@@ -78,6 +78,12 @@ pub fn run() -> Result<(), StartError> {
         .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::system::subscribe,
+            commands::shell::play,
+            commands::shell::apply_preview,
+            commands::shell::window_minimize,
+            commands::shell::window_toggle_maximize,
+            commands::shell::window_close,
+            commands::shell::window_start_drag,
             commands::system::system_locale,
             commands::library::library,
             commands::library::set_enabled,
