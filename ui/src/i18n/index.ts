@@ -7,6 +7,7 @@ export {
   formatTime,
   language,
   setLanguage,
+  setRegion,
   t,
   type MessageInput,
   type MessageText,

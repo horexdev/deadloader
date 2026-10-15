@@ -40,9 +40,10 @@ describe('negotiating the system language', () => {
   it.each([
     ['ru-RU', 'ru'],
     ['pt-BR', 'pt-BR'],
-    ['pt-PT', 'en'],
+    // 177: the nearest language we have, rather than English.
+    ['pt-PT', 'pt-BR'],
     ['zh-CN', 'zh-Hans'],
-    ['zh-TW', 'en'],
+    ['zh-TW', 'zh-Hans'],
     ['es-MX', 'es-419'],
     ['es-ES', 'es-ES'],
   ])('%s → %s', (requested, expected) => {
@@ -56,8 +57,8 @@ describe('negotiating the system language', () => {
     ['zh', 'zh-Hans'],
     ['zh-SG', 'zh-Hans'],
     ['zh-Hans-HK', 'zh-Hans'],
-    ['zh-HK', 'en'],
-    ['zh-Hant', 'en'],
+    ['zh-HK', 'zh-Hans'],
+    ['zh-Hant', 'zh-Hans'],
     ['pt', 'pt-BR'],
     ['es', 'es-ES'],
     ['es-419', 'es-419'],
@@ -77,7 +78,8 @@ describe('negotiating the system language', () => {
   });
 
   it('takes the first language of the list that we have', () => {
-    expect(negotiate(['pt-PT', 'zh-TW', 'ru-RU', 'en-US'])).toBe('ru');
+    expect(negotiate(['nl-NL', 'ru-RU', 'en-US'])).toBe('ru');
+    expect(negotiate(['pt-PT', 'ru-RU'])).toBe('pt-BR');
     expect(negotiate(['nl-NL', 'de-DE'])).toBe('de');
   });
 
@@ -91,7 +93,7 @@ describe('negotiating the system language', () => {
 describe('the language setting', () => {
   it('negotiates "system" against the preferred languages', () => {
     expect(resolveLanguage('system', ['pl-PL', 'en-US'])).toBe('pl');
-    expect(resolveLanguage('system', ['pt-PT'])).toBe('en');
+    expect(resolveLanguage('system', ['pt-PT'])).toBe('pt-BR');
   });
 
   it('lets an explicit language win over the system', () => {

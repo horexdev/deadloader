@@ -1,8 +1,10 @@
 //! Windows specifics: Steam discovery, hard links, the recycle bin, free disk space, process detection, the system
-//! proxy and WebView2 settings.
+//! proxy, the user's languages and regional format, and WebView2 settings.
 
 #[cfg(windows)]
 pub mod disk;
+#[cfg(windows)]
+pub mod locale;
 #[cfg(windows)]
 pub mod process;
 #[cfg(windows)]

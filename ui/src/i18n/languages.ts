@@ -101,11 +101,11 @@ function match(tag: string): Lang | null {
   }
   switch (locale.language) {
     case 'zh':
-      // Traditional Chinese readers are not given Simplified Chinese.
-      return locale.script === 'Hans' ? 'zh-Hans' : null;
+      // Decision 177: Traditional Chinese readers get Simplified Chinese, which is nearer than English.
+      return 'zh-Hans';
     case 'pt':
-      // European Portuguese differs enough from Brazilian that English is the safer default.
-      return locale.region === 'BR' ? 'pt-BR' : null;
+      // Decision 177: European Portuguese readers get Brazilian Portuguese rather than English.
+      return 'pt-BR';
     case 'es':
       return locale.region !== undefined && LATIN_AMERICA.has(locale.region) ? 'es-419' : 'es-ES';
     default:
