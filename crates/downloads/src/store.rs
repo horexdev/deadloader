@@ -45,6 +45,8 @@ pub struct TaskRecord {
     pub initiator: Initiator,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub meta: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_as: Option<String>,
     pub state: Saved,
     /// Why the task waits or failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,6 +109,14 @@ impl Store<'_> {
     pub fn archive_path(&self, id: TaskId, file_name: &str) -> PathBuf {
         self.dir
             .join(format!("{id}.{}", archive_extension(file_name)))
+    }
+
+    /// Where a kept archive goes: `wanted` as a safe name that no file in the folder has yet.
+    pub fn kept_path(&self, wanted: &str, file_name: &str) -> PathBuf {
+        let name = kept_name(wanted, archive_extension(file_name), |name| {
+            !self.dir.join(name).exists()
+        });
+        self.dir.join(name)
     }
 
     /// Reads `queue.json`, falling back to `queue.json.bak` if it is damaged. A missing file is an empty queue.
@@ -245,6 +255,58 @@ fn part_id(name: &str) -> Option<TaskId> {
 
 /// One of the archive formats deadloader reads, from the listed name; anything else is `bin` (the format is detected
 /// from the bytes when unpacking anyway).
+/// Characters kept of a kept archive's name before the extension; well inside Windows' path limits.
+const KEPT_NAME_CHARS: usize = 150;
+
+/// A Windows file name for a kept archive: forbidden and control characters become `_`, trailing dots and spaces go,
+/// reserved device names get a `_` in front, and the extension is always ours. `free` says whether a name is unused;
+/// a taken one gets ` (2)`, ` (3)`, ….
+pub fn kept_name(wanted: &str, ext: &str, free: impl Fn(&str) -> bool) -> String {
+    let dotted = format!(".{ext}");
+    let stem = if wanted.len() > dotted.len()
+        && wanted[wanted.len() - dotted.len()..].eq_ignore_ascii_case(&dotted)
+    {
+        &wanted[..wanted.len() - dotted.len()]
+    } else {
+        wanted
+    };
+    let cleaned: String = stem
+        .chars()
+        .map(|c| {
+            if c.is_control() || r#"<>:"/\|?*"#.contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .take(KEPT_NAME_CHARS)
+        .collect();
+    let mut stem = cleaned.trim_end_matches(['.', ' ']).trim_start().to_owned();
+    if stem.is_empty() {
+        stem = "download".to_owned();
+    }
+    let device = stem
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((device.starts_with("COM") || device.starts_with("LPT"))
+            && device.len() == 4
+            && device.as_bytes()[3].is_ascii_digit());
+    if reserved {
+        stem.insert(0, '_');
+    }
+    let first = format!("{stem}.{ext}");
+    if free(&first) {
+        return first;
+    }
+    (2..)
+        .map(|n| format!("{stem} ({n}).{ext}"))
+        .find(|name| free(name))
+        .expect("a free name")
+}
+
 pub fn archive_extension(file_name: &str) -> &'static str {
     let ext = Path::new(file_name)
         .extension()
@@ -273,6 +335,7 @@ mod tests {
             size: Some(10),
             initiator: Initiator::User,
             meta: BTreeMap::from([("mod".into(), "123".into())]),
+            keep_as: None,
             state: Saved::Queued,
             message: None,
             checkpoint: 4,
@@ -398,6 +461,39 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].1.op, FileOp::Delete);
         assert_eq!(store.highest_id_on_disk(), 3);
+    }
+
+    #[test]
+    fn kept_names_are_safe_windows_file_names() {
+        let free = |_: &str| true;
+        assert_eq!(
+            kept_name("Haze V2 - haze.zip", "zip", free),
+            "Haze V2 - haze.zip"
+        );
+        // The extension is ours, whatever the name says.
+        assert_eq!(
+            kept_name("Haze V2 - haze.exe", "zip", free),
+            "Haze V2 - haze.exe.zip"
+        );
+        assert_eq!(
+            kept_name(r#"a<b>c:d"e/f\g|h?i*j.zip"#, "zip", free),
+            "a_b_c_d_e_f_g_h_i_j.zip"
+        );
+        assert_eq!(kept_name("trailing. . ", "rar", free), "trailing.rar");
+        assert_eq!(kept_name("CON", "zip", free), "_CON.zip");
+        assert_eq!(kept_name("", "zip", free), "download.zip");
+        assert_eq!(kept_name("x\u{7}y", "7z", free), "x_y.7z");
+        let long = "a".repeat(400);
+        assert!(kept_name(&long, "zip", free).chars().count() <= 150 + 4);
+    }
+
+    #[test]
+    fn a_taken_kept_name_gets_a_number() {
+        let taken = ["Haze.zip", "Haze (2).zip"];
+        assert_eq!(
+            kept_name("Haze.zip", "zip", |n| !taken.contains(&n)),
+            "Haze (3).zip"
+        );
     }
 
     #[test]

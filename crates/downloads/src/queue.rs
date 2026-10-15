@@ -515,6 +515,7 @@ impl Downloads {
                     size: new.size,
                     initiator: new.initiator,
                     meta: new.meta,
+                    keep_as: new.keep_as,
                     state: Saved::Queued,
                     message: None,
                     checkpoint: 0,

@@ -348,6 +348,32 @@ fn a_download_is_verified_handed_off_and_its_archive_deleted() {
 }
 
 #[test]
+fn kept_archives_get_the_name_the_caller_asked_for() {
+    let mut h = Harness::new("keepname");
+    h.config.keep_archives = true;
+    h.open();
+    for n in [1, 2] {
+        let bytes = content(1000, n);
+        h.server
+            .serve(&url(n), Served::new(bytes.clone(), &format!("v{n}")));
+        let id = h
+            .dl()
+            .add(
+                NewTask::new(url(n), "haze_v2.zip")
+                    .md5(md5_hex(&bytes))
+                    .size(bytes.len() as u64)
+                    .keep_as("Haze: V2 - haze_v2.zip"),
+            )
+            .expect("add");
+        h.events.wait("done", removed(id));
+    }
+    // Characters Windows forbids are replaced; a second archive of the same name gets a number (174).
+    assert!(h.data().join("Haze_ V2 - haze_v2.zip").exists());
+    assert!(h.data().join("Haze_ V2 - haze_v2 (2).zip").exists());
+    assert!(!h.data().join("1.zip").exists());
+}
+
+#[test]
 fn kept_archives_stay() {
     let mut h = Harness::new("keep");
     h.config.keep_archives = true;
