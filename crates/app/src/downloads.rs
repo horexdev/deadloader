@@ -220,7 +220,11 @@ mod tests {
             Some("0123456789abcdef0123456789abcdef")
         );
         assert_eq!(task.initiator, Initiator::User);
-        assert_eq!(task.keep_as.as_deref(), Some("Haze V2 - haze_v2.vpk"), "174");
+        assert_eq!(
+            task.keep_as.as_deref(),
+            Some("Haze V2 - haze_v2.vpk"),
+            "174"
+        );
         let download = download_of(&info(&task)).expect("ours");
         assert_eq!(
             download,
