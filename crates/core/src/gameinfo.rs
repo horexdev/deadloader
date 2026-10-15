@@ -69,6 +69,122 @@ pub fn remove_addons_path(text: &str) -> Result<String, State> {
     Ok(format!("{}{}", &text[..ours.start], &text[ours.end..]))
 }
 
+/// One line of [`Diff`], without its line ending.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct DiffLine {
+    pub text: String,
+    /// Expected: the line deadloader adds. Found: a line another program added (an addons path or its marker).
+    pub marked: bool,
+}
+
+/// D10: the `SearchPaths` block as it should be (the original plus our line) next to what the file has now.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Diff {
+    /// Empty when the file has no single, closed `SearchPaths` block to compare with.
+    pub expected: Vec<DiffLine>,
+    pub found: Vec<DiffLine>,
+}
+
+/// At most this many lines of a file without a usable block are shown.
+const DIFF_MAX_LINES: usize = 400;
+
+/// What D10 shows: the expected block is the found one without other addons paths and manager markers, with our line
+/// in front of `Game citadel`. A guess at the original, never written anywhere: only Steam restores the real file.
+pub fn diff(text: &str) -> Diff {
+    let lines = split_lines(text);
+    let is_marker = |l: &Line<'_>| l.comment().to_ascii_lowercase().contains("mod manager");
+    let line = |l: &Line<'_>, marked: bool| DiffLine {
+        text: l.content.to_owned(),
+        marked,
+    };
+    let Some((header, end)) = block(&lines) else {
+        return Diff {
+            expected: Vec::new(),
+            found: lines
+                .iter()
+                .take(DIFF_MAX_LINES)
+                .map(|l| line(l, is_marker(l)))
+                .collect(),
+        };
+    };
+    let is_addons = |i: usize| {
+        let l = &lines[i];
+        i > header
+            && i < end
+            && l.tokens.len() >= 2
+            && l.tokens[1]
+                .text(l.content)
+                .replace('\\', "/")
+                .split('/')
+                .any(|seg| seg.eq_ignore_ascii_case("addons"))
+    };
+    let mut found = Vec::new();
+    let mut expected = Vec::new();
+    let mut ours_added = false;
+    for (i, l) in lines.iter().enumerate() {
+        let inside = (header..=end).contains(&i);
+        let marker = is_marker(l) && l.tokens.is_empty();
+        if !inside && !marker {
+            continue;
+        }
+        let foreign = marker || is_addons(i);
+        found.push(line(l, foreign));
+        if foreign {
+            continue;
+        }
+        let game_citadel = inside
+            && i > header
+            && l.tokens.len() >= 2
+            && l.tokens[0].text(l.content).eq_ignore_ascii_case("Game")
+            && l.tokens[1].text(l.content).eq_ignore_ascii_case("citadel");
+        if game_citadel && !ours_added {
+            let value = l.tokens[1];
+            expected.push(DiffLine {
+                text: format!(
+                    "{}{}",
+                    &l.content[..value.start],
+                    l.content[value.start..value.end].replacen("citadel", OUR_VALUE, 1)
+                ),
+                marked: true,
+            });
+            ours_added = true;
+        }
+        expected.push(line(l, false));
+    }
+    Diff { expected, found }
+}
+
+/// The lines of the one `SearchPaths` block, header to closing brace; `None` when there isn't exactly one closed block.
+fn block(lines: &[Line<'_>]) -> Option<(usize, usize)> {
+    let mut headers = lines.iter().enumerate().filter(|(_, l)| {
+        l.tokens
+            .first()
+            .is_some_and(|t| t.text(l.content).eq_ignore_ascii_case("SearchPaths"))
+    });
+    let (header, _) = headers.next()?;
+    if headers.next().is_some() {
+        return None;
+    }
+    let mut depth = 0usize;
+    let mut opened = false;
+    for (i, line) in lines.iter().enumerate().skip(header) {
+        for tok in &line.tokens {
+            match tok.text(line.content) {
+                "{" => {
+                    depth += 1;
+                    opened = true;
+                }
+                "}" => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        if opened && depth == 0 {
+            return Some((header, i));
+        }
+    }
+    None
+}
+
 struct Analysis<'a> {
     lines: Vec<Line<'a>>,
     state: State,
@@ -431,6 +547,83 @@ mod tests {
     fn an_unclosed_search_paths_block_is_foreign() {
         let text = "\"GameInfo\"\r\n{\r\n\tSearchPaths\r\n\t{\r\n\t\tGame\tcitadel\r\n";
         assert_eq!(foreign_reasons(text), [Foreign::Unclosed]);
+    }
+
+    fn texts(lines: &[DiffLine]) -> Vec<(&str, bool)> {
+        lines.iter().map(|l| (l.text.as_str(), l.marked)).collect()
+    }
+
+    #[test]
+    fn the_diff_of_another_managers_block_marks_its_lines_and_ours() {
+        let text = VANILLA.replace(
+            "\t\t\tGame\t\t\t\tcitadel\r\n",
+            "\t\t\tGame\t\t\t\tcitadel/addons/dmm\r\n\t\t\tGame\t\t\t\tcitadel/addons\r\n\t\t\tGame\t\t\t\tcitadel\r\n",
+        );
+        let diff = diff(&text);
+        assert_eq!(
+            texts(&diff.found)[7..10],
+            [
+                ("\t\t\tGame\t\t\t\tcitadel/addons/dmm", true),
+                ("\t\t\tGame\t\t\t\tcitadel/addons", true),
+                ("\t\t\tGame\t\t\t\tcitadel", false),
+            ]
+        );
+        assert_eq!(texts(&diff.found)[0], ("\t\tSearchPaths", false));
+        assert_eq!(texts(&diff.found).last(), Some(&("\t\t}", false)));
+        // Expected: the other lines gone, ours in front of `Game citadel` in the same style.
+        assert_eq!(
+            texts(&diff.expected)[7..9],
+            [
+                ("\t\t\tGame\t\t\t\tcitadel/addons", true),
+                ("\t\t\tGame\t\t\t\tcitadel", false),
+            ]
+        );
+        assert_eq!(diff.expected.len(), diff.found.len() - 1);
+    }
+
+    #[test]
+    fn the_diff_marks_another_managers_comments() {
+        let dmm = "\"GameInfo\"\n{\n// Deadlock Mod Manager - Start\n\tSearchPaths\n\t{\n\t\tGame\tcitadel/addons\n\t\tGame\tcitadel\n\t}\n// Deadlock Mod Manager - End\n}\n";
+        let diff = diff(dmm);
+        assert_eq!(
+            texts(&diff.found),
+            [
+                ("// Deadlock Mod Manager - Start", true),
+                ("\tSearchPaths", false),
+                ("\t{", false),
+                ("\t\tGame\tcitadel/addons", true),
+                ("\t\tGame\tcitadel", false),
+                ("\t}", false),
+                ("// Deadlock Mod Manager - End", true),
+            ]
+        );
+        assert_eq!(
+            texts(&diff.expected),
+            [
+                ("\tSearchPaths", false),
+                ("\t{", false),
+                ("\t\tGame\tcitadel/addons", true),
+                ("\t\tGame\tcitadel", false),
+                ("\t}", false),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_file_without_a_block_shows_what_it_has_and_expects_nothing() {
+        let diff = diff("\"GameInfo\"\r\n{\r\n}\r\n");
+        assert_eq!(
+            texts(&diff.found),
+            [("\"GameInfo\"", false), ("{", false), ("}", false)]
+        );
+        assert!(diff.expected.is_empty());
+    }
+
+    #[test]
+    fn the_diff_of_a_vanilla_file_only_adds_our_line() {
+        let diff = diff(VANILLA);
+        assert!(diff.found.iter().all(|l| !l.marked));
+        assert_eq!(diff.expected.iter().filter(|l| l.marked).count(), 1);
     }
 
     #[test]

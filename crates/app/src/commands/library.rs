@@ -114,3 +114,115 @@ pub async fn add_from_disk(
     })
     .await
 }
+
+/// S9: the pending changes and the last automatic apply while it can be undone.
+#[tauri::command]
+pub async fn pending(backend: Shared<'_>) -> Reply<crate::backend::Pending> {
+    blocking(backend, move |b| b.pending()).await
+}
+
+/// S9 "Undo this change": that part of the mod goes back to what the game folder has.
+#[tauri::command]
+pub async fn pending_revert(
+    backend: Shared<'_>,
+    mod_id: String,
+    aspect: deadloader_core::pending::Aspect,
+) -> Reply<Changed> {
+    blocking(backend, move |b| b.revert_pending(&mod_id, aspect)).await
+}
+
+/// S9 "Discard all", or "Keep <the applied profile>" for a profile switch.
+#[tauri::command]
+pub async fn pending_discard(backend: Shared<'_>) -> Reply<Changed> {
+    blocking(backend, move |b| b.discard_pending()).await
+}
+
+/// Undo of what was applied after the game closed (N12, 143, 147).
+#[tauri::command]
+pub async fn pending_undo_applied(backend: Shared<'_>) -> Reply<Changed> {
+    blocking(backend, move |b| b.undo_applied()).await
+}
+
+/// F9: the foreign items of the game's mod folder.
+#[tauri::command]
+pub async fn foreign_files(backend: Shared<'_>) -> Reply<crate::backend::ForeignReport> {
+    blocking(backend, move |b| b.foreign_files()).await
+}
+
+/// F9 "Leave as is".
+#[tauri::command]
+pub async fn foreign_leave(
+    backend: Shared<'_>,
+    name: String,
+) -> Reply<crate::backend::ForeignReport> {
+    blocking(backend, move |b| b.leave_foreign(&name)).await
+}
+
+/// D11 "Take under management".
+#[tauri::command]
+pub async fn foreign_take(
+    backend: Shared<'_>,
+    name: String,
+    mod_name: String,
+) -> Reply<crate::backend::Taken> {
+    blocking(backend, move |b| b.take_foreign(&name, &mod_name)).await
+}
+
+/// D10: the state of `gameinfo.gi` and, when another program changed it, the differences. `fix` ("Check again")
+/// adds our line to the original file.
+#[tauri::command]
+pub async fn gameinfo_status(
+    backend: Shared<'_>,
+    fix: bool,
+) -> Reply<crate::backend::GameinfoStatus> {
+    blocking(backend, move |b| b.gameinfo_status(fix)).await
+}
+
+type AppLog = Arc<
+    deadloader_core::log::Logger<
+        deadloader_core::log::SystemClock,
+        deadloader_core::log::DiskLogDir,
+    >,
+>;
+
+/// Logs an external program deadloader started (ADR 0009).
+fn log_shell(log: &AppLog, result: &Reply<crate::backend::ShellRequest>) {
+    use deadloader_core::log::Level;
+    if let Ok(request) = result {
+        let (program, arguments) = request.describe();
+        let fields = serde_json::Map::from_iter([
+            ("program".to_owned(), program.into()),
+            ("arguments".to_owned(), arguments.into()),
+        ]);
+        let _ = log.app(Level::Info, "external program started", fields);
+    }
+}
+
+/// D10 "Verify game files in Steam".
+#[tauri::command]
+pub async fn verify_game_files(backend: Shared<'_>, log: State<'_, AppLog>) -> Reply<()> {
+    let log = Arc::clone(log.inner());
+    blocking(backend, move |b| {
+        let result = b.verify_game_files();
+        log_shell(&log, &result);
+        result.map(|_| ())
+    })
+    .await
+}
+
+/// "Open file" / "Open folder" for a place the core knows.
+#[tauri::command]
+pub async fn show_place(
+    backend: Shared<'_>,
+    log: State<'_, AppLog>,
+    place: crate::backend::Place,
+    as_file: bool,
+) -> Reply<()> {
+    let log = Arc::clone(log.inner());
+    blocking(backend, move |b| {
+        let result = b.show(&place, as_file);
+        log_shell(&log, &result);
+        result.map(|_| ())
+    })
+    .await
+}

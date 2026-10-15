@@ -16,7 +16,8 @@ pub struct AppliedFile {
     pub len: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ForeignKind {
     /// A pak file (or a data chunk of one) another tool or the user put there.
     ModFile,
@@ -27,7 +28,8 @@ pub enum ForeignKind {
 }
 
 /// Who probably created a foreign item, when it can be told from its name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Origin {
     DeadlockModManager,
 }

@@ -16,6 +16,7 @@ pub mod library;
 pub mod log;
 pub mod message;
 pub mod overlap;
+pub mod pending;
 pub mod place;
 pub mod profiles;
 pub mod remove;

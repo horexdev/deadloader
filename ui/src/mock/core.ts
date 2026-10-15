@@ -38,6 +38,7 @@ function fresh(): State {
       selected_profile: 'Default',
       applied_profile: 'Default',
       pending: false,
+      pending_count: 0,
       mods: [libraryMod(0, true), libraryMod(1, true), libraryMod(2, false), libraryMod(3, true, true), libraryMod(4, true)],
       conflicts: [
         {

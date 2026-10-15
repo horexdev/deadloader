@@ -128,6 +128,16 @@ pub fn run() -> Result<(), StartError> {
             commands::library::mod_link,
             commands::library::mod_link_files,
             commands::library::mod_rename,
+            commands::library::pending,
+            commands::library::pending_revert,
+            commands::library::pending_discard,
+            commands::library::pending_undo_applied,
+            commands::library::foreign_files,
+            commands::library::foreign_leave,
+            commands::library::foreign_take,
+            commands::library::gameinfo_status,
+            commands::library::verify_game_files,
+            commands::library::show_place,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;

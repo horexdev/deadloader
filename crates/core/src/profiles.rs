@@ -535,6 +535,7 @@ mod tests {
             game_root: root.into(),
             applied_profile: Some(profile.into()),
             applied: vec![],
+            ..InstallationState::default()
         });
     }
 

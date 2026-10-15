@@ -5,18 +5,21 @@
 //! The folder layout is ADR 0003's. The library's VPK directories are read once when the session opens and after each
 //! import; variant groups and conflicts are computed from them.
 
-use crate::apply::{Direction, Wanted, layout};
-use crate::engine::{Engine, EngineError};
-use crate::fs::{Disk, Logged};
-use crate::gamedir::{GuardOutcome, ensure_mods_load};
+use crate::addons::{AppliedFile, ForeignKind, Origin, scan};
+use crate::apply::{Direction, Wanted, layout, slot_of};
+use crate::engine::{Engine, EngineError, same_root};
+use crate::fs::{Counted, Disk, Logged};
+use crate::gamedir::{GuardOutcome, addons_path, ensure_mods_load};
 use crate::import::{ImportError, ImportRequest, NoHooks, import, limits_from};
-use crate::journal::{FileJournal, Recovery};
+use crate::journal::{self, FileJournal, Recovery, Step};
 use crate::library::{
-    Manifest, ModelError, Profile, ProfileEntry, Section, Source, load_manifest, save_manifest,
+    InstallationState, Manifest, ModelError, Profile, ProfileEntry, Section, Source, load_manifest,
+    save_manifest,
 };
 use crate::log::{FileEvent, FileLog, FileOp, Outcome};
 use crate::message::{Area, MessageId, ToUserMessage, UserMessage, data_file, from_io};
 use crate::overlap::{FileIndex, Grouping, conflicts, group};
+use crate::pending::{self, Aspect, InGame, PendingChange};
 use crate::profiles::{self, ProfileError};
 use crate::remove::{
     self as removal, Delete, Permanently, RemovalPlan, RemoveError, Removed, Target,
@@ -208,6 +211,8 @@ pub enum SessionError {
     EmptyName,
     /// The game folder has no `gameinfo.gi` (moved, uninstalled, or its drive is gone): nothing is written there (E2).
     GameNotFound(PathBuf),
+    /// Only a self-contained `pakNN_dir.vpk` of another tool can be taken under management (D11).
+    NotTakeable(String),
     Io(io::Error),
 }
 
@@ -227,6 +232,12 @@ impl std::fmt::Display for SessionError {
             Self::EmptyName => f.write_str("a mod name can't be empty"),
             Self::GameNotFound(root) => {
                 write!(f, "no Deadlock installation in {}", root.display())
+            }
+            Self::NotTakeable(name) => {
+                write!(
+                    f,
+                    "{name} is not a mod file deadloader can take under management"
+                )
             }
             Self::Io(e) => write!(f, "{e}"),
         }
@@ -249,9 +260,11 @@ impl ToUserMessage for SessionError {
                 .arg("path", root.display())
                 .arg("detail", self),
             Self::Update(e) => e.user_message(),
-            Self::UnknownMod(_) | Self::UnknownFile(_) | Self::NotLinked(_) | Self::EmptyName => {
-                UserMessage::new(MessageId::Internal).arg("detail", self)
-            }
+            Self::UnknownMod(_)
+            | Self::UnknownFile(_)
+            | Self::NotLinked(_)
+            | Self::EmptyName
+            | Self::NotTakeable(_) => UserMessage::new(MessageId::Internal).arg("detail", self),
         }
     }
 }
@@ -282,6 +295,8 @@ pub struct LibraryView {
     pub applied_profile: Option<String>,
     /// The selected profile differs from what is in that game folder.
     pub pending: bool,
+    /// How many pending changes S9 lists: 1 for a profile switch, else one per mod and aspect (the sidebar's count).
+    pub pending_count: usize,
     /// The profile's mods in priority order (first wins), then library mods it doesn't use, switched off.
     pub mods: Vec<ModView>,
     pub conflicts: Vec<ConflictView>,
@@ -300,6 +315,75 @@ pub struct ModView {
     /// Files overlapping nothing else in the mod (parts / add-ons) and whether each is on.
     pub add_ons: Vec<(String, bool)>,
     pub bytes: u64,
+    /// Some change of this mod waits to be applied (S4's "Pending" badge).
+    pub pending: bool,
+    /// Files of this mod are in the game folder now (`None`: none are).
+    pub in_game: Option<InGameView>,
+}
+
+/// How a mod's files are in the game folder: hard links take no extra space; copies do (124).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct InGameView {
+    pub copied: bool,
+    /// The size of its files there; extra disk space when `copied`.
+    pub bytes: u64,
+}
+
+/// The pending-changes panel (S9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PendingView {
+    /// The selected profile isn't the one in its game folder: it waits for Apply or Play (138), shown as one change.
+    pub switch: Option<ProfileSwitch>,
+    /// Edits of the applied profile not in the game yet (while it runs, or after a failed apply).
+    pub changes: Vec<PendingChange>,
+    /// What applying does to the game folder.
+    pub folder: FolderSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfileSwitch {
+    /// The profile in the game folder now; `None` when deadloader never applied one there.
+    pub from: Option<String>,
+    pub to: String,
+    pub turned_on: usize,
+    pub turned_off: usize,
+}
+
+/// Applying's effect on the game's `addons` folder, in files.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct FolderSummary {
+    pub added: usize,
+    pub removed: usize,
+    /// Files that stay but move to another `pakNN` slot.
+    pub renumbered: usize,
+    pub addons: Option<String>,
+}
+
+/// An item of the game's `addons` folder deadloader didn't put there (decision 16, F9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ForeignView {
+    pub name: String,
+    pub kind: ForeignKind,
+    pub slot: Option<u8>,
+    /// A folder: everything in it.
+    pub bytes: u64,
+    /// A folder: how many files it holds, at every level (counted up to a limit).
+    pub files: Option<u64>,
+    pub modified_unix_ms: Option<i64>,
+    pub origin: Option<Origin>,
+    /// What a readable mod file contains.
+    pub vpk: Option<VpkSummary>,
+    /// D11 can take it: a self-contained `pakNN_dir.vpk`.
+    pub takeable: bool,
+    /// The user chose to leave it as it is.
+    pub left: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VpkSummary {
+    pub entries: usize,
+    /// The hero folder most of its files are in (the game's internal name), when there is one.
+    pub hero: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -572,10 +656,21 @@ impl Session {
             })
             .collect();
         let installation = self.installation();
+        // A profile without a game folder of its own goes to the first one (as Apply does with Steam's first).
+        let target = installation.or_else(|| {
+            self.profile()
+                .filter(|p| p.game_root.is_none())
+                .and_then(|_| self.manifest.installations.first())
+        });
+        let (switch, changes) = self.pending_parts(target);
+        for m in &mut mods {
+            m.pending = changes.iter().any(|c| c.mod_id == m.id);
+        }
         LibraryView {
             selected_profile: self.selected.clone(),
             applied_profile: installation.and_then(|i| i.applied_profile.clone()),
             pending: self.pending(&wanted),
+            pending_count: if switch.is_some() { 1 } else { changes.len() },
             mods,
             conflicts,
         }
@@ -1209,8 +1304,9 @@ impl Session {
             return Err(SessionError::GameNotFound(game_root.to_path_buf()));
         }
         let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
+        let counted = Counted::new(&fs);
         let engine = Engine {
-            fs: &fs,
+            fs: &counted,
             journal: &journal,
             data_dir: &self.data_dir,
             direction: self.direction,
@@ -1227,6 +1323,19 @@ impl Session {
             )
             .map_err(SessionError::Engine)?;
         let root = game_root.display().to_string();
+        if counted.linked() + counted.copied() > 0 {
+            let copies = Some(counted.copied() > 0);
+            if let Some(i) = self
+                .manifest
+                .installations
+                .iter_mut()
+                .find(|i| same_root(&i.game_root, &root))
+                && i.copies != copies
+            {
+                i.copies = copies;
+                save_manifest(&manifest_path, &self.manifest)?;
+            }
+        }
         if profile.game_root.as_deref() != Some(root.as_str()) {
             profile.game_root = Some(root);
             profiles::save(&self.profiles_dir(), &profile)?;
@@ -1238,6 +1347,368 @@ impl Session {
             recovered: report.recovered,
             foreign: report.foreign.len(),
         })
+    }
+
+    /// S9: what applying the selected profile would change in its game folder (`fallback_root` as in
+    /// [`Session::apply_preview`]).
+    pub fn pending_view(&self, fallback_root: Option<&Path>) -> PendingView {
+        let root = self.root_or(fallback_root);
+        let installation = root.as_deref().and_then(|r| self.installation_at(r));
+        let (switch, changes) = self.pending_parts(installation);
+        PendingView {
+            switch,
+            changes,
+            folder: self.folder_summary(root.as_deref(), installation),
+        }
+    }
+
+    /// S9 "Undo this change": that part of the mod's entry goes back to what the game folder has.
+    pub fn revert_pending(
+        &mut self,
+        mod_id: &str,
+        aspect: Aspect,
+        fallback_root: Option<&Path>,
+    ) -> Result<(), SessionError> {
+        let game = self.game_side(fallback_root);
+        let mut profile = self
+            .profile()
+            .cloned()
+            .ok_or_else(|| ProfileError::NotFound(self.selected.clone()))?;
+        pending::revert(
+            &mut profile,
+            &game,
+            &|id| self.grouping(id).unwrap_or_default(),
+            mod_id,
+            aspect,
+        );
+        self.edit_profile(|p| p.entries = profile.entries)
+    }
+
+    /// S9 "Discard all": a profile switch selects the applied profile again ("Keep Evening"); edits make the profile
+    /// match the game folder.
+    pub fn discard_pending(&mut self, fallback_root: Option<&Path>) -> Result<(), SessionError> {
+        let root = self.root_or(fallback_root);
+        let applied = root
+            .as_deref()
+            .and_then(|r| self.installation_at(r))
+            .and_then(|i| i.applied_profile.clone());
+        match applied {
+            Some(name) if name == self.selected => {
+                let matched = self
+                    .profile_matching_game(fallback_root)
+                    .ok_or_else(|| ProfileError::NotFound(self.selected.clone()))?;
+                self.restore_profile(&matched)
+            }
+            Some(name) => self.select_profile(&name),
+            None => Ok(()),
+        }
+    }
+
+    /// The selected profile as the game folder has it now: what Undo after an automatic apply goes back to (143, 147).
+    pub fn profile_matching_game(&self, fallback_root: Option<&Path>) -> Option<Profile> {
+        let game = self.game_side(fallback_root);
+        let profile = self.profile()?;
+        Some(pending::matching_game(profile, &game, &|id| {
+            self.grouping(id).unwrap_or_default()
+        }))
+    }
+
+    /// Puts a profile's mods back as they were (Undo); only for the selected profile.
+    pub fn restore_profile(&mut self, profile: &Profile) -> Result<(), SessionError> {
+        if profile.name != self.selected {
+            return Err(ProfileError::NotFound(profile.name.clone()).into());
+        }
+        let entries = profile.entries.clone();
+        self.edit_profile(|p| p.entries = entries)
+    }
+
+    /// F9: what is in the game's `addons` folder that deadloader didn't put there, by name.
+    pub fn foreign(&self, game_root: &Path) -> Vec<ForeignView> {
+        let installation = self.installation_at(game_root);
+        let applied: Vec<AppliedFile> = installation
+            .map(|i| {
+                i.applied
+                    .iter()
+                    .map(|r| AppliedFile {
+                        slot: r.slot,
+                        id: r.file.clone(),
+                        len: r.len,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let addons = addons_path(game_root);
+        let Ok(found) = scan(&Disk, &addons, &applied) else {
+            return Vec::new();
+        };
+        let chunked = |slot: u8| {
+            found.foreign.iter().any(|o| {
+                o.kind == ForeignKind::ModFile && o.slot == Some(slot) && slot_of(&o.name).is_none()
+            })
+        };
+        let mut out: Vec<ForeignView> = found
+            .foreign
+            .iter()
+            .map(|item| {
+                let path = addons.join(&item.name);
+                let modified_unix_ms = std::fs::metadata(&path)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|d| i64::try_from(d.as_millis()).ok());
+                let (bytes, files) = if item.kind == ForeignKind::Folder {
+                    let (bytes, files) = folder_size(&path);
+                    (bytes, Some(files))
+                } else {
+                    (item.len, None)
+                };
+                let dir_file =
+                    matches!(item.kind, ForeignKind::ModFile | ForeignKind::ReplacedOurs)
+                        && slot_of(&item.name).is_some();
+                let read = dir_file.then(|| summarize(&path)).flatten();
+                let takeable = read.as_ref().is_some_and(|(_, inline)| *inline)
+                    && !item.slot.is_some_and(chunked);
+                ForeignView {
+                    name: item.name.clone(),
+                    kind: item.kind,
+                    slot: item.slot,
+                    bytes,
+                    files,
+                    modified_unix_ms,
+                    origin: item.origin,
+                    vpk: read.map(|(summary, _)| summary),
+                    takeable,
+                    left: installation.is_some_and(|i| {
+                        i.left_foreign
+                            .iter()
+                            .any(|n| n.eq_ignore_ascii_case(&item.name))
+                    }),
+                }
+            })
+            .collect();
+        out.sort_by_key(|i| i.name.to_lowercase());
+        out
+    }
+
+    /// F9 "Leave as is": the item stays where it is and listed, but is never reported again.
+    pub fn leave_foreign(&mut self, game_root: &Path, name: &str) -> Result<(), SessionError> {
+        let root = game_root.display().to_string();
+        let mut updated = self.manifest.clone();
+        let index = match updated
+            .installations
+            .iter()
+            .position(|i| same_root(&i.game_root, &root))
+        {
+            Some(i) => i,
+            None => {
+                updated.installations.push(InstallationState {
+                    game_root: root,
+                    ..InstallationState::default()
+                });
+                updated.installations.len() - 1
+            }
+        };
+        let left = &mut updated.installations[index].left_foreign;
+        if !left.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+            left.push(name.to_owned());
+            left.sort_by_key(|n| n.to_lowercase());
+        }
+        save_manifest(&self.manifest_path(), &updated)?;
+        self.manifest = updated;
+        Ok(())
+    }
+
+    /// D11: a foreign mod file becomes a local mod. It is copied into the library (the copy keeps its bytes, so this
+    /// can be undone), the original leaves the game folder through the intent journal, and the mod is enabled at the
+    /// bottom of the selected profile; the next apply puts our copy in. Returns the new mod's id.
+    pub fn take_foreign(
+        &mut self,
+        game_root: &Path,
+        name: &str,
+        mod_name: &str,
+        game_running: bool,
+    ) -> Result<String, SessionError> {
+        if game_running {
+            return Err(SessionError::Engine(EngineError::GameRunning));
+        }
+        let item = self
+            .foreign(game_root)
+            .into_iter()
+            .find(|i| i.name.eq_ignore_ascii_case(name) && i.takeable)
+            .ok_or_else(|| SessionError::NotTakeable(name.to_owned()))?;
+        let path = addons_path(game_root).join(&item.name);
+        let title = match mod_name.trim() {
+            "" => item.name.trim_end_matches(".vpk").to_owned(),
+            given => given.to_owned(),
+        };
+        let req = ImportRequest {
+            source: path.clone(),
+            mod_id: self.free_local_id(),
+            name: title,
+            mod_source: Source::Local {
+                imported_from: Some(path.display().to_string()),
+            },
+            version: None,
+            remote_file_id: None,
+            archive_name: None,
+        };
+        let imported = self.import_request(&req, None, false)?;
+        let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
+        let fs = Logged {
+            fs: &Disk,
+            log: &*self.log,
+        };
+        if let Err(e) = journal::run(&fs, &journal, unique_number(), &[Step::Delete { path }]) {
+            // The original stays where it was; the copy goes again.
+            let _ = self.remove(&Target::Mod(imported.mod_id.clone()), &Permanently);
+            return Err(SessionError::Engine(EngineError::Tx(e)));
+        }
+        let grouping = self.grouping(&imported.mod_id)?;
+        let mod_id = imported.mod_id.clone();
+        self.edit_profile(|p| {
+            p.entries.retain(|e| e.mod_id != mod_id);
+            p.entries.push(ProfileEntry {
+                mod_id: mod_id.clone(),
+                variants: grouping
+                    .variant_groups
+                    .iter()
+                    .filter_map(|g| g.first().cloned())
+                    .collect(),
+                add_ons: grouping.standalone.clone(),
+                enabled: true,
+            });
+        })?;
+        Ok(imported.mod_id)
+    }
+
+    /// D10 "Check again": our line goes into a `gameinfo.gi` that is the original again (after Steam restored it);
+    /// a file another program changed is left as it is. Never while the game runs.
+    pub fn fix_gameinfo(
+        &mut self,
+        game_root: &Path,
+        game_running: bool,
+    ) -> Result<GuardOutcome, SessionError> {
+        if game_running {
+            return Err(SessionError::Engine(EngineError::GameRunning));
+        }
+        let fs = Logged {
+            fs: &Disk,
+            log: &*self.log,
+        };
+        Ok(ensure_mods_load(
+            &fs,
+            game_root,
+            &self.data_dir.join("backups").join("gameinfo"),
+            &format!("{}.gi", unique_number()),
+        )?)
+    }
+
+    /// Where a mod's first file is in the library ("Open folder" in the mod details).
+    pub fn mod_file_path(&self, mod_id: &str) -> Option<PathBuf> {
+        let m = self.manifest.mods.iter().find(|m| m.id == mod_id)?;
+        let f = m.files.first()?;
+        Some(library_path(&self.data_dir, &f.library_path))
+    }
+
+    /// The pending switch or the pending edits against `installation`.
+    fn pending_parts(
+        &self,
+        installation: Option<&InstallationState>,
+    ) -> (Option<ProfileSwitch>, Vec<PendingChange>) {
+        let Some(profile) = self.profile() else {
+            return (None, Vec::new());
+        };
+        let game = pending::in_game(&self.manifest, installation, self.direction);
+        let changes = pending::changes(&self.manifest, profile, &game);
+        let applied = installation.and_then(|i| i.applied_profile.clone());
+        if applied.as_deref() == Some(self.selected.as_str()) {
+            return (None, changes);
+        }
+        // A profile never applied to an empty folder has nothing to switch.
+        if applied.is_none() && changes.is_empty() {
+            return (None, Vec::new());
+        }
+        let count = |kind: pending::Change| changes.iter().filter(|c| c.change == kind).count();
+        (
+            Some(ProfileSwitch {
+                from: applied,
+                to: self.selected.clone(),
+                turned_on: count(pending::Change::Enable),
+                turned_off: count(pending::Change::Disable),
+            }),
+            Vec::new(),
+        )
+    }
+
+    /// Files added, removed and renumbered in `root`'s `addons` folder by applying the selected profile.
+    fn folder_summary(
+        &self,
+        root: Option<&Path>,
+        installation: Option<&InstallationState>,
+    ) -> FolderSummary {
+        let applied: Vec<&crate::library::AppliedRecord> = installation
+            .map(|i| i.applied.iter().collect())
+            .unwrap_or_default();
+        let foreign_slots = root
+            .and_then(|r| {
+                let records: Vec<AppliedFile> = applied
+                    .iter()
+                    .map(|r| AppliedFile {
+                        slot: r.slot,
+                        id: r.file.clone(),
+                        len: r.len,
+                    })
+                    .collect();
+                scan(&Disk, &addons_path(r), &records).ok()
+            })
+            .map(|s| s.foreign_slots())
+            .unwrap_or_default();
+        let wanted: Vec<Wanted> = self
+            .wanted_files()
+            .into_iter()
+            .map(|id| Wanted {
+                id,
+                source: PathBuf::new(),
+                sha256: [0; 32],
+            })
+            .collect();
+        let target = layout(&foreign_slots, &wanted, self.direction).unwrap_or_default();
+        let slot_now = |id: &str| applied.iter().find(|r| r.file == id).map(|r| r.slot);
+        FolderSummary {
+            added: target
+                .iter()
+                .filter(|(_, id)| slot_now(id).is_none())
+                .count(),
+            removed: applied
+                .iter()
+                .filter(|r| !target.iter().any(|(_, id)| *id == r.file))
+                .count(),
+            renumbered: target
+                .iter()
+                .filter(|(slot, id)| slot_now(id).is_some_and(|s| s != *slot))
+                .count(),
+            addons: root.map(|r| addons_path(r).display().to_string()),
+        }
+    }
+
+    /// What deadloader put into the game folder the selected profile goes to, by mod.
+    fn game_side(&self, fallback_root: Option<&Path>) -> Vec<InGame> {
+        let root = self.root_or(fallback_root);
+        let installation = root.as_deref().and_then(|r| self.installation_at(r));
+        pending::in_game(&self.manifest, installation, self.direction)
+    }
+
+    fn root_or(&self, fallback_root: Option<&Path>) -> Option<PathBuf> {
+        self.game_root()
+            .or_else(|| fallback_root.map(Path::to_path_buf))
+    }
+
+    fn installation_at(&self, root: &Path) -> Option<&InstallationState> {
+        let root = root.display().to_string();
+        self.manifest
+            .installations
+            .iter()
+            .find(|i| same_root(&i.game_root, &root))
     }
 
     fn profile(&self) -> Option<&Profile> {
@@ -1350,6 +1821,27 @@ impl Session {
                 .map(|f| (f.clone(), active(f)))
                 .collect(),
             bytes: m.files.iter().map(|f| f.len).sum(),
+            pending: false,
+            in_game: self.in_game_view(m),
+        })
+    }
+
+    /// The files of `m` deadloader put into the selected profile's game folder.
+    fn in_game_view(&self, m: &crate::library::Mod) -> Option<InGameView> {
+        let installation = self.installation()?;
+        let bytes: u64 = installation
+            .applied
+            .iter()
+            .filter(|r| m.files.iter().any(|f| f.id == r.file))
+            .map(|r| r.len)
+            .sum();
+        let any = installation
+            .applied
+            .iter()
+            .any(|r| m.files.iter().any(|f| f.id == r.file));
+        any.then_some(InGameView {
+            copied: installation.copies == Some(true),
+            bytes,
         })
     }
 
@@ -1464,6 +1956,65 @@ fn default_files(grouping: &Grouping) -> Vec<String> {
         .filter_map(|g| g.first().cloned())
         .chain(grouping.standalone.iter().cloned())
         .collect()
+}
+
+/// At most this many files of a foreign folder are counted (a replays folder can be big).
+const FOLDER_COUNT_LIMIT: u64 = 10_000;
+
+/// The size and number of files of a folder, at every level, up to [`FOLDER_COUNT_LIMIT`] files.
+fn folder_size(dir: &Path) -> (u64, u64) {
+    let mut bytes = 0u64;
+    let mut files = 0u64;
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(at) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&at) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else {
+                files += 1;
+                bytes += entry.metadata().map_or(0, |m| m.len());
+                if files >= FOLDER_COUNT_LIMIT {
+                    return (bytes, files);
+                }
+            }
+        }
+    }
+    (bytes, files)
+}
+
+/// What a foreign `pakNN_dir.vpk` holds, and whether all its data is inside it (no `pakNN_000.vpk` chunks needed).
+fn summarize(path: &Path) -> Option<(VpkSummary, bool)> {
+    let file = std::fs::File::open(path).ok()?;
+    let index = read_index(&mut io::BufReader::new(file)).ok()?;
+    let inline = index.entries.iter().all(crate::vpk::Entry::in_dir_file);
+    let mut heroes: HashMap<String, usize> = HashMap::new();
+    for e in &index.entries {
+        let parts: Vec<&str> = e.path.split('/').collect();
+        if let Some(i) = parts
+            .iter()
+            .position(|p| p.to_ascii_lowercase().starts_with("heroes"))
+            && let Some(hero) = parts.get(i + 1).filter(|_| i + 2 < parts.len())
+        {
+            *heroes.entry(hero.to_ascii_lowercase()).or_default() += 1;
+        }
+    }
+    let hero = heroes
+        .into_iter()
+        .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0)))
+        .map(|(name, _)| name);
+    Some((
+        VpkSummary {
+            entries: index.entries.len(),
+            hero,
+        },
+        inline,
+    ))
 }
 
 fn library_path(data_dir: &Path, relative: &str) -> PathBuf {
@@ -2385,6 +2936,347 @@ mod tests {
         let err = Session::open(&f.data(), f.log.clone()).expect_err("refused");
         assert!(matches!(err, SessionError::Manifest(_)));
         assert!(f.data().join("manifest.json").exists(), "left for the user");
+    }
+
+    /// Haze and Wraith imported (Wraith on top) and applied to a fresh game folder.
+    fn applied_two(f: &Fixture) -> (Session, PathBuf, String, String) {
+        let mut s = open(f);
+        let haze = s
+            .import_file(
+                &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+                "Haze",
+            )
+            .expect("haze")
+            .mod_id;
+        let wraith = s
+            .import_file(
+                &f.source("wraith.vpk", &[("models/wraith/body.vmdl_c", 1)]),
+                "Wraith",
+            )
+            .expect("wraith")
+            .mod_id;
+        let game = f.game();
+        s.apply(&game, false).expect("applied");
+        (s, game, haze, wraith)
+    }
+
+    fn addons(game: &Path) -> PathBuf {
+        game.join("game").join("citadel").join("addons")
+    }
+
+    #[test]
+    fn edits_not_in_the_game_yet_are_listed_counted_and_badged() {
+        let f = Fixture::new("pendinglist");
+        let (mut s, _, haze, wraith) = applied_two(&f);
+        assert!(s.pending_view(None).changes.is_empty());
+        assert_eq!(s.library().pending_count, 0);
+
+        s.set_enabled(&haze, false).expect("off");
+        let view = s.pending_view(None);
+        assert!(view.switch.is_none());
+        assert_eq!(view.changes.len(), 1);
+        assert_eq!(view.changes[0].mod_id, haze);
+        assert_eq!(view.changes[0].change, crate::pending::Change::Disable);
+        assert_eq!(
+            (
+                view.folder.added,
+                view.folder.removed,
+                view.folder.renumbered
+            ),
+            (0, 1, 0)
+        );
+        let library = s.library();
+        assert_eq!(library.pending_count, 1);
+        let badge = |id: &str| {
+            library
+                .mods
+                .iter()
+                .find(|m| m.id == id)
+                .expect("mod")
+                .pending
+        };
+        assert!(badge(&haze) && !badge(&wraith));
+    }
+
+    #[test]
+    fn a_pending_change_is_taken_back_one_by_one_or_all_at_once() {
+        let f = Fixture::new("pendingrevert");
+        let (mut s, _, haze, wraith) = applied_two(&f);
+        s.set_enabled(&haze, false).expect("off");
+        s.move_mod(&haze, 0).expect("moved");
+        s.revert_pending(&haze, crate::pending::Aspect::Enabled, None)
+            .expect("reverted");
+        assert_eq!(s.pending_view(None).changes.len(), 1, "the move is left");
+        s.discard_pending(None).expect("discarded");
+        assert!(s.pending_view(None).changes.is_empty());
+        let order: Vec<String> = s.library().mods.into_iter().map(|m| m.id).collect();
+        assert_eq!(order, [wraith.clone(), haze.clone()]);
+        assert_eq!(open(&f).library().pending_count, 0, "saved");
+    }
+
+    #[test]
+    fn a_profile_switch_is_one_change_and_discarding_it_selects_the_applied_profile_again() {
+        let f = Fixture::new("pendingswitch");
+        let (mut s, game, _, _) = applied_two(&f);
+        s.create_profile("Evening").expect("created");
+        s.select_profile("Evening").expect("selected");
+        // A profile that was never applied goes to the first game folder (the caller passes Steam's).
+        let view = s.pending_view(Some(&game));
+        let switch = view.switch.expect("a switch");
+        assert_eq!(switch.from.as_deref(), Some(crate::profiles::DEFAULT_NAME));
+        assert_eq!(switch.to, "Evening");
+        assert_eq!((switch.turned_on, switch.turned_off), (0, 2));
+        assert!(view.changes.is_empty());
+        assert_eq!(view.folder.removed, 2);
+        assert_eq!(s.library().pending_count, 1);
+        s.discard_pending(Some(&game))
+            .expect("kept the applied one");
+        assert_eq!(s.selected_profile(), crate::profiles::DEFAULT_NAME);
+    }
+
+    #[test]
+    fn a_fresh_empty_profile_has_nothing_pending() {
+        let f = Fixture::new("pendingfresh");
+        let s = open(&f);
+        let view = s.pending_view(Some(&f.game()));
+        assert!(view.switch.is_none() && view.changes.is_empty());
+        assert_eq!(s.library().pending_count, 0);
+    }
+
+    #[test]
+    fn the_game_state_before_a_change_can_be_restored_as_an_edit() {
+        let f = Fixture::new("pendingrestore");
+        let (mut s, game, haze, _) = applied_two(&f);
+        s.set_enabled(&haze, false).expect("off");
+        // What the game had before the waiting change goes in (143's Undo).
+        let before = s.profile_matching_game(None).expect("a profile");
+        s.apply(&game, false).expect("applied");
+        assert!(s.pending_view(None).changes.is_empty());
+        s.restore_profile(&before).expect("restored");
+        let changes = s.pending_view(None).changes;
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].change, crate::pending::Change::Enable);
+    }
+
+    #[test]
+    fn mods_in_the_game_say_how_they_got_there() {
+        let f = Fixture::new("placement");
+        let (s, _, haze, _) = applied_two(&f);
+        let view = s.library();
+        let m = view.mods.iter().find(|m| m.id == haze).expect("haze");
+        // The test folders share a drive, so the files are hard links.
+        assert_eq!(
+            m.in_game,
+            Some(InGameView {
+                copied: false,
+                bytes: m.bytes
+            })
+        );
+        let mut s = s;
+        s.set_enabled(&haze, false).expect("off");
+        assert!(
+            s.library()
+                .mods
+                .iter()
+                .find(|m| m.id == haze)
+                .expect("haze")
+                .in_game
+                .is_some(),
+            "still in the game until applied"
+        );
+    }
+
+    fn foreign_game(f: &Fixture) -> PathBuf {
+        let game = f.game();
+        let addons = addons(&game);
+        std::fs::create_dir_all(addons.join("replays")).expect("addons");
+        std::fs::write(
+            addons.join("pak01_dir.vpk"),
+            vpk(&[
+                ("models/heroes/haze/body.vmdl_c", 1),
+                ("models/heroes/haze/head.vmdl_c", 2),
+            ]),
+        )
+        .expect("pak");
+        std::fs::write(addons.join(".dmm.json"), b"{}").expect("dmm");
+        std::fs::write(addons.join("replays").join("a.dem"), b"aaaa").expect("dem");
+        std::fs::write(addons.join("replays").join("b.dem"), b"bb").expect("dem");
+        game
+    }
+
+    #[test]
+    fn foreign_items_are_listed_with_what_they_seem_to_be() {
+        let f = Fixture::new("foreignlist");
+        let s = open(&f);
+        let game = foreign_game(&f);
+        let items = s.foreign(&game);
+        let names: Vec<&str> = items.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, [".dmm.json", "pak01_dir.vpk", "replays"]);
+        let pak = &items[1];
+        assert_eq!(pak.kind, crate::addons::ForeignKind::ModFile);
+        assert_eq!(pak.slot, Some(1));
+        assert!(pak.takeable && !pak.left);
+        assert_eq!(
+            pak.vpk,
+            Some(VpkSummary {
+                entries: 2,
+                hero: Some("haze".into())
+            })
+        );
+        assert!(pak.modified_unix_ms.is_some());
+        let dmm = &items[0];
+        assert_eq!(dmm.origin, Some(crate::addons::Origin::DeadlockModManager));
+        assert!(!dmm.takeable && dmm.vpk.is_none());
+        let replays = &items[2];
+        assert_eq!(replays.kind, crate::addons::ForeignKind::Folder);
+        assert_eq!((replays.files, replays.bytes), (Some(2), 6));
+    }
+
+    #[test]
+    fn leaving_a_foreign_item_as_it_is_is_remembered() {
+        let f = Fixture::new("foreignleave");
+        let mut s = open(&f);
+        let game = foreign_game(&f);
+        s.leave_foreign(&game, "replays").expect("left");
+        let again = open(&f);
+        let items = again.foreign(&game);
+        assert!(
+            items
+                .iter()
+                .find(|i| i.name == "replays")
+                .expect("listed")
+                .left
+        );
+        assert!(
+            !items
+                .iter()
+                .find(|i| i.name == "pak01_dir.vpk")
+                .expect("listed")
+                .left
+        );
+        assert!(addons(&game).join("replays").exists(), "never touched");
+    }
+
+    #[test]
+    fn a_foreign_mod_taken_under_management_is_copied_and_then_replaced_by_ours() {
+        let f = Fixture::new("foreigntake");
+        let mut s = open(&f);
+        let game = foreign_game(&f);
+        let original = std::fs::read(addons(&game).join("pak01_dir.vpk")).expect("pak");
+        s.import_file(
+            &f.source("wraith.vpk", &[("models/wraith/body.vmdl_c", 1)]),
+            "Wraith",
+        )
+        .expect("wraith");
+        let id = s
+            .take_foreign(&game, "pak01_dir.vpk", "Haze skin", false)
+            .expect("taken");
+        assert!(
+            !addons(&game).join("pak01_dir.vpk").exists(),
+            "the original left"
+        );
+        let view = s.library();
+        let m = view
+            .mods
+            .iter()
+            .find(|m| m.id == id)
+            .expect("in the library");
+        assert_eq!(m.name, "Haze skin");
+        assert!(m.enabled);
+        assert_eq!(
+            view.mods.last().map(|m| m.id.as_str()),
+            Some(id.as_str()),
+            "at the bottom"
+        );
+        assert!(
+            matches!(&m.source, Source::Local { imported_from: Some(p) } if p.ends_with("pak01_dir.vpk"))
+        );
+        assert!(
+            f.ops()
+                .iter()
+                .any(|(op, path)| *op == FileOp::Delete && path.ends_with("pak01_dir.vpk")),
+            "logged"
+        );
+
+        s.apply(&game, false).expect("applied");
+        // Ours now: Wraith on top in slot 1, the taken mod below it in slot 2.
+        assert_eq!(
+            std::fs::read(addons(&game).join("pak02_dir.vpk")).expect("ours"),
+            original
+        );
+        assert!(
+            s.foreign(&game)
+                .iter()
+                .all(|i| i.name != "pak01_dir.vpk" && i.name != "pak02_dir.vpk")
+        );
+    }
+
+    #[test]
+    fn taking_over_waits_while_the_game_runs_and_refuses_what_is_not_a_mod() {
+        let f = Fixture::new("foreignrefuse");
+        let mut s = open(&f);
+        let game = foreign_game(&f);
+        assert!(matches!(
+            s.take_foreign(&game, "pak01_dir.vpk", "Haze", true),
+            Err(SessionError::Engine(
+                crate::engine::EngineError::GameRunning
+            ))
+        ));
+        assert!(matches!(
+            s.take_foreign(&game, "replays", "Replays", false),
+            Err(SessionError::NotTakeable(_))
+        ));
+        assert!(addons(&game).join("pak01_dir.vpk").exists());
+        assert!(s.library().mods.is_empty());
+    }
+
+    #[test]
+    fn a_multi_part_pak_of_another_tool_is_not_taken() {
+        let f = Fixture::new("foreignchunks");
+        let s = open(&f);
+        let game = foreign_game(&f);
+        std::fs::write(addons(&game).join("pak01_000.vpk"), b"data").expect("chunk");
+        let items = s.foreign(&game);
+        assert!(
+            !items
+                .iter()
+                .find(|i| i.name == "pak01_dir.vpk")
+                .expect("listed")
+                .takeable
+        );
+    }
+
+    #[test]
+    fn checking_gameinfo_again_adds_our_line_only_to_the_original() {
+        let f = Fixture::new("gifix");
+        let mut s = open(&f);
+        let game = f.game();
+        let file = game.join("game").join("citadel").join("gameinfo.gi");
+        assert!(matches!(
+            s.fix_gameinfo(&game, true),
+            Err(SessionError::Engine(
+                crate::engine::EngineError::GameRunning
+            ))
+        ));
+        assert!(matches!(
+            s.fix_gameinfo(&game, false).expect("fixed"),
+            GuardOutcome::Added { .. }
+        ));
+        assert!(
+            std::fs::read_to_string(&file)
+                .expect("gi")
+                .contains("citadel/addons")
+        );
+        let foreign = VANILLA.replace(
+            "\t\t\tGame\t\t\t\tcore\r\n",
+            "\t\t\tGame\t\t\t\tcore\r\n\t\t\tGame\tcitadel/addons/dmm\r\n",
+        );
+        std::fs::write(&file, &foreign).expect("dmm");
+        assert!(matches!(
+            s.fix_gameinfo(&game, false).expect("checked"),
+            GuardOutcome::Foreign(_)
+        ));
+        assert_eq!(std::fs::read_to_string(&file).expect("gi"), foreign);
     }
 
     #[test]
