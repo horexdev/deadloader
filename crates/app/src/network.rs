@@ -88,7 +88,7 @@ impl NetLog for HopLog {
                 retry_in,
             } => {
                 let msg = if retry_in.is_some() {
-                    "response; retrying"
+                    core_log::RETRYING_MSG
                 } else if location.is_some() {
                     "redirect"
                 } else {

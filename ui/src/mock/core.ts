@@ -5,15 +5,29 @@
 
 import type {
   Card,
+  CatalogStatus,
   Changed,
+  Favourite,
   LibraryView,
   Listing,
+  ModPage,
   Query,
   Settings,
   TaskSnapshot,
   UiEvent,
 } from '../lib/api';
-import { card, libraryMod, modPage, settings as defaultSettings } from './fixtures';
+import {
+  HERO_CATEGORIES,
+  MOD_ROOTS,
+  SOUND_ROOTS,
+  card,
+  libraryMod,
+  modPage,
+  settings as defaultSettings,
+  soundCard,
+  soundPage,
+} from './fixtures';
+import * as downloadsPreview from './downloads';
 
 /** Tauri's `Channel`: the UI sets `onmessage`; the mock calls it. */
 export class Channel<T> {
@@ -28,6 +42,11 @@ interface State {
   nextTask: number;
   listener: Channel<UiEvent> | null;
   gameRunning: boolean;
+  favourites: Favourite[];
+  /** Pushed right after `subscribe`, like the events the core keeps while nobody listens. */
+  onSubscribe: UiEvent[];
+  /** Overrides the catalog status the settings imply (e.g. offline). */
+  catalogStatus: CatalogStatus | null;
 }
 
 let state: State;
@@ -56,6 +75,23 @@ function fresh(): State {
     nextTask: 1,
     listener: null,
     gameRunning: false,
+    favourites: [favouriteOf(card(9)), favouriteOf(card(3))],
+    onSubscribe: [],
+    catalogStatus: null,
+  };
+}
+
+/** What the heart saves for a card (the core keeps it in favourites.json). */
+export function favouriteOf(c: Card): Favourite {
+  return {
+    section: c.section,
+    id: c.id,
+    name: c.name,
+    author: c.author,
+    root_category: c.root_category,
+    subcategory: c.subcategory,
+    nsfw: c.nsfw,
+    date_updated: c.date_updated,
   };
 }
 
@@ -77,6 +113,32 @@ function applyScenario(s: State): State {
     case 'local':
       s.settings.catalog = { ...s.settings.catalog, enabled: false };
       break;
+    // Downloads (S6): the board `Downloads` and its states; `downloads-empty` is the first start.
+    case 'downloads':
+    case 'downloads-choice':
+    case 'downloads-offline':
+    case 'downloads-disk-full': {
+      const choice = downloadsPreview.variantMod();
+      s.library.mods.push(choice);
+      const queue = downloadsPreview.queue();
+      s.tasks =
+        scenario === 'downloads-offline'
+          ? downloadsPreview.offline(queue)
+          : scenario === 'downloads-disk-full'
+            ? downloadsPreview.diskFull(queue)
+            : scenario === 'downloads-choice'
+              ? queue.slice(0, 2)
+              : queue;
+      s.onSubscribe = downloadsPreview.finishedEvents(choice, {
+        library: structuredClone(s.library),
+        applied: true,
+        waiting_for_game: false,
+      });
+      if (scenario === 'downloads-offline') {
+        s.catalogStatus = { kind: 'offline', since_unix_ms: Date.now() - 12 * 60_000 };
+      }
+      break;
+    }
   }
   return s;
 }
@@ -84,8 +146,9 @@ function applyScenario(s: State): State {
 /** Back to the first-start state (tests). */
 export function resetMock(): void {
   state = applyScenario(fresh());
+  catalogScenario = scenarioFromAddress();
+  activated.clear();
 }
-resetMock();
 
 function push(event: UiEvent): void {
   state.listener?.onmessage(event);
@@ -103,25 +166,245 @@ function mod(id: unknown) {
   return found;
 }
 
-const LISTED = Array.from({ length: 120 }, (_, i) => card(i));
+// ---- the catalog (S2, S3): pages, categories, mod pages, description pictures and the catalog's scenarios
+
+/**
+ * The catalog's preview states (`?scenario=…`): `catalog-offline` (saved pages only), `catalog-api-changed` (E4),
+ * `catalog-rate-limited` (E5 with a countdown, saved pages stay), `catalog-empty` (nothing matches),
+ * `catalog-loading` (the first page never arrives), `modpage-removed` (gone from GameBanana) and `modpage-offline`
+ * (a saved copy of the page while offline). Tests switch them with `setCatalogScenario`.
+ */
+export type CatalogScenario =
+  | 'catalog-offline'
+  | 'catalog-api-changed'
+  | 'catalog-rate-limited'
+  | 'catalog-empty'
+  | 'catalog-loading'
+  | 'modpage-removed'
+  | 'modpage-offline';
+
+const CATALOG_SCENARIOS: readonly string[] = [
+  'catalog-offline',
+  'catalog-api-changed',
+  'catalog-rate-limited',
+  'catalog-empty',
+  'catalog-loading',
+  'modpage-removed',
+  'modpage-offline',
+];
+
+let catalogScenario: CatalogScenario | null = null;
+/** When the rate-limited scenario started waiting. */
+let limitedAt = Date.now();
+const activated = new Set<string>();
+
+function scenarioFromAddress(): CatalogScenario | null {
+  const name = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('scenario');
+  return name && CATALOG_SCENARIOS.includes(name) ? (name as CatalogScenario) : null;
+}
+
+/** Tests: the catalog's state for the following calls (null: online). */
+export function setCatalogScenario(scenario: CatalogScenario | null): void {
+  catalogScenario = scenario;
+  limitedAt = Date.now();
+}
+
+const MODS = Array.from({ length: 120 }, (_, i) => card(i));
+const SOUNDS = Array.from({ length: 40 }, (_, i) => soundCard(i));
+const SAVED_AT = Date.now() - 47 * 60_000;
+const LOG_ID = 'net-20261015-1742-0193';
+
+function catalogStatus(): CatalogStatus {
+  if (state.catalogStatus) {
+    return state.catalogStatus;
+  }
+  if (!state.settings.catalog?.enabled) {
+    return { kind: 'local_mode' };
+  }
+  switch (catalogScenario) {
+    case 'catalog-offline':
+    case 'modpage-offline':
+      return { kind: 'offline', since_unix_ms: SAVED_AT + 20 * 60_000 };
+    case 'catalog-api-changed':
+      return { kind: 'api_changed', message: { id: 'E4', args: { log_id: LOG_ID } } };
+    case 'catalog-rate-limited': {
+      const until = limitedAt + 12_000;
+      return Date.now() < until
+        ? { kind: 'rate_limited', until_unix_ms: until, message: { id: 'E5', args: { status: '429' } } }
+        : { kind: 'online' };
+    }
+    default:
+      return { kind: 'online' };
+  }
+}
+
+const SORTS: Record<string, (a: Card, b: Card) => number> = {
+  newest: (a, b) => (b.date_added ?? 0) - (a.date_added ?? 0),
+  latest_updated: (a, b) => (b.date_updated ?? b.date_added ?? 0) - (a.date_updated ?? a.date_added ?? 0),
+  most_downloaded: (a, b) => b.views / 3 - a.views / 3,
+  most_liked: (a, b) => b.likes - a.likes,
+  most_viewed: (a, b) => b.views - a.views,
+  most_commented: (a, b) => (b.id % 17) - (a.id % 17),
+  oldest: (a, b) => (a.date_added ?? 0) - (b.date_added ?? 0),
+};
 
 function listing(query: Query): Listing {
-  const perPage = query.filter.kind === 'search' ? 15 : 50;
-  const matching =
-    query.filter.kind === 'search'
-      ? LISTED.filter((c) => c.name.toLowerCase().includes((query.filter as { text: string }).text.toLowerCase()))
-      : LISTED;
-  const visible = matching.filter((c: Card) => !c.nsfw || state.settings.catalog?.nsfw !== 'hidden');
+  const filter = query.filter;
+  const all = query.section === 'sound' ? SOUNDS : MODS;
+  let matching: Card[];
+  if (filter.kind === 'search') {
+    const text = filter.text.trim();
+    const bytes = new TextEncoder().encode(text).length;
+    if (bytes < 2 || bytes > 100) {
+      throw { kind: 'invalid_search', problem: bytes < 2 ? 'too_short' : 'too_long' };
+    }
+    matching = all.filter((c) => c.name.toLowerCase().includes(text.toLowerCase()));
+  } else {
+    const category = filter.category;
+    matching = all
+      .filter((c) => category === null || c.root_category?.id === category || c.subcategory?.id === category)
+      .sort(SORTS[filter.sort] ?? SORTS['newest']);
+  }
+  if (catalogScenario === 'catalog-empty') {
+    matching = [];
+  }
+  const perPage = filter.kind === 'search' ? 15 : 50;
+  const nsfw = state.settings.catalog?.nsfw ?? 'hidden';
   const start = (Math.max(query.page, 1) - 1) * perPage;
+  const page = matching.slice(start, start + perPage);
+  const items = page.filter((c) => !c.nsfw || nsfw !== 'hidden');
+  const offline = catalogScenario === 'catalog-offline' || catalogScenario === 'catalog-rate-limited';
   return {
-    items: visible.slice(start, start + perPage),
-    hidden_nsfw: matching.slice(start, start + perPage).length - visible.slice(start, start + perPage).length,
-    total: visible.length,
+    items: structuredClone(items),
+    hidden_nsfw: page.length - items.length,
+    total: matching.length,
     page: query.page,
-    has_more: start + perPage < visible.length,
-    origin: { kind: 'network' },
+    has_more: start + perPage < matching.length,
+    origin: offline ? { kind: 'cache', fetched_at_unix_ms: SAVED_AT, stale: true } : { kind: 'network' },
   };
 }
+
+function catalogList(args: Record<string, unknown>): Listing | Promise<never> {
+  if (!state.settings.catalog?.enabled) {
+    throw { kind: 'local_mode' };
+  }
+  const query = args.query as Query;
+  switch (catalogScenario) {
+    case 'catalog-loading':
+      return new Promise<never>(() => {});
+    case 'catalog-api-changed':
+      throw { kind: 'api_changed', message: { id: 'E4', args: { log_id: LOG_ID } } };
+    case 'catalog-offline':
+      // Only the first two pages of the default listing were saved.
+      if (query.filter.kind === 'search' || query.page > 2) {
+        throw { kind: 'offline', since_unix_ms: SAVED_AT + 20 * 60_000 };
+      }
+      break;
+    case 'catalog-rate-limited':
+      if (query.page > 2 && catalogStatus().kind === 'rate_limited') {
+        throw { kind: 'rate_limited', retry_in_s: 12, message: { id: 'E5', args: { status: '429' } } };
+      }
+      break;
+    default:
+      break;
+  }
+  return listing(query);
+}
+
+function categories(args: Record<string, unknown>) {
+  const parent = args.parent === null || args.parent === undefined ? null : Number(args.parent);
+  const all = args.section === 'sound' ? SOUNDS : MODS;
+  const count = (id: number) => all.filter((c) => c.root_category?.id === id || c.subcategory?.id === id).length;
+  const items =
+    parent === null
+      ? (args.section === 'sound' ? SOUND_ROOTS : MOD_ROOTS).map((c) => ({
+          ...c,
+          item_count: count(c.id),
+          subcategory_count: c.id === 1 ? HERO_CATEGORIES.length : 0,
+        }))
+      : parent === 1
+        ? HERO_CATEGORIES.map((c) => ({ ...c, item_count: count(c.id), subcategory_count: 0 }))
+        : [];
+  return { items, origin: { kind: 'network' } };
+}
+
+function details(args: Record<string, unknown>): ModPage {
+  const id = Number(args.id);
+  if (catalogScenario === 'modpage-removed') {
+    throw { kind: 'not_found', other_game: null };
+  }
+  if (catalogScenario === 'catalog-api-changed') {
+    throw { kind: 'api_changed', message: { id: 'E4', args: { log_id: LOG_ID } } };
+  }
+  const page = args.section === 'sound' ? soundPage(id - 800_000) : modPage(id - 700_000);
+  if (catalogScenario === 'modpage-offline' || catalogScenario === 'catalog-offline') {
+    if (id % 4 === 3) {
+      throw { kind: 'offline', since_unix_ms: SAVED_AT };
+    }
+    return { ...page, origin: { kind: 'cache', fetched_at_unix_ms: SAVED_AT - 3 * 86_400_000, stale: true } };
+  }
+  if (!state.settings.catalog?.enabled) {
+    throw { kind: 'local_mode' };
+  }
+  // Pictures the user loaded before show at once.
+  const images = page.description.images.map((image) => ({
+    ...image,
+    access: activated.has(image.id) || (state.settings.catalog?.allowed_image_hosts as string[] | undefined)?.includes(image.host) ? 'load' : image.access,
+  }));
+  // While NSFW is hidden the core withholds such a mod's pictures (27).
+  const nsfwHidden = page.nsfw && (state.settings.catalog?.nsfw ?? 'hidden') === 'hidden';
+  return { ...page, nsfw_hidden: nsfwHidden, description: { ...page.description, images } as ModPage['description'] };
+}
+
+function imageHost(id: string): string | undefined {
+  for (const i of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+    const found = modPage(i).description.images.find((image) => image.id === id);
+    if (found) {
+      return found.host;
+    }
+  }
+  return undefined;
+}
+
+const catalogHandlers: Record<string, (args: Record<string, unknown>) => unknown> = {
+  catalog_status: () => catalogStatus(),
+  catalog_list: catalogList,
+  catalog_refresh: catalogList,
+  catalog_prefetch: () => catalogScenario === null,
+  catalog_categories: (args) => {
+    if (catalogScenario === 'catalog-api-changed') {
+      throw { kind: 'api_changed', message: { id: 'E4', args: { log_id: LOG_ID } } };
+    }
+    return categories(args);
+  },
+  catalog_details: details,
+  catalog_retry_now: () => {
+    limitedAt = 0;
+    push({ event: 'catalog', data: { event: 'status', data: catalogStatus() } });
+    return null;
+  },
+  catalog_activate: (args) => {
+    activated.add(String(args.id));
+    return null;
+  },
+  catalog_consent_prompt: (args) => ({
+    host: imageHost(String(args.id)) ?? 'i.imgur.com',
+    always_allow_prechecked: state.settings.catalog?.always_allow_host_prechecked !== false,
+  }),
+  catalog_grant: (args) => {
+    const id = String(args.id);
+    activated.add(id);
+    const host = imageHost(id);
+    if (args.scope === 'always' && host) {
+      const hosts = (state.settings.catalog?.allowed_image_hosts as string[] | undefined) ?? [];
+      state.settings.catalog = { ...state.settings.catalog, allowed_image_hosts: [...new Set([...hosts, host])] };
+    }
+    return { activated: [id] };
+  },
+};
+
+// Everything the mock state needs is declared above.
+resetMock();
 
 /** A download that takes a few seconds, reported like the real queue. */
 function startDownload(modId: number, fileId: number, name: string): number {
@@ -183,6 +466,9 @@ const handlers: Record<string, (args: Args) => unknown> = {
   subscribe: (args) => {
     state.listener = args.events as Channel<UiEvent>;
     push({ event: 'game', data: { running: state.gameRunning } });
+    for (const event of state.onSubscribe) {
+      push(structuredClone(event));
+    }
     return null;
   },
   system_locale: () => ({ languages: [...navigator.languages], region: null }),
@@ -226,16 +512,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
     state.settings = structuredClone(args.settings as Settings);
     return structuredClone(state.settings);
   },
-  catalog_status: () => (state.settings.catalog?.enabled ? { kind: 'online' } : { kind: 'local_mode' }),
-  catalog_list: (args) => {
-    if (!state.settings.catalog?.enabled) {
-      throw { kind: 'local_mode' };
-    }
-    return listing(args.query as Query);
-  },
-  catalog_prefetch: () => true,
-  catalog_details: (args) => modPage(Number(args.id) - 700_000),
-  catalog_retry_now: () => null,
+  ...catalogHandlers,
   downloads: () => structuredClone(state.tasks),
   download_install: (args) => startDownload(Number(args.modId), Number(args.fileId), String(args.name)),
   download_control: (args) => {
@@ -244,6 +521,12 @@ const handlers: Record<string, (args: Args) => unknown> = {
       task.state = { state: 'paused' };
     } else if (task && args.action === 'resume') {
       task.state = { state: 'downloading' };
+    } else if (task && args.action === 'retry') {
+      task.state = { state: 'queued' };
+    } else if (task && args.action === 'cancel') {
+      state.tasks = state.tasks.filter((t) => t !== task);
+      push({ event: 'download', data: { event: 'removed', id: task.id } });
+      return null;
     }
     if (task) {
       push({ event: 'download', data: { event: 'state', id: task.id, state: task.state } });
@@ -272,10 +555,55 @@ const handlers: Record<string, (args: Args) => unknown> = {
     push({ event: 'game', data: { running: true } });
     return { library: structuredClone(state.library), changed: true, gameinfo_foreign: false };
   },
+  choose: (args) => {
+    const m = mod(args.modId);
+    const files = (args.files as string[]) ?? [];
+    for (const group of m.variant_groups) {
+      const pick = files.find((f) => group.files.includes(f));
+      if (pick) {
+        group.active = pick;
+      }
+    }
+    m.enabled = true;
+    state.library.mods = [m, ...state.library.mods.filter((x) => x !== m)];
+    return changed();
+  },
+  add_from_disk: () => {
+    const imported = libraryMod(state.library.mods.length + 20, true, true);
+    state.library.mods.unshift(imported);
+    return [{ Ok: { mod_id: imported.id, new_files: imported.files.map((f) => f.id), choices: [], skipped: [] } }];
+  },
   window_minimize: () => null,
   window_toggle_maximize: () => null,
   window_close: () => null,
   window_start_drag: () => null,
+  // Like the core, only https pages are handed to the browser.
+  open_link: (args) => {
+    if (!/^https:\/\/\S+$/i.test(String(args.url))) {
+      throw { id: 'Internal', args: { detail: `mock: only https pages are opened, not ${String(args.url)}` } };
+    }
+    return null;
+  },
+  favourites: () => structuredClone(state.favourites),
+  set_favourite: (args) => {
+    const favourite = args.favourite as Favourite;
+    const at = state.favourites.findIndex((f) => f.section === favourite.section && f.id === favourite.id);
+    if (args.on && at >= 0) {
+      state.favourites[at] = structuredClone(favourite);
+    } else if (args.on) {
+      state.favourites.unshift(structuredClone(favourite));
+    } else if (at >= 0) {
+      state.favourites.splice(at, 1);
+    }
+    return structuredClone(state.favourites);
+  },
+  confirm_age: () => {
+    state.settings.acknowledgements = {
+      ...state.settings.acknowledgements,
+      age_confirmed_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+    };
+    return structuredClone(state.settings);
+  },
 };
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */
