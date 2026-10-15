@@ -7,7 +7,7 @@
 
 <svelte:window bind:innerWidth={width} />
 
-<div class="shell">
+<div class="shell dl-root">
   <aside class="sidebar" data-mode={mode}></aside>
   <main class="content"></main>
 </div>
