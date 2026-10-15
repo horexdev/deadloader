@@ -16,6 +16,7 @@ pub mod library;
 pub mod log;
 pub mod overlap;
 pub mod place;
+pub mod profiles;
 pub mod remove;
 pub mod settings;
 pub mod steam;
