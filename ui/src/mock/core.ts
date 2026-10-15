@@ -6,6 +6,7 @@
 import type {
   Card,
   Changed,
+  Favourite,
   LibraryView,
   Listing,
   Query,
@@ -28,6 +29,7 @@ interface State {
   nextTask: number;
   listener: Channel<UiEvent> | null;
   gameRunning: boolean;
+  favourites: Favourite[];
 }
 
 let state: State;
@@ -55,6 +57,21 @@ function fresh(): State {
     nextTask: 1,
     listener: null,
     gameRunning: false,
+    favourites: [favouriteOf(card(9)), favouriteOf(card(3))],
+  };
+}
+
+/** What the heart saves for a card (the core keeps it in favourites.json). */
+export function favouriteOf(c: Card): Favourite {
+  return {
+    section: c.section,
+    id: c.id,
+    name: c.name,
+    author: c.author,
+    root_category: c.root_category,
+    subcategory: c.subcategory,
+    nsfw: c.nsfw,
+    date_updated: c.date_updated,
   };
 }
 
@@ -275,6 +292,33 @@ const handlers: Record<string, (args: Args) => unknown> = {
   window_toggle_maximize: () => null,
   window_close: () => null,
   window_start_drag: () => null,
+  // Like the core, only https pages are handed to the browser.
+  open_link: (args) => {
+    if (!/^https:\/\/\S+$/i.test(String(args.url))) {
+      throw { id: 'Internal', args: { detail: `mock: only https pages are opened, not ${String(args.url)}` } };
+    }
+    return null;
+  },
+  favourites: () => structuredClone(state.favourites),
+  set_favourite: (args) => {
+    const favourite = args.favourite as Favourite;
+    const at = state.favourites.findIndex((f) => f.section === favourite.section && f.id === favourite.id);
+    if (args.on && at >= 0) {
+      state.favourites[at] = structuredClone(favourite);
+    } else if (args.on) {
+      state.favourites.unshift(structuredClone(favourite));
+    } else if (at >= 0) {
+      state.favourites.splice(at, 1);
+    }
+    return structuredClone(state.favourites);
+  },
+  confirm_age: () => {
+    state.settings.acknowledgements = {
+      ...state.settings.acknowledgements,
+      age_confirmed_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+    };
+    return structuredClone(state.settings);
+  },
 };
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */

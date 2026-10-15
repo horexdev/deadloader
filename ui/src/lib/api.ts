@@ -15,6 +15,8 @@ export type Source =
 
 export interface FileView {
   id: string;
+  /** The GameBanana file it came from (or was linked to); the mod page tells installed files by it. */
+  remote_file_id: number | null;
   archive_name: string;
   inner_path: string;
   version: string | null;
@@ -227,8 +229,16 @@ export interface Listing {
   origin: Origin;
 }
 
+/** A category of a section; under Skins the subcategories are the heroes (131). */
+export interface Category {
+  id: number;
+  name: string;
+  item_count: number;
+  subcategory_count: number;
+}
+
 export interface Categories {
-  items: Record<string, unknown>[];
+  items: Category[];
   origin: Origin;
 }
 
@@ -378,6 +388,26 @@ export const catalog = {
   activate: (id: ImageId) => callCatalog<null>('catalog_activate', { id }),
   consentPrompt: (id: ImageId) => callCatalog<ConsentPrompt>('catalog_consent_prompt', { id }),
   grant: (id: ImageId, scope: Scope) => callCatalog<Granted>('catalog_grant', { id, scope }),
+};
+
+/** A mod marked with the heart (34), with what its card showed, so "favourites only" works without GameBanana. */
+export interface Favourite {
+  section: Section;
+  id: number;
+  name: string;
+  author: string | null;
+  root_category: CategoryRef | null;
+  subcategory: CategoryRef | null;
+  nsfw: boolean;
+  /** Unix seconds; lets the catalog serve a saved mod page as current. */
+  date_updated: number | null;
+}
+
+export const favourites = {
+  /** Newest first. */
+  list: () => call<Favourite[]>('favourites'),
+  /** Marks (`on`) or unmarks a mod; the whole list comes back. */
+  set: (favourite: Favourite, on: boolean) => call<Favourite[]>('set_favourite', { favourite, on }),
 };
 
 // ---- downloads (crates/downloads/src/task.rs; crates/app/src/downloads.rs)
@@ -634,4 +664,8 @@ export const api = {
   addFromDisk: (text: DialogText) => call<ImportResult[]>('add_from_disk', { text }),
   exportProfileDialog: (name: string, text: DialogText) => call<boolean>('export_profile_dialog', { name, text }),
   importProfileDialog: (text: DialogText) => call<ProfileImported | null>('import_profile_dialog', { text }),
+  /** D3 (109): the user confirmed legal age; the saved settings come back. */
+  confirmAge: () => call<Settings>('confirm_age'),
+  /** D1's Open (31): the page in the user's browser; only https pages are opened. */
+  openLink: (url: string) => call<null>('open_link', { url }),
 };

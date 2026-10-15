@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Changed, LibraryView, Listing, TaskSnapshot, UiEvent } from '../lib/api';
-import { Channel, invoke, resetMock } from './core';
+import type { Card, Changed, Favourite, LibraryView, Listing, TaskSnapshot, UiEvent } from '../lib/api';
+import { Channel, favouriteOf, invoke, resetMock } from './core';
 
 beforeEach(() => {
   resetMock();
@@ -48,6 +48,21 @@ describe('the mock core (pnpm dev:mock)', () => {
     expect(kinds).toContain('download:progress');
     expect(kinds).toContain('installed');
     expect(await invoke<TaskSnapshot[]>('downloads')).toEqual([]);
+  });
+
+  it('keeps favourites newest first and opens only https links', async () => {
+    const before = await invoke<Favourite[]>('favourites');
+    expect(before.length).toBeGreaterThan(0);
+    const listing = await invoke<Listing>('catalog_list', {
+      query: { section: 'mod', filter: { kind: 'browse', sort: 'newest', category: null }, page: 1 },
+      byUser: true,
+    });
+    const fresh = favouriteOf(listing.items[0] as Card);
+    const after = await invoke<Favourite[]>('set_favourite', { favourite: fresh, on: true });
+    expect(after[0]).toEqual(fresh);
+    expect(await invoke<Favourite[]>('set_favourite', { favourite: fresh, on: false })).toEqual(before);
+    await expect(invoke('open_link', { url: 'https://gamebanana.com/' })).resolves.toBeNull();
+    await expect(invoke('open_link', { url: 'http://example.org/' })).rejects.toMatchObject({ id: 'Internal' });
   });
 
   it('says which command it does not know yet', async () => {

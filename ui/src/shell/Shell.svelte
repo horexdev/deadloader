@@ -10,6 +10,7 @@
   import type { Router } from '../lib/router.svelte';
   import { formatNumber, formatTime, t } from '../i18n';
   import PlayConfirm from './PlayConfirm.svelte';
+  import Prompts from '../lib/dialogs/Prompts.svelte';
   import TitleBar from './TitleBar.svelte';
 
   interface Props {
@@ -176,6 +177,7 @@
       oncancel={() => (app.confirm = null)}
     />
   {/if}
+  <Prompts />
   <ToastStack toasts={app.toasts} dismissLabel={t('toast-dismiss')} ondismiss={(id) => app.dismiss(id)} />
 </div>
 
