@@ -18,7 +18,10 @@ use crate::log::{FileEvent, FileLog, FileOp, Outcome};
 use crate::message::{Area, MessageId, ToUserMessage, UserMessage, data_file, from_io};
 use crate::overlap::{FileIndex, Grouping, conflicts, group};
 use crate::profiles::{self, ProfileError};
-use crate::remove::{Delete, Permanently, sweep};
+use crate::remove::{
+    self as removal, Delete, Permanently, RemovalPlan, RemoveError, Removed, Target,
+    forget_missing, sweep,
+};
 use crate::selection;
 use crate::settings::{self, Settings, SettingsError, Warning};
 use crate::vpk::read_index;
@@ -62,6 +65,7 @@ pub enum SessionError {
     Profile(ProfileError),
     Engine(EngineError),
     Import(ImportError),
+    Remove(RemoveError),
     UnknownMod(String),
     UnknownFile(String),
     Io(io::Error),
@@ -75,6 +79,7 @@ impl std::fmt::Display for SessionError {
             Self::Profile(e) => write!(f, "{e}"),
             Self::Engine(e) => write!(f, "{e}"),
             Self::Import(e) => write!(f, "{e}"),
+            Self::Remove(e) => write!(f, "{e}"),
             Self::UnknownMod(id) => write!(f, "the mod \"{id}\" is not in the library"),
             Self::UnknownFile(id) => write!(f, "the file \"{id}\" is not in the library"),
             Self::Io(e) => write!(f, "{e}"),
@@ -92,6 +97,7 @@ impl ToUserMessage for SessionError {
             Self::Profile(e) => e.user_message(),
             Self::Engine(e) => e.user_message(),
             Self::Import(e) => e.user_message(),
+            Self::Remove(e) => e.user_message(),
             Self::Io(e) => from_io(e, Area::Data),
             Self::UnknownMod(_) | Self::UnknownFile(_) => {
                 UserMessage::new(MessageId::Internal).arg("detail", self)
@@ -182,6 +188,13 @@ pub struct ImportOutcome {
     pub skipped: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfileImported {
+    pub name: String,
+    /// Mods and files this library doesn't have (D9).
+    pub missing: Vec<profiles::Missing>,
+}
+
 #[derive(Debug)]
 pub struct Applied {
     pub changed: bool,
@@ -214,14 +227,15 @@ impl std::fmt::Debug for Session {
     }
 }
 
-/// Deletes for good and reports each deletion.
+/// Deletes through `inner` (permanently or to the recycle bin) and reports each deletion.
 struct LoggedDelete<'a> {
+    inner: &'a dyn Delete,
     log: &'a (dyn FileLog + Send + Sync),
 }
 
 impl Delete for LoggedDelete<'_> {
     fn delete(&self, path: &Path) -> io::Result<()> {
-        let result = Permanently.delete(path);
+        let result = self.inner.delete(path);
         let mut event = FileEvent {
             src: Some(path.display().to_string()),
             ..FileEvent::new(FileOp::Delete)
@@ -230,7 +244,7 @@ impl Delete for LoggedDelete<'_> {
             event.result = Outcome::Failed;
             event.error = Some(e.to_string());
         }
-        self.log.record("library file nothing refers to", &event);
+        self.log.record("library file deleted", &event);
         result
     }
 }
@@ -297,7 +311,14 @@ impl Session {
             })
             .unwrap_or_else(|| profiles::DEFAULT_NAME.to_owned());
 
-        let swept = sweep(data_dir, &manifest, &LoggedDelete { log: &*log })?;
+        let swept = sweep(
+            data_dir,
+            &manifest,
+            &LoggedDelete {
+                inner: &Permanently,
+                log: &*log,
+            },
+        )?;
         if !swept.is_empty() {
             notices.push(Notice::Swept(swept.len()));
         }
@@ -561,6 +582,113 @@ impl Session {
             },
         )?;
         self.reload_profiles()
+    }
+
+    /// What removing `target` means, for D6.
+    pub fn removal_plan(&self, target: &Target) -> Result<RemovalPlan, SessionError> {
+        removal::plan(&self.manifest, target, &self.profiles).map_err(SessionError::Remove)
+    }
+
+    /// Removes a mod or some of its files (decision 42), through `deleter` (permanently or to the recycle bin), and
+    /// drops them from every profile. Files still in a game folder are refused: apply without them first.
+    pub fn remove(
+        &mut self,
+        target: &Target,
+        deleter: &dyn Delete,
+    ) -> Result<Removed, SessionError> {
+        let logged = LoggedDelete {
+            inner: deleter,
+            log: &*self.log,
+        };
+        let manifest_path = self.manifest_path();
+        let removed = removal::remove(&self.data_dir, &mut self.manifest, target, &logged, |m| {
+            save_io(&manifest_path, m)
+        })
+        .map_err(SessionError::Remove)?;
+        for id in &removed.files {
+            self.indexes.remove(id);
+            self.damaged.remove(id);
+        }
+        let dir = self.profiles_dir();
+        for profile in &mut self.profiles {
+            if forget_missing(profile, &self.manifest) {
+                profiles::save(&dir, profile)?;
+            }
+        }
+        Ok(removed)
+    }
+
+    pub fn rename_profile(&mut self, old: &str, new: &str) -> Result<(), SessionError> {
+        let manifest_path = self.manifest_path();
+        profiles::rename(&self.profiles_dir(), &mut self.manifest, old, new, |m| {
+            save_io(&manifest_path, m)
+        })?;
+        self.reload_profiles()?;
+        if self.selected.to_lowercase() == old.to_lowercase() {
+            self.select_profile(new)?;
+        }
+        Ok(())
+    }
+
+    pub fn duplicate_profile(&mut self, name: &str, new_name: &str) -> Result<(), SessionError> {
+        profiles::duplicate(&self.profiles_dir(), name, new_name)?;
+        self.reload_profiles()
+    }
+
+    /// Deletes a profile (the UI confirms first). If it was selected, the default profile (or the first) is
+    /// selected instead.
+    pub fn delete_profile(&mut self, name: &str) -> Result<(), SessionError> {
+        let manifest_path = self.manifest_path();
+        profiles::delete(&self.profiles_dir(), &mut self.manifest, name, |m| {
+            save_io(&manifest_path, m)
+        })?;
+        self.reload_profiles()?;
+        if self.selected.to_lowercase() == name.to_lowercase() {
+            let next = self
+                .profiles
+                .iter()
+                .find(|p| p.name == profiles::DEFAULT_NAME)
+                .or(self.profiles.first())
+                .map(|p| p.name.clone())
+                .ok_or(ProfileError::LastProfile)?;
+            self.select_profile(&next)?;
+        }
+        Ok(())
+    }
+
+    /// The shareable JSON of a profile (F14).
+    pub fn export_profile(&self, name: &str) -> Result<String, SessionError> {
+        let profile = self
+            .profiles
+            .iter()
+            .find(|p| p.name.to_lowercase() == name.to_lowercase())
+            .ok_or_else(|| ProfileError::NotFound(name.to_owned()))?;
+        Ok(profiles::export(profile, &self.manifest)?)
+    }
+
+    /// Imports an exported profile under a free name and selects it (not applied, F14); what this library lacks is
+    /// listed for D9.
+    pub fn import_profile(&mut self, text: &str) -> Result<ProfileImported, SessionError> {
+        let imported = profiles::import(text, &self.manifest)?;
+        let mut profile = imported.profile;
+        profile.name = profiles::free_name(&self.profiles, &profile.name);
+        profiles::create(&self.profiles_dir(), &profile)?;
+        self.reload_profiles()?;
+        self.select_profile(&profile.name)?;
+        Ok(ProfileImported {
+            name: profile.name,
+            missing: imported.missing,
+        })
+    }
+
+    /// Replaces the settings; refused (and nothing saved) if any value is invalid. An unreadable `settings.json`
+    /// kept from start is overwritten only now, by the user's own change; the previous file stays as `.bak`.
+    pub fn update_settings(&mut self, settings: Settings) -> Result<(), SessionError> {
+        settings::save(&self.data_dir.join("settings.json"), &settings)
+            .map_err(SessionError::Settings)?;
+        self.settings = settings;
+        self.settings_locked = false;
+        Ok(())
     }
 
     /// Puts the selected profile into the game folder `game_root` (F3/F6): our line in `gameinfo.gi` if it is
@@ -1150,6 +1278,112 @@ mod tests {
             SessionError::Engine(crate::engine::EngineError::GameRunning)
         ));
         assert!(!game.join("game").join("citadel").join("addons").exists());
+    }
+
+    #[test]
+    fn a_removed_mod_leaves_the_library_the_disk_and_every_profile() {
+        let f = Fixture::new("remove");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        let id = s.import_file(&src, "Haze").expect("imported").mod_id;
+        s.create_profile("Evening").expect("created");
+        s.select_profile("Evening").expect("selected");
+        s.set_enabled(&id, true).expect("on");
+
+        let plan = s.removal_plan(&Target::Mod(id.clone())).expect("plan");
+        assert_eq!(plan.profiles.len(), 2);
+        assert!(plan.bytes > 0 && plan.applied_in.is_empty());
+
+        s.remove(&Target::Mod(id.clone()), &Permanently)
+            .expect("removed");
+        assert!(s.library().mods.is_empty());
+        assert!(!f.data().join("library").join(&id).exists());
+        let again = open(&f);
+        assert!(again.library().mods.is_empty());
+        assert!(
+            f.ops().iter().any(|(op, _)| *op == FileOp::Delete),
+            "deletions are logged"
+        );
+    }
+
+    #[test]
+    fn a_mod_still_in_the_game_is_not_removed() {
+        let f = Fixture::new("removeapplied");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        let id = s.import_file(&src, "Haze").expect("imported").mod_id;
+        s.apply(&f.game(), false).expect("applied");
+        let err = s
+            .remove(&Target::Mod(id.clone()), &Permanently)
+            .expect_err("refused");
+        assert!(matches!(
+            err,
+            SessionError::Remove(RemoveError::StillInGame(_))
+        ));
+        assert_eq!(s.library().mods.len(), 1);
+    }
+
+    #[test]
+    fn profiles_can_be_renamed_duplicated_and_deleted() {
+        let f = Fixture::new("profileops");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_file(&src, "Haze").expect("imported");
+        s.rename_profile(crate::profiles::DEFAULT_NAME, "Main")
+            .expect("renamed");
+        assert_eq!(s.selected_profile(), "Main", "the selection follows");
+        s.duplicate_profile("Main", "Copy").expect("duplicated");
+        s.select_profile("Copy").expect("selected");
+        assert_eq!(
+            names(&s.library()),
+            [("Haze", true)],
+            "the copy has the same mods"
+        );
+        s.delete_profile("Copy").expect("deleted");
+        assert_eq!(s.selected_profile(), "Main", "another profile is selected");
+        assert_eq!(s.profile_names(), ["Main"]);
+        assert!(matches!(
+            s.delete_profile("Main"),
+            Err(SessionError::Profile(ProfileError::LastProfile))
+        ));
+        assert_eq!(open(&f).selected_profile(), "Main");
+    }
+
+    #[test]
+    fn an_exported_profile_imports_under_a_free_name() {
+        let f = Fixture::new("exchange");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_file(&src, "Haze").expect("imported");
+        let text = s
+            .export_profile(crate::profiles::DEFAULT_NAME)
+            .expect("exported");
+        let imported = s.import_profile(&text).expect("imported");
+        assert_eq!(imported.name, "Default (2)");
+        assert!(imported.missing.is_empty());
+        assert_eq!(
+            s.selected_profile(),
+            "Default (2)",
+            "selected, not applied (F14)"
+        );
+        assert_eq!(names(&s.library()), [("Haze", true)]);
+    }
+
+    #[test]
+    fn settings_changes_are_saved_and_invalid_ones_refused() {
+        let f = Fixture::new("settings");
+        let mut s = open(&f);
+        let mut changed = s.settings().clone();
+        changed.downloads.parallel = 2;
+        s.update_settings(changed).expect("saved");
+        assert_eq!(open(&f).settings().downloads.parallel, 2);
+        let mut bad = s.settings().clone();
+        bad.downloads.parallel = 999;
+        assert!(matches!(
+            s.update_settings(bad),
+            Err(SessionError::Settings(_))
+        ));
+        assert_eq!(open(&f).settings().downloads.parallel, 2);
     }
 
     #[test]

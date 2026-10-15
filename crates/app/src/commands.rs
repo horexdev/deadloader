@@ -5,7 +5,9 @@ use crate::backend::{ApplyResult, Backend, Changed, Game};
 use deadloader_core::fs::Disk;
 use deadloader_core::message::MessageId;
 use deadloader_core::message::UserMessage;
-use deadloader_core::session::{ImportOutcome, LibraryView};
+use deadloader_core::remove::{RemovalPlan, Removed};
+use deadloader_core::session::{ImportOutcome, LibraryView, ProfileImported};
+use deadloader_core::settings::Settings;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
@@ -77,6 +79,63 @@ pub async fn apply(backend: Shared<'_>) -> Reply<ApplyResult> {
     blocking(backend, move |b| b.apply()).await
 }
 
+#[tauri::command]
+pub async fn removal_plan(
+    backend: Shared<'_>,
+    mod_id: String,
+    files: Option<Vec<String>>,
+) -> Reply<RemovalPlan> {
+    blocking(backend, move |b| b.removal_plan(&mod_id, files)).await
+}
+
+#[tauri::command]
+pub async fn remove(
+    backend: Shared<'_>,
+    mod_id: String,
+    files: Option<Vec<String>>,
+) -> Reply<Removed> {
+    blocking(backend, move |b| b.remove(&mod_id, files)).await
+}
+
+#[tauri::command]
+pub async fn rename_profile(backend: Shared<'_>, old: String, new: String) -> Reply<Vec<String>> {
+    blocking(backend, move |b| b.rename_profile(&old, &new)).await
+}
+
+#[tauri::command]
+pub async fn duplicate_profile(
+    backend: Shared<'_>,
+    name: String,
+    new_name: String,
+) -> Reply<Vec<String>> {
+    blocking(backend, move |b| b.duplicate_profile(&name, &new_name)).await
+}
+
+#[tauri::command]
+pub async fn delete_profile(backend: Shared<'_>, name: String) -> Reply<Vec<String>> {
+    blocking(backend, move |b| b.delete_profile(&name)).await
+}
+
+#[tauri::command]
+pub async fn export_profile(backend: Shared<'_>, name: String) -> Reply<String> {
+    blocking(backend, move |b| b.export_profile(&name)).await
+}
+
+#[tauri::command]
+pub async fn import_profile(backend: Shared<'_>, text: String) -> Reply<ProfileImported> {
+    blocking(backend, move |b| b.import_profile(&text)).await
+}
+
+#[tauri::command]
+pub async fn settings(backend: Shared<'_>) -> Reply<Settings> {
+    blocking(backend, move |b| b.settings()).await
+}
+
+#[tauri::command]
+pub async fn update_settings(backend: Shared<'_>, settings: Settings) -> Reply<Settings> {
+    blocking(backend, move |b| b.update_settings(settings)).await
+}
+
 /// Deadlock on this PC, found through Steam.
 pub struct SteamGame;
 
@@ -85,6 +144,10 @@ impl Game for SteamGame {
         // If the process list can't be read, assume the game runs: waiting is safe, writing into a running game's
         // folder is not.
         deadloader_platform_windows::process::game_running().unwrap_or(true)
+    }
+
+    fn move_to_recycle_bin(&self, path: &std::path::Path) -> std::io::Result<()> {
+        deadloader_platform_windows::recycle::move_to_recycle_bin(path)
     }
 
     fn installations(&self) -> Vec<PathBuf> {

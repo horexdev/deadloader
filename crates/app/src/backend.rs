@@ -2,7 +2,12 @@
 //! decision 138 (edits to the applied profile take effect at once while the game is closed).
 
 use deadloader_core::message::{MessageId, ToUserMessage, UserMessage};
-use deadloader_core::session::{ImportOutcome, LibraryView, Session, SharedLog};
+use deadloader_core::profiles::ProfileError;
+use deadloader_core::remove::{Delete, Permanently, RemovalPlan, RemoveError, Removed, Target};
+use deadloader_core::session::{
+    ImportOutcome, LibraryView, ProfileImported, Session, SessionError, SharedLog,
+};
+use deadloader_core::settings::{Deletion, Settings};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -11,6 +16,16 @@ use std::sync::Mutex;
 pub trait Game: Send + Sync {
     fn running(&self) -> bool;
     fn installations(&self) -> Vec<PathBuf>;
+    fn move_to_recycle_bin(&self, path: &Path) -> std::io::Result<()>;
+}
+
+/// The recycle bin as a way to delete library files (decision 42).
+struct RecycleBin<'a>(&'a dyn Game);
+
+impl Delete for RecycleBin<'_> {
+    fn delete(&self, path: &Path) -> std::io::Result<()> {
+        self.0.move_to_recycle_bin(path)
+    }
 }
 
 pub struct Backend {
@@ -118,6 +133,99 @@ impl Backend {
         Ok(outcomes)
     }
 
+    /// What deleting a mod (no `files`) or some of its files means, for D6.
+    pub fn removal_plan(
+        &self,
+        mod_id: &str,
+        files: Option<Vec<String>>,
+    ) -> Result<RemovalPlan, UserMessage> {
+        let target = target(mod_id, files);
+        self.with(|s| Ok(s.removal_plan(&target)?))
+    }
+
+    /// Deletes a mod or some of its files the way the settings say (permanently or to the recycle bin). A whole mod
+    /// that the selected, applied profile has in the game is taken out of the game first; that waits while the game
+    /// runs.
+    pub fn remove(&self, mod_id: &str, files: Option<Vec<String>>) -> Result<Removed, UserMessage> {
+        let target = target(mod_id, files);
+        let running = self.game.running();
+        let game = self.game.as_ref();
+        self.with(|s| {
+            let recycle = RecycleBin(game);
+            let deleter: &dyn Delete = match s.settings().library.deletion {
+                Deletion::Permanent => &Permanently,
+                Deletion::RecycleBin => &recycle,
+            };
+            match s.remove(&target, deleter) {
+                Err(SessionError::Remove(RemoveError::StillInGame(roots))) => {
+                    if running {
+                        return Err(UserMessage::new(MessageId::E13).into());
+                    }
+                    let view = s.library();
+                    let live =
+                        view.applied_profile.as_deref() == Some(view.selected_profile.as_str());
+                    let root = s.game_root();
+                    let only_here = root
+                        .as_ref()
+                        .is_some_and(|r| roots.iter().all(|x| Path::new(x) == r));
+                    match (&target, live, only_here, root) {
+                        (Target::Mod(id), true, true, Some(root)) => {
+                            s.set_enabled(id, false)?;
+                            s.apply(&root, false)?;
+                            Ok(s.remove(&target, deleter)?)
+                        }
+                        _ => Err(SessionError::Remove(RemoveError::StillInGame(roots)).into()),
+                    }
+                }
+                other => Ok(other?),
+            }
+        })
+    }
+
+    pub fn rename_profile(&self, old: &str, new: &str) -> Result<Vec<String>, UserMessage> {
+        self.with(|s| {
+            s.rename_profile(old, new)?;
+            Ok(s.profile_names())
+        })
+    }
+
+    pub fn duplicate_profile(
+        &self,
+        name: &str,
+        new_name: &str,
+    ) -> Result<Vec<String>, UserMessage> {
+        self.with(|s| {
+            s.duplicate_profile(name, new_name)?;
+            Ok(s.profile_names())
+        })
+    }
+
+    pub fn delete_profile(&self, name: &str) -> Result<Vec<String>, UserMessage> {
+        self.with(|s| {
+            s.delete_profile(name)?;
+            Ok(s.profile_names())
+        })
+    }
+
+    pub fn export_profile(&self, name: &str) -> Result<String, UserMessage> {
+        self.with(|s| Ok(s.export_profile(name)?))
+    }
+
+    pub fn import_profile(&self, text: &str) -> Result<ProfileImported, UserMessage> {
+        self.with(|s| Ok(s.import_profile(text)?))
+    }
+
+    pub fn settings(&self) -> Result<Settings, UserMessage> {
+        self.with(|s| Ok(s.settings().clone()))
+    }
+
+    pub fn update_settings(&self, settings: Settings) -> Result<Settings, UserMessage> {
+        self.with(|s| {
+            s.update_settings(settings)?;
+            Ok(s.settings().clone())
+        })
+    }
+
     /// Apply / Play: the selected profile goes into its game folder, or the first one Steam knows.
     pub fn apply(&self) -> Result<ApplyResult, UserMessage> {
         let running = self.game.running();
@@ -195,6 +303,19 @@ impl Backend {
     }
 }
 
+fn target(mod_id: &str, files: Option<Vec<String>>) -> Target {
+    match files {
+        Some(files) => Target::Files(files),
+        None => Target::Mod(mod_id.to_owned()),
+    }
+}
+
+impl From<ProfileError> for Failure {
+    fn from(e: ProfileError) -> Self {
+        Self(e.user_message())
+    }
+}
+
 /// Any error on its way to the UI.
 pub struct Failure(UserMessage);
 
@@ -222,6 +343,7 @@ mod tests {
     struct FakeGame {
         running: Arc<AtomicBool>,
         installs: Vec<PathBuf>,
+        recycled: Arc<std::sync::Mutex<Vec<PathBuf>>>,
     }
 
     impl Game for FakeGame {
@@ -230,6 +352,10 @@ mod tests {
         }
         fn installations(&self) -> Vec<PathBuf> {
             self.installs.clone()
+        }
+        fn move_to_recycle_bin(&self, path: &Path) -> std::io::Result<()> {
+            self.recycled.lock().expect("lock").push(path.to_path_buf());
+            deadloader_core::remove::Delete::delete(&deadloader_core::remove::Permanently, path)
         }
     }
 
@@ -473,6 +599,85 @@ mod tests {
         let changed = backend.set_enabled(&id, false).expect("off");
         assert!(!changed.applied && !changed.waiting_for_game);
         assert!(!f.addons().exists());
+    }
+
+    #[test]
+    fn removing_a_mod_that_is_in_the_game_takes_it_out_first() {
+        let f = Fixture::new("removelive");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = backend.apply().expect("applied").library.mods[0].id.clone();
+        assert!(f.addons().join("pak01_dir.vpk").exists());
+
+        let removed = backend.remove(&id, None).expect("removed");
+        assert_eq!(removed.files.len(), 1);
+        assert!(!f.addons().join("pak01_dir.vpk").exists());
+        assert!(backend.library().expect("library").mods.is_empty());
+    }
+
+    #[test]
+    fn removing_while_the_game_runs_waits_for_it() {
+        let f = Fixture::new("removerunning");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = backend.apply().expect("applied").library.mods[0].id.clone();
+        game.running.store(true, Ordering::Relaxed);
+        assert_eq!(
+            backend.remove(&id, None).expect_err("refused").id,
+            MessageId::E13
+        );
+        assert_eq!(backend.library().expect("library").mods.len(), 1);
+    }
+
+    #[test]
+    fn the_recycle_bin_setting_sends_files_there() {
+        let f = Fixture::new("recycle");
+        let game = FakeGame::default();
+        let backend = f.backend(&game);
+        let outcomes = backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = outcomes[0].as_ref().expect("ok").mod_id.clone();
+        let mut settings = backend.settings().expect("settings");
+        settings.library.deletion = deadloader_core::settings::Deletion::RecycleBin;
+        backend.update_settings(settings).expect("saved");
+        backend.remove(&id, None).expect("removed");
+        assert_eq!(game.recycled.lock().expect("lock").len(), 1);
+    }
+
+    #[test]
+    fn profiles_are_managed_through_the_backend() {
+        let f = Fixture::new("profiles");
+        let backend = f.backend(&FakeGame::default());
+        backend.create_profile("Evening").expect("created");
+        backend.rename_profile("Evening", "Night").expect("renamed");
+        backend
+            .duplicate_profile("Night", "Night 2")
+            .expect("duplicated");
+        backend.delete_profile("Night 2").expect("deleted");
+        assert_eq!(
+            backend.profile_names().expect("names"),
+            ["Default", "Night"]
+        );
+        let text = backend.export_profile("Night").expect("exported");
+        let imported = backend.import_profile(&text).expect("imported");
+        assert_eq!(imported.name, "Night (2)");
+        assert_eq!(
+            backend.library().expect("library").selected_profile,
+            "Night (2)"
+        );
     }
 
     #[test]

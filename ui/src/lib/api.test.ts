@@ -22,6 +22,15 @@ describe('api', () => {
     await api.profileNames();
     await api.importPaths(['D:\\mods\\haze.zip']);
     await api.apply();
+    await api.removalPlan('local-1');
+    await api.remove('local-1', ['local-1-1-0']);
+    await api.renameProfile('A', 'B');
+    await api.duplicateProfile('B', 'C');
+    await api.deleteProfile('C');
+    await api.exportProfile('B');
+    await api.importProfile('{}');
+    await api.settings();
+    await api.updateSettings({ general: { zoom_percent: 110 } });
     expect(invoke.mock.calls).toEqual([
       ['library', {}],
       ['set_enabled', { modId: 'local-1', enabled: false }],
@@ -33,6 +42,15 @@ describe('api', () => {
       ['profile_names', {}],
       ['import_paths', { paths: ['D:\\mods\\haze.zip'] }],
       ['apply', {}],
+      ['removal_plan', { modId: 'local-1', files: null }],
+      ['remove', { modId: 'local-1', files: ['local-1-1-0'] }],
+      ['rename_profile', { old: 'A', new: 'B' }],
+      ['duplicate_profile', { name: 'B', newName: 'C' }],
+      ['delete_profile', { name: 'C' }],
+      ['export_profile', { name: 'B' }],
+      ['import_profile', { text: '{}' }],
+      ['settings', {}],
+      ['update_settings', { settings: { general: { zoom_percent: 110 } } }],
     ]);
   });
 
