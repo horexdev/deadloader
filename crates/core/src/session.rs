@@ -7,17 +7,18 @@
 
 use crate::apply::{Direction, Wanted, layout};
 use crate::engine::{Engine, EngineError};
-use crate::fs::Disk;
+use crate::fs::{Disk, Logged};
 use crate::gamedir::{GuardOutcome, ensure_mods_load};
 use crate::import::{ImportError, ImportRequest, Limits, NoHooks, import};
 use crate::journal::{FileJournal, Recovery};
 use crate::library::{
     Manifest, ModelError, Profile, ProfileEntry, Source, load_manifest, save_manifest,
 };
+use crate::log::{FileEvent, FileLog, FileOp, Outcome};
 use crate::message::{Area, MessageId, ToUserMessage, UserMessage, data_file, from_io};
 use crate::overlap::{FileIndex, Grouping, conflicts, group};
 use crate::profiles::{self, ProfileError};
-use crate::remove::{Permanently, sweep};
+use crate::remove::{Delete, Permanently, sweep};
 use crate::selection;
 use crate::settings::{self, Settings, SettingsError, Warning};
 use crate::vpk::read_index;
@@ -25,6 +26,10 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+/// Where the session reports file operations (the files log).
+pub type SharedLog = Arc<dyn FileLog + Send + Sync>;
 
 /// Something the user should hear about after start (a toast or banner).
 #[derive(Debug)]
@@ -185,9 +190,9 @@ pub struct Applied {
     pub foreign: usize,
 }
 
-#[derive(Debug)]
 pub struct Session {
     data_dir: PathBuf,
+    log: SharedLog,
     manifest: Manifest,
     profiles: Vec<Profile>,
     settings: Settings,
@@ -199,8 +204,39 @@ pub struct Session {
     direction: Direction,
 }
 
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("data_dir", &self.data_dir)
+            .field("selected", &self.selected)
+            .field("mods", &self.manifest.mods.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Deletes for good and reports each deletion.
+struct LoggedDelete<'a> {
+    log: &'a (dyn FileLog + Send + Sync),
+}
+
+impl Delete for LoggedDelete<'_> {
+    fn delete(&self, path: &Path) -> io::Result<()> {
+        let result = Permanently.delete(path);
+        let mut event = FileEvent {
+            src: Some(path.display().to_string()),
+            ..FileEvent::new(FileOp::Delete)
+        };
+        if let Err(e) = &result {
+            event.result = Outcome::Failed;
+            event.error = Some(e.to_string());
+        }
+        self.log.record("library file nothing refers to", &event);
+        result
+    }
+}
+
 impl Session {
-    pub fn open(data_dir: &Path) -> Result<Opened, SessionError> {
+    pub fn open(data_dir: &Path, log: SharedLog) -> Result<Opened, SessionError> {
         std::fs::create_dir_all(data_dir)?;
         let mut notices = Vec::new();
         let (settings, settings_locked) = match settings::load(&data_dir.join("settings.json")) {
@@ -220,8 +256,12 @@ impl Session {
 
         let direction = Direction::default();
         let journal = FileJournal::new(data_dir.join("journal.jsonl"));
-        let engine = Engine {
+        let fs = Logged {
             fs: &Disk,
+            log: &*log,
+        };
+        let engine = Engine {
+            fs: &fs,
             journal: &journal,
             data_dir,
             direction,
@@ -257,13 +297,14 @@ impl Session {
             })
             .unwrap_or_else(|| profiles::DEFAULT_NAME.to_owned());
 
-        let swept = sweep(data_dir, &manifest, &Permanently)?;
+        let swept = sweep(data_dir, &manifest, &LoggedDelete { log: &*log })?;
         if !swept.is_empty() {
             notices.push(Notice::Swept(swept.len()));
         }
 
         let mut session = Session {
             data_dir: data_dir.to_path_buf(),
+            log,
             manifest,
             profiles: listed.profiles,
             settings,
@@ -390,6 +431,22 @@ impl Session {
         .map_err(SessionError::Import)?;
         save_manifest(&self.manifest_path(), &updated)?;
         self.manifest = updated;
+        for id in &imported.new_files {
+            if let Some((_, f)) = self.manifest.file(id) {
+                let event = FileEvent {
+                    src: Some(format!("{} | {}", path.display(), f.inner_path)),
+                    dst: Some(
+                        library_path(&self.data_dir, &f.library_path)
+                            .display()
+                            .to_string(),
+                    ),
+                    bytes: Some(f.len),
+                    sha256: Some(f.sha256),
+                    ..FileEvent::new(FileOp::Copy)
+                };
+                self.log.record("imported into the library", &event);
+            }
+        }
         self.index(&imported.new_files);
         let choices = selection::choices_needed(&imported.grouping, &imported.new_files);
         if choices.is_empty() {
@@ -517,15 +574,19 @@ impl Session {
             .cloned()
             .ok_or_else(|| ProfileError::NotFound(self.selected.clone()))?;
         let backup_name = format!("{}.gi", unique_number());
+        let fs = Logged {
+            fs: &Disk,
+            log: &*self.log,
+        };
         let gameinfo = ensure_mods_load(
-            &Disk,
+            &fs,
             game_root,
             &self.data_dir.join("backups").join("gameinfo"),
             &backup_name,
         )?;
         let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
         let engine = Engine {
-            fs: &Disk,
+            fs: &fs,
             journal: &journal,
             data_dir: &self.data_dir,
             direction: self.direction,
@@ -795,20 +856,31 @@ fn unique_number() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::log::{FileOp, MemFileLog};
     use crate::testing::{remove_all, temp_dir, vpk};
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     const VANILLA: &str = "\"GameInfo\"\r\n{\r\n\tFileSystem\r\n\t{\r\n\t\tSearchPaths\r\n\t\t{\r\n\t\t\tGame\t\t\t\tcitadel\r\n\t\t\tGame\t\t\t\tcore\r\n\t\t}\r\n\t}\r\n}\r\n";
 
     struct Fixture {
         dir: PathBuf,
+        log: Arc<MemFileLog>,
     }
 
     impl Fixture {
         fn new(name: &str) -> Self {
             Self {
                 dir: temp_dir("session", name),
+                log: Arc::new(MemFileLog::default()),
             }
+        }
+        fn ops(&self) -> Vec<(FileOp, String)> {
+            self.log
+                .events()
+                .into_iter()
+                .map(|(_, e)| (e.op, e.dst.or(e.src).unwrap_or_default()))
+                .collect()
         }
         fn data(&self) -> PathBuf {
             self.dir.join("deadloader-data")
@@ -836,7 +908,9 @@ mod tests {
     }
 
     fn open(f: &Fixture) -> Session {
-        Session::open(&f.data()).expect("opened").session
+        Session::open(&f.data(), f.log.clone())
+            .expect("opened")
+            .session
     }
 
     fn names(view: &LibraryView) -> Vec<(&str, bool)> {
@@ -849,7 +923,7 @@ mod tests {
     #[test]
     fn a_first_start_has_an_empty_library_and_the_default_profile() {
         let f = Fixture::new("first");
-        let opened = Session::open(&f.data()).expect("opened");
+        let opened = Session::open(&f.data(), f.log.clone()).expect("opened");
         assert!(opened.notices.is_empty(), "{:?}", opened.notices);
         let s = opened.session;
         assert_eq!(s.selected_profile(), crate::profiles::DEFAULT_NAME);
@@ -1005,6 +1079,65 @@ mod tests {
     }
 
     #[test]
+    fn files_put_into_the_library_and_the_game_are_logged() {
+        let f = Fixture::new("logged");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_file(&src, "Haze").expect("imported");
+        let ops = f.ops();
+        assert!(
+            ops.iter().any(|(op, dst)| *op == FileOp::Copy
+                && dst.contains("library")
+                && dst.ends_with("0.vpk")),
+            "{ops:?}"
+        );
+        s.apply(&f.game(), false).expect("applied");
+        let ops = f.ops();
+        // Two-phase: linked under a temporary name in addons, then renamed into its slot.
+        assert!(
+            ops.iter()
+                .any(|(op, dst)| matches!(op, FileOp::Hardlink | FileOp::Copy)
+                    && dst.contains("addons")),
+            "{ops:?}"
+        );
+        assert!(
+            ops.iter()
+                .any(|(op, dst)| *op == FileOp::Rename && dst.ends_with("pak01_dir.vpk")),
+            "{ops:?}"
+        );
+        assert!(
+            ops.iter()
+                .any(|(op, dst)| *op == FileOp::Rename && dst.ends_with("gameinfo.gi")),
+            "{ops:?}"
+        );
+        assert!(
+            f.log
+                .events()
+                .iter()
+                .all(|(_, e)| e.result == crate::log::Outcome::Ok),
+            "a normal apply logs no failures: {ops:?}"
+        );
+    }
+
+    #[test]
+    fn stray_library_files_are_deleted_on_start_and_logged() {
+        let f = Fixture::new("stray");
+        open(&f);
+        let stray = f.data().join("library").join("ghost").join("1");
+        std::fs::create_dir_all(&stray).expect("dir");
+        std::fs::write(stray.join("0.vpk"), b"x").expect("write");
+        let opened = Session::open(&f.data(), f.log.clone()).expect("opened");
+        assert!(opened.notices.iter().any(|n| matches!(n, Notice::Swept(1))));
+        assert!(
+            f.ops()
+                .iter()
+                .any(|(op, path)| *op == FileOp::Delete && path.ends_with("0.vpk")),
+            "{:?}",
+            f.ops()
+        );
+    }
+
+    #[test]
     fn nothing_is_applied_while_the_game_runs() {
         let f = Fixture::new("running");
         let mut s = open(&f);
@@ -1046,7 +1179,7 @@ mod tests {
         let f = Fixture::new("damaged");
         open(&f);
         std::fs::write(f.data().join("manifest.json"), "{ not json").expect("damage");
-        let err = Session::open(&f.data()).expect_err("refused");
+        let err = Session::open(&f.data(), f.log.clone()).expect_err("refused");
         assert!(matches!(err, SessionError::Manifest(_)));
         assert!(f.data().join("manifest.json").exists(), "left for the user");
     }

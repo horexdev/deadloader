@@ -2,7 +2,7 @@
 //! decision 138 (edits to the applied profile take effect at once while the game is closed).
 
 use deadloader_core::message::{MessageId, ToUserMessage, UserMessage};
-use deadloader_core::session::{ImportOutcome, LibraryView, Session};
+use deadloader_core::session::{ImportOutcome, LibraryView, Session, SharedLog};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -39,8 +39,8 @@ pub struct ApplyResult {
 }
 
 impl Backend {
-    pub fn start(data_dir: &Path, game: Box<dyn Game>) -> Self {
-        match Session::open(data_dir) {
+    pub fn start(data_dir: &Path, game: Box<dyn Game>, log: SharedLog) -> Self {
+        match Session::open(data_dir, log) {
             Ok(opened) => Self {
                 session: Mutex::new(Some(opened.session)),
                 start_error: None,
@@ -265,7 +265,11 @@ mod tests {
             file
         }
         fn backend(&self, game: &FakeGame) -> Backend {
-            Backend::start(&self.dir.join("deadloader-data"), Box::new(game.clone()))
+            Backend::start(
+                &self.dir.join("deadloader-data"),
+                Box::new(game.clone()),
+                Arc::new(deadloader_core::log::MemFileLog::default()),
+            )
         }
     }
 
