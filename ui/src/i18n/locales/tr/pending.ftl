@@ -119,3 +119,11 @@ library-n12-above = { $name }, { $other } üstüne taşındı
 library-n12-below = { $name }, { $other } altına taşındı
 library-n12-switched = { $name }: { $to } seçildi
 library-n12-files = { $name }: dosyalar değişti
+
+## S9: the file list of a pending apply
+library-show-file-list = Dosya listesini göster
+library-hide-file-list = Dosya listesini gizle
+library-file-list = Oyun klasöründeki dosyalar
+library-files-added = Eklenir · { $count }
+library-files-removed = Kaldırılır · { $count }
+library-files-renumbered = Yeniden numaralanır · { $count }

@@ -119,3 +119,11 @@ library-n12-above = { $name }: přesunut nad { $other }
 library-n12-below = { $name }: přesunut pod { $other }
 library-n12-switched = { $name }: přepnuto na { $to }
 library-n12-files = { $name }: soubory změněny
+
+## S9: the file list of a pending apply
+library-show-file-list = Zobrazit seznam souborů
+library-hide-file-list = Skrýt seznam souborů
+library-file-list = Soubory ve složce hry
+library-files-added = Přidané · { $count }
+library-files-removed = Odebrané · { $count }
+library-files-renumbered = Přečíslované · { $count }

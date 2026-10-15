@@ -71,6 +71,18 @@ describe('the library mock', () => {
     expect(mock.auto?.changes).toHaveLength(4);
   });
 
+  it('sets up the profile switch board with the files it adds, removes and renumbers', () => {
+    const mock = new LibraryMock(host());
+    mock.scenario('library-switch');
+    const pending = mock.handlers().pending?.({}) as Pending;
+    expect(pending.switch).toEqual({ from: 'Evening', to: 'Weekend', turned_on: 1, turned_off: 3 });
+    const { files } = pending.folder;
+    expect(files.filter((f) => f.kind === 'added').map((f) => [f.name, f.to_slot])).toEqual([['Wraith — Formal', 7]]);
+    expect(files.filter((f) => f.kind === 'removed').map((f) => f.from_slot)).toEqual([7, 8, 9]);
+    expect(files.filter((f) => f.kind === 'renumbered').map((f) => [f.from_slot, f.to_slot])).toEqual([[10, 8]]);
+    expect([pending.folder.added, pending.folder.removed, pending.folder.renumbered]).toEqual([1, 3, 1]);
+  });
+
   it('sets up the applying board: an apply reports its progress once the UI listens, then ends', () => {
     vi.useFakeTimers();
     try {

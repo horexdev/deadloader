@@ -119,3 +119,11 @@ library-n12-above = { $name }：移到 { $other } 之上
 library-n12-below = { $name }：移到 { $other } 之下
 library-n12-switched = { $name }：切换为 { $to }
 library-n12-files = { $name }：文件已更改
+
+## S9: the file list of a pending apply
+library-show-file-list = 显示文件列表
+library-hide-file-list = 隐藏文件列表
+library-file-list = 游戏文件夹中的文件
+library-files-added = 添加 · { $count }
+library-files-removed = 移除 · { $count }
+library-files-renumbered = 重新编号 · { $count }

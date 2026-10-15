@@ -190,6 +190,28 @@ describe('the Library screen', () => {
     expect(app.library?.mods[0]?.enabled).toBe(true);
   });
 
+  it('shows the file list of a profile switch on request', async () => {
+    const target = await start('library-switch');
+    click(button(target, 'Review switch'));
+    await settle();
+    const panel = one(target, '[role=dialog]');
+    expect(panel.textContent).toContain('Evening → Weekend');
+    expect(panel.textContent).toContain('1 file added · 3 removed · 1 renumbered');
+    expect(panel.querySelector('.file')).toBeNull();
+    const show = button(panel, 'Show the file list');
+    expect(show.getAttribute('aria-expanded')).toBe('false');
+    click(show);
+    await settle();
+    expect(all(panel, '.label').map((l) => l.textContent)).toEqual(
+      // Only the rows in view are drawn (here the first few: the list has no height in the test).
+      expect.arrayContaining(['Added · 1', 'Removed · 3']),
+    );
+    expect(panel.textContent).toContain('Wraith — Formal');
+    click(button(panel, 'Hide the file list'));
+    await settle();
+    expect(panel.querySelector('.file')).toBeNull();
+  });
+
   it('shows how far an apply is in the banner, and drops the banner when it ends', async () => {
     const target = await start();
     expect(target.querySelector('.applying')).toBeNull();
