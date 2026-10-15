@@ -46,7 +46,8 @@
 
 use crate::fs::sha256;
 use crate::library::Section;
-use crate::log::{Clock, FileEvent, FileOp, LogDir, Logger, Outcome};
+pub use crate::log::FileLog;
+use crate::log::{Clock, FileEvent, FileOp, Outcome};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -54,7 +55,7 @@ use std::fmt;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 use time::OffsetDateTime;
 
@@ -192,30 +193,6 @@ fn open_for_attributes(path: &Path) -> io::Result<std::fs::File> {
 #[cfg(not(windows))]
 fn open_for_attributes(path: &Path) -> io::Result<std::fs::File> {
     std::fs::OpenOptions::new().write(true).open(path)
-}
-
-/// Where the cache reports the files it writes and deletes.
-pub trait FileLog {
-    fn record(&self, msg: &str, event: &FileEvent);
-}
-
-impl<T: FileLog + ?Sized> FileLog for &T {
-    fn record(&self, msg: &str, event: &FileEvent) {
-        (**self).record(msg, event);
-    }
-}
-
-impl<T: FileLog + ?Sized> FileLog for Arc<T> {
-    fn record(&self, msg: &str, event: &FileEvent) {
-        (**self).record(msg, event);
-    }
-}
-
-impl<C: Clock, D: LogDir> FileLog for Logger<C, D> {
-    fn record(&self, msg: &str, event: &FileEvent) {
-        // A cache operation must not fail because its log line could not be written.
-        let _ = self.file(msg, event);
-    }
 }
 
 fn file_event(op: FileOp, path: &Path, len: Option<u64>, error: Option<&io::Error>) -> FileEvent {
@@ -2656,7 +2633,7 @@ mod tests {
             Cache<
                 DiskCacheFs,
                 crate::log::SystemClock,
-                Arc<Logger<crate::log::SystemClock, crate::log::DiskLogDir>>,
+                std::sync::Arc<crate::log::Logger<crate::log::SystemClock, crate::log::DiskLogDir>>,
             >,
         >();
     }

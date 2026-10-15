@@ -693,6 +693,7 @@ dependencies = [
  "deadloader-catalog",
  "deadloader-core",
  "deadloader-platform-windows",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",

@@ -126,10 +126,13 @@ fn edit(
     let backup = backup_dir.join(backup_name);
     fs.write_new(&backup, text.as_bytes()).map_err(Stop::Io)?;
     let staged = path.with_extension("gi.dl-tmp");
-    match fs.remove_file(&staged) {
-        Ok(()) => {}
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(Stop::Io(e)),
+    // A leftover from an interrupted edit; checked first so a normal run logs no failed delete.
+    if fs.exists(&staged).map_err(Stop::Io)? {
+        match fs.remove_file(&staged) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(Stop::Io(e)),
+        }
     }
     fs.write_new(&staged, new_text.as_bytes())
         .map_err(Stop::Io)?;
