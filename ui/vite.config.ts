@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [svelte()],
   // Component tests mount real components, so Svelte must resolve to its client build there.
   resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
+  // The i18n tests read the Rust sources (message ids, reasons, language codes) to stay in step with the core.
+  server: process.env.VITEST ? { fs: { allow: ['.', '../crates'] } } : undefined,
   build: {
     // Assets stay separate files: the CSP allows no data: URLs.
     assetsInlineLimit: 0,
