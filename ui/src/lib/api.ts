@@ -197,7 +197,9 @@ export type UiEvent =
   | { event: 'installed'; data: { task: TaskId; installed: Installed } }
   | { event: 'updates'; data: UpdateReport }
   | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } }
-  | { event: 'log'; data: { kinds: LogKind[] } };
+  | { event: 'log'; data: { kinds: LogKind[] } }
+  /** How many network requests are running now (the sidebar's live count). */
+  | { event: 'network'; data: { running: number } };
 
 /**
  * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.

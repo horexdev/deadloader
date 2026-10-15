@@ -55,6 +55,8 @@ pub enum UiEvent {
         task: deadloader_downloads::TaskId,
         installed: crate::backend::Installed,
     },
+    /// How many network requests are running now (the sidebar's live count). Sent only while the UI listens.
+    Network { running: usize },
     /// New lines in these logs since the last such event (Activity's live view). Sent only while the UI listens.
     Log {
         kinds: Vec<deadloader_core::log::Kind>,
@@ -282,6 +284,10 @@ pub(crate) mod tests {
         assert_eq!(
             json(&game(true)),
             serde_json::json!({"event": "game", "data": {"running": true}})
+        );
+        assert_eq!(
+            json(&UiEvent::Network { running: 3 }),
+            serde_json::json!({"event": "network", "data": {"running": 3}})
         );
         assert_eq!(
             json(&UiEvent::DragHover { over: false }),

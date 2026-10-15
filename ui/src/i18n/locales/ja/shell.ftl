@@ -26,6 +26,7 @@ network-offline-detail = { $time }に保存したカタログ
 network-local = ローカルモード
 network-local-detail = リクエストなし
 network-title-online = オンライン — アクティビティを開く
+network-title-running = オンライン — 実行中の要求 { $count } 件 — アクティビティを開く
 network-title-offline = オフライン — { $time }に保存したカタログ — アクティビティを開く
 network-title-local = ローカルモード — ネットワークリクエストなし — アクティビティを開く
 play = プレイ

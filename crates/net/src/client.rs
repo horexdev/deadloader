@@ -12,7 +12,7 @@ use crate::url::{Host, HttpsUrl, UrlError};
 use std::fmt;
 use std::io::{self, Read};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{PoisonError, RwLock};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Duration;
 
 /// Sent on every request so GameBanana's administrators can see who we are and reach us (decision 56).
@@ -301,6 +301,66 @@ pub struct Client {
     /// The retry count of `retry`, changeable while the client is shared (the settings' "retries").
     max_retries: AtomicU32,
     next_id: AtomicU64,
+    running: Arc<Running>,
+}
+
+/// Listens to the number of running requests.
+pub type RunningListener = Box<dyn Fn(usize) + Send + Sync>;
+
+/// The requests running now, from the first hop until the response's body is dropped (a download counts while its
+/// body is read), and who hears when the number changes (the sidebar's live count).
+#[derive(Default)]
+struct Running {
+    /// The count and the listeners. The count changes under this lock, so listeners hear the numbers in the order they
+    /// happened.
+    state: Mutex<(usize, Vec<RunningListener>)>,
+}
+
+impl Running {
+    fn change(&self, up: bool) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        state.0 = if up {
+            state.0 + 1
+        } else {
+            state.0.saturating_sub(1)
+        };
+        let count = state.0;
+        for listener in &state.1 {
+            listener(count);
+        }
+    }
+
+    fn count(&self) -> usize {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner).0
+    }
+}
+
+/// One running request; dropping it ends it.
+struct RunningGuard(Arc<Running>);
+
+impl RunningGuard {
+    fn start(running: &Arc<Running>) -> Self {
+        running.change(true);
+        Self(Arc::clone(running))
+    }
+}
+
+impl Drop for RunningGuard {
+    fn drop(&mut self) {
+        self.0.change(false);
+    }
+}
+
+/// A response body that keeps its request counted as running until it is dropped.
+struct CountedBody {
+    inner: Body,
+    _running: RunningGuard,
+}
+
+impl Read for CountedBody {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
 }
 
 impl fmt::Debug for Client {
@@ -328,7 +388,24 @@ impl Client {
             retry: RetryPolicy::default(),
             max_retries: AtomicU32::new(RetryPolicy::default().max_retries),
             next_id: AtomicU64::new(1),
+            running: Arc::default(),
         }
+    }
+
+    /// How many requests are running now.
+    pub fn running(&self) -> usize {
+        self.running.count()
+    }
+
+    /// `listener` hears the number of running requests every time it changes. It runs on the request's thread under a
+    /// lock, so it must be quick and must not call back into the client.
+    pub fn on_running(&self, listener: RunningListener) {
+        self.running
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .1
+            .push(listener);
     }
 
     pub fn with_retry_policy(mut self, retry: RetryPolicy) -> Self {
@@ -395,6 +472,8 @@ impl Client {
                 });
             }
         };
+        // Counted from here: the request may now reach the network.
+        let running = RunningGuard::start(&self.running);
         let headers = self.headers(request, trace.range.as_deref());
         let mut retries = 0;
         let mut redirected_from: Option<Host> = None;
@@ -565,7 +644,10 @@ impl Client {
                 url,
                 host_source: source,
                 request_id: trace.id,
-                body: response.body,
+                body: Box::new(CountedBody {
+                    inner: response.body,
+                    _running: running,
+                }),
             });
         }
     }
@@ -896,6 +978,41 @@ mod tests {
                 retry_in: None,
             }
         );
+    }
+
+    #[test]
+    fn a_request_counts_as_running_until_its_body_is_done_with() {
+        let h = harness(gamebanana_chain().fail(
+            "https://gamebanana.com/broken",
+            TransportError::new(TransportErrorKind::Connect, "refused"),
+        ));
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&heard);
+        h.client
+            .on_running(Box::new(move |n| sink.lock().expect("heard").push(n)));
+        assert_eq!(h.client.running(), 0);
+
+        let response = h.client.get(&download(DL)).expect("downloaded");
+        // The headers are in; the body is still being read (a download).
+        assert_eq!(h.client.running(), 1);
+        let mut body = response.into_body();
+        let mut bytes = Vec::new();
+        body.read_to_end(&mut bytes).expect("read");
+        assert_eq!(h.client.running(), 1, "until the body is dropped");
+        drop(body);
+        assert_eq!(h.client.running(), 0);
+
+        // A failed request doesn't stay counted.
+        assert!(
+            h.client
+                .get(&download("https://gamebanana.com/broken"))
+                .is_err()
+        );
+        assert_eq!(h.client.running(), 0);
+        // Nothing runs in local mode, so nothing is counted.
+        h.client.set_local_mode(true);
+        assert!(h.client.get(&download(DL)).is_err());
+        assert_eq!(*heard.lock().expect("heard"), [1, 0, 1, 0]);
     }
 
     #[test]

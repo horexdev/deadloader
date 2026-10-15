@@ -78,6 +78,8 @@ export class AppState {
   settings: Settings | null = $state(null);
   game: GameStatus | null = $state(null);
   network: CatalogStatus = $state({ kind: 'local_mode' });
+  /** Network requests running now, downloads included (the sidebar's live count). */
+  running = $state(0);
   tasks: TaskSnapshot[] = $state([]);
   /** Play is applying the profile. */
   playing = $state(false);
@@ -197,6 +199,9 @@ export class AppState {
         break;
       case 'drop_failed':
         this.fail(event.data.message);
+        break;
+      case 'network':
+        this.running = event.data.running;
         break;
       case 'log':
         for (const listener of this.#logListeners) {
