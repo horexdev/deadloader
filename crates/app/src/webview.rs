@@ -88,6 +88,43 @@ impl Zoom {
     }
 }
 
+/// How much memory WebView2 may keep (ICoreWebView2_19 `MemoryUsageTargetLevel`): `Low` drops caches it can rebuild,
+/// such as decoded pictures, at the cost of a slower first frame when the window is used again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryLevel {
+    Normal,
+    Low,
+}
+
+/// The level for the window's state: low while it is minimised or another window is in front (the game, a browser),
+/// normal while it is used.
+pub fn memory_level(minimised: bool, focused: bool) -> MemoryLevel {
+    if minimised || !focused {
+        MemoryLevel::Low
+    } else {
+        MemoryLevel::Normal
+    }
+}
+
+/// The last level given to WebView2, so window events that don't change it don't reach it again.
+#[derive(Debug, Default)]
+pub struct MemoryTarget {
+    /// 0: none yet, 1: normal, 2: low.
+    last: std::sync::atomic::AtomicU8,
+}
+
+impl MemoryTarget {
+    /// `level` when WebView2 doesn't have it yet, else `None`.
+    pub fn changed(&self, level: MemoryLevel) -> Option<MemoryLevel> {
+        let code = match level {
+            MemoryLevel::Normal => 1,
+            MemoryLevel::Low => 2,
+        };
+        let before = self.last.swap(code, std::sync::atomic::Ordering::SeqCst);
+        (before != code).then_some(level)
+    }
+}
+
 /// The design's smallest layout, in CSS px: the window's minimum at 100 % zoom.
 pub const MIN_LAYOUT: (f64, f64) = (960.0, 600.0);
 
@@ -150,6 +187,36 @@ mod tests {
         assert_eq!(zoom.changed(100), None, "another setting was saved");
         assert_eq!(zoom.changed(125), Some(1.25));
         assert_eq!(zoom.changed(50), Some(0.5));
+    }
+
+    #[test]
+    fn webview_memory_drops_while_the_window_is_out_of_use() {
+        let level = |minimised, focused| memory_level(minimised, focused);
+        assert_eq!(level(false, true), MemoryLevel::Normal);
+        assert_eq!(
+            level(false, false),
+            MemoryLevel::Low,
+            "another window is in front"
+        );
+        assert_eq!(level(true, false), MemoryLevel::Low);
+        assert_eq!(level(true, true), MemoryLevel::Low, "minimised wins");
+    }
+
+    #[test]
+    fn the_memory_level_reaches_webview2_only_when_it_changed() {
+        let target = MemoryTarget::default();
+        assert_eq!(
+            target.changed(MemoryLevel::Normal),
+            Some(MemoryLevel::Normal),
+            "the first value always applies"
+        );
+        assert_eq!(target.changed(MemoryLevel::Normal), None);
+        assert_eq!(target.changed(MemoryLevel::Low), Some(MemoryLevel::Low));
+        assert_eq!(target.changed(MemoryLevel::Low), None);
+        assert_eq!(
+            target.changed(MemoryLevel::Normal),
+            Some(MemoryLevel::Normal)
+        );
     }
 
     #[test]

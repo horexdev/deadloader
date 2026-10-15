@@ -299,6 +299,7 @@ pub fn run() -> Result<(), StartError> {
         }
     };
     follow_zoom(&window, &settings_source, &log);
+    follow_window_use(&window, &log);
     open_catalog(app.handle().clone(), slot, catalog_parts, Arc::clone(&log));
     app.run(move |_, event| {
         // Running downloads save their position and stay queued for the next start.
@@ -697,6 +698,59 @@ fn check_profile_folder(
 
 #[cfg(not(windows))]
 fn check_profile_folder(_: &Log, _: &std::path::Path, _: tauri::webview::PlatformWebview) {}
+
+/// The webview keeps little memory while the window is minimised or behind another window (the game, a browser) and
+/// works normally while it is used (`webview::memory_level`). Only a failure is logged: focus changes are frequent.
+fn follow_window_use(window: &tauri::WebviewWindow, log: &Log) {
+    let target = webview::MemoryTarget::default();
+    let (handle, log) = (window.clone(), Arc::clone(log));
+    window.on_window_event(move |event| {
+        if !matches!(
+            event,
+            tauri::WindowEvent::Focused(_) | tauri::WindowEvent::Resized(_)
+        ) {
+            return;
+        }
+        let minimised = handle.is_minimized().unwrap_or(false);
+        let focused = handle.is_focused().unwrap_or(true);
+        let Some(level) = target.changed(webview::memory_level(minimised, focused)) else {
+            return;
+        };
+        let inner = Arc::clone(&log);
+        if let Err(e) =
+            handle.with_webview(move |platform| set_memory_level(&inner, level, platform))
+        {
+            write(
+                &log,
+                Level::Warn,
+                "webview memory level could not be set",
+                [("error", e.to_string().into())],
+            );
+        }
+    });
+}
+
+#[cfg(windows)]
+fn set_memory_level(
+    log: &Log,
+    level: webview::MemoryLevel,
+    platform: tauri::webview::PlatformWebview,
+) {
+    let low = level == webview::MemoryLevel::Low;
+    if let Err(e) =
+        deadloader_platform_windows::webview2::set_memory_low(&platform.controller(), low)
+    {
+        write(
+            log,
+            Level::Warn,
+            "webview memory level could not be set",
+            [("low", low.into()), ("error", e.to_string().into())],
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn set_memory_level(_: &Log, _: webview::MemoryLevel, _: tauri::webview::PlatformWebview) {}
 
 fn focus_main_window(app: &AppHandle) {
     if let Some(log) = app.try_state::<Log>() {

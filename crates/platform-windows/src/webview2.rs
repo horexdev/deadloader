@@ -7,7 +7,8 @@
 
 use std::path::PathBuf;
 use webview2_com::Microsoft::Web::WebView2::Win32::{
-    ICoreWebView2_2, ICoreWebView2Controller, ICoreWebView2Environment7,
+    COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+    ICoreWebView2_2, ICoreWebView2_19, ICoreWebView2Controller, ICoreWebView2Environment7,
 };
 use webview2_com::take_pwstr;
 use windows_core::{Interface, PWSTR};
@@ -26,4 +27,20 @@ pub fn user_data_folder(controller: &ICoreWebView2Controller) -> windows_core::R
     // which `take_pwstr` copies and frees exactly once.
     unsafe { environment.UserDataFolder(&mut folder) }?;
     Ok(PathBuf::from(take_pwstr(folder)))
+}
+
+/// Asks the webview behind `controller` to keep little memory (`low`: it drops caches it can rebuild, such as decoded
+/// pictures) or to work normally again. Fails on a WebView2 runtime older than ICoreWebView2_19 (1.0.2210).
+pub fn set_memory_low(controller: &ICoreWebView2Controller, low: bool) -> windows_core::Result<()> {
+    // SAFETY: `controller` is a live COM interface owned by the caller; the getter has no preconditions and returns
+    // an owned reference.
+    let webview = unsafe { controller.CoreWebView2() }?;
+    let webview: ICoreWebView2_19 = webview.cast()?;
+    let level = if low {
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+    } else {
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+    };
+    // SAFETY: a plain setter on a live interface; `level` is one of the two values the API defines.
+    unsafe { webview.SetMemoryUsageTargetLevel(level) }
 }
