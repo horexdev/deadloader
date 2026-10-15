@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Description } from '../../lib/api';
+import { hoverTooltip } from '../../lib/test/render';
 import { enhanceDescription, type DescriptionTexts } from './description';
 
 const texts: DescriptionTexts = {
@@ -111,6 +112,18 @@ describe('a mod description (S3)', () => {
     expect(card?.textContent).toContain('www.youtube.com');
     card?.click();
     expect(handlers.onlink).toHaveBeenCalledWith('https://www.youtube.com/watch?v=x');
+  });
+
+  it("shows the design's tooltips on links and video cards, never Windows' own, until it is taken down", () => {
+    const { root, controller } = setup();
+    expect(root.querySelectorAll('[title]')).toHaveLength(0);
+    const [mod, site] = [...root.querySelectorAll<HTMLElement>('a[data-dl-link]')];
+    const card = root.querySelector<HTMLElement>('.dl-youtube button');
+    expect(hoverTooltip(mod ?? root)).toBe('Open in deadloader');
+    expect(hoverTooltip(site ?? root)).toBe('https://example.org/a');
+    expect(hoverTooltip(card ?? root)).toBe('https://www.youtube.com/watch?v=x');
+    controller.destroy();
+    expect(hoverTooltip(site ?? root)).toBeNull();
   });
 
   it('keeps spoilers closed until asked', () => {
