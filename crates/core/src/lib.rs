@@ -4,6 +4,7 @@
 
 pub mod addons;
 pub mod apply;
+pub mod backups;
 pub mod cache;
 pub mod engine;
 pub mod fs;
@@ -22,9 +23,11 @@ pub mod remove;
 pub mod selection;
 pub mod session;
 pub mod settings;
+pub mod setup;
 pub mod steam;
 #[cfg(test)]
 pub(crate) mod testing;
 pub mod updates;
 pub mod vdf;
 pub mod vpk;
+pub mod wipe;

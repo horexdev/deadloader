@@ -50,9 +50,59 @@ pub fn open_url(url: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Shows a folder in File Explorer ("Open folder"). Only an existing folder is passed on, with the `explore` verb, so a
+/// file is never run.
+pub fn open_folder(path: &std::path::Path) -> io::Result<()> {
+    if !std::fs::metadata(path)?.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{} is not a folder", path.display()),
+        ));
+    }
+    let wide = |s: &std::ffi::OsStr| {
+        use std::os::windows::ffi::OsStrExt;
+        s.encode_wide().chain(Some(0)).collect::<Vec<u16>>()
+    };
+    let (verb, target) = (wide("explore".as_ref()), wide(path.as_os_str()));
+    // SAFETY: both strings are NUL-terminated UTF-16 that outlive the call; the window, parameters and directory are
+    // optional and passed as null.
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result as isize <= 32 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_folders_are_shown_in_explorer() {
+        let file =
+            std::env::temp_dir().join(format!("deadloader-shell-{}.txt", std::process::id()));
+        std::fs::write(&file, b"x").expect("file");
+        assert_eq!(
+            open_folder(&file).expect_err("a file").kind(),
+            io::ErrorKind::InvalidInput
+        );
+        let _ = std::fs::remove_file(&file);
+        assert_eq!(
+            open_folder(std::path::Path::new(r"Z:\no\such\folder\here"))
+                .expect_err("missing")
+                .kind(),
+            io::ErrorKind::NotFound
+        );
+    }
 
     #[test]
     fn only_web_pages_and_the_deadlock_link_are_opened() {

@@ -32,6 +32,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod maintenance;
+pub use maintenance::{
+    Detected, EditProblem, EditRefused, EditSaved, ForeignFile, InstallSource, InstallationView,
+    OtherInstallation, ProblemKind, RollbackPreview, RolledBack,
+};
+
 /// Where the session reports file operations (the files log).
 pub type SharedLog = Arc<dyn FileLog + Send + Sync>;
 

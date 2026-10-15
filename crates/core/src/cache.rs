@@ -787,6 +787,11 @@ impl<F: CacheFs, C: Clock, L: FileLog> BlobCache<F, C, L> {
         self.lock().total
     }
 
+    /// How many images are stored.
+    pub fn count(&self) -> usize {
+        self.lock().items.len()
+    }
+
     pub fn limits(&self) -> BlobLimits {
         self.lock().limits
     }
@@ -1176,6 +1181,14 @@ impl<F: CacheFs, C: Clock, L: FileLog> CatalogCache<F, C, L> {
         Ok(card)
     }
 
+    /// How many pages and mod cards are stored.
+    pub fn count(&self) -> io::Result<usize> {
+        Ok(list_or_empty(&self.fs, &self.root)?
+            .iter()
+            .filter(|f| !f.is_dir && is_catalog_name(&f.name))
+            .count())
+    }
+
     /// Bytes held by our files in the folder.
     pub fn size(&self) -> io::Result<u64> {
         Ok(list_or_empty(&self.fs, &self.root)?
@@ -1327,6 +1340,16 @@ impl Sizes {
     }
 }
 
+/// What Settings → Cache shows: bytes per area and how many entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Usage {
+    pub sizes: Sizes,
+    pub thumbnails: usize,
+    pub images: usize,
+    /// Catalog pages and mod cards.
+    pub pages: usize,
+}
+
 /// `deadloader-data\cache\`: the catalog, thumbnails and description images.
 #[derive(Debug)]
 pub struct Cache<F, C, L> {
@@ -1356,12 +1379,23 @@ impl<F: CacheFs + Clone, C: Clock + Clone, L: FileLog + Clone> Cache<F, C, L> {
             images: BlobCache::open(cache_dir.join("images"), fs, clock, log, settings.images)?,
         })
     }
+}
 
+impl<F: CacheFs, C: Clock, L: FileLog> Cache<F, C, L> {
     pub fn sizes(&self) -> io::Result<Sizes> {
         Ok(Sizes {
             catalog: self.catalog.size()?,
             thumbs: self.thumbs.size(),
             images: self.images.size(),
+        })
+    }
+
+    pub fn usage(&self) -> io::Result<Usage> {
+        Ok(Usage {
+            sizes: self.sizes()?,
+            thumbnails: self.thumbs.count(),
+            images: self.images.count(),
+            pages: self.catalog.count()?,
         })
     }
 
@@ -2553,11 +2587,19 @@ mod tests {
             .put_card(Section::Sound, 7, t0(), &page_value())
             .expect("put");
         let before = cache.sizes().expect("sizes").total();
+        let usage = cache.usage().expect("usage");
+        assert_eq!(
+            (usage.thumbnails, usage.images, usage.pages),
+            (1, 1, 2),
+            "foreign files aren't counted"
+        );
+        assert_eq!(usage.sizes.total(), before);
         let cleared = cache.clear().expect("clear");
         assert_eq!(cleared.bytes, before);
         assert_eq!(cleared.files, 4);
         assert_eq!(cleared.failed, 0);
         assert_eq!(cache.sizes().expect("sizes"), Sizes::default());
+        assert_eq!(cache.usage().expect("usage"), Usage::default());
         let mut left = w.our_files();
         left.sort();
         let mut expected: Vec<String> = foreign.iter().map(norm).collect();
