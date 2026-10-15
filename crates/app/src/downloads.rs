@@ -48,7 +48,9 @@ pub fn task_for(file: &RemoteFile, of: &ModRef) -> NewTask {
         .meta(meta::SECTION, section)
         .meta(meta::MOD_ID, of.mod_id.to_string())
         .meta(meta::FILE_ID, file.id.to_string())
-        .meta(meta::MOD_NAME, &of.name);
+        .meta(meta::MOD_NAME, &of.name)
+        // Decision 174: a kept archive is named for people, not by its queue number.
+        .keep_as(format!("{} - {}", of.name, file.file_name));
     if let Some(md5) = &file.md5 {
         task = task.md5(md5);
     }
@@ -218,6 +220,7 @@ mod tests {
             Some("0123456789abcdef0123456789abcdef")
         );
         assert_eq!(task.initiator, Initiator::User);
+        assert_eq!(task.keep_as.as_deref(), Some("Haze V2 - haze_v2.vpk"), "174");
         let download = download_of(&info(&task)).expect("ours");
         assert_eq!(
             download,
