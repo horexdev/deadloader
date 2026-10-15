@@ -4,6 +4,7 @@
 pub mod allowlist;
 pub mod client;
 pub mod clock;
+mod idle;
 pub mod log;
 pub mod transport;
 pub mod ureq_transport;

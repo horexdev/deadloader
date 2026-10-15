@@ -6,15 +6,21 @@
 
 use crate::allowlist::Purpose;
 use crate::client::USER_AGENT;
+use crate::idle::IdleTimeout;
 use crate::transport::{HopRequest, HopResponse, Transport, TransportError, TransportErrorKind};
 use std::time::Duration;
 use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
+use ureq::unversioned::resolver::DefaultResolver;
+use ureq::unversioned::transport::{Connector, DefaultConnector};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportConfig {
     pub connect_timeout: Duration,
     /// Waiting for the response headers; for everything except downloads also the whole body.
     pub read_timeout: Duration,
+    /// The longest a single wait for data may last, downloads included: a connection that goes silent without
+    /// closing fails after this instead of blocking its thread.
+    pub idle_timeout: Duration,
     /// A user-configured proxy (`http://host:port`, `socks5://…` is not compiled in). `None` = direct.
     pub proxy: Option<String>,
 }
@@ -24,6 +30,7 @@ impl Default for TransportConfig {
         Self {
             connect_timeout: Duration::from_secs(10),
             read_timeout: Duration::from_secs(30),
+            idle_timeout: Duration::from_secs(60),
             proxy: None,
         }
     }
@@ -59,7 +66,11 @@ impl UreqTransport {
             .timeout_recv_response(Some(config.read_timeout))
             .build();
         Ok(Self {
-            agent: ureq::Agent::new_with_config(agent_config),
+            agent: ureq::Agent::with_parts(
+                agent_config,
+                connector(config.idle_timeout),
+                DefaultResolver::default(),
+            ),
             read_timeout: config.read_timeout,
         })
     }
@@ -96,8 +107,13 @@ impl Transport for UreqTransport {
     }
 }
 
-/// ureq 3 has no per-read idle timeout, only a total body budget. Small responses get one; downloads can legitimately
-/// take many minutes, so their stall detection belongs to the download worker.
+/// ureq's own connection chain (TCP, proxy, TLS) with the idle limit on top.
+fn connector(idle: Duration) -> impl Connector {
+    DefaultConnector::default().chain(IdleTimeout(idle))
+}
+
+/// Small responses get a total body budget. Downloads can legitimately take many minutes, so they have none: the idle
+/// limit ends a dead connection, and slow progress is the download worker's call.
 fn body_deadline(purpose: Purpose, read_timeout: Duration) -> Option<Duration> {
     (purpose != Purpose::Download).then_some(read_timeout)
 }
@@ -179,6 +195,60 @@ mod tests {
             "a plain-text peer cannot pass a TLS handshake"
         );
         let _ = peer.join();
+    }
+
+    #[test]
+    fn the_idle_limit_defaults_to_a_minute() {
+        assert_eq!(
+            TransportConfig::default().idle_timeout,
+            Duration::from_secs(60)
+        );
+    }
+
+    /// A peer that sends the headers and part of the body, then goes silent without closing: the read must fail with a
+    /// timeout instead of blocking. Plain HTTP on loopback; nothing leaves the machine.
+    #[test]
+    fn a_silent_connection_times_out_while_reading_the_body() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::time::Instant;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().expect("addr").port();
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let peer = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut request = [0; 1024];
+                let _ = stream.read(&mut request);
+                let _ = stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n\r\npartial body");
+                // Silent until the test is over.
+                let _ = done_rx.recv();
+            }
+        });
+        let config = ureq::Agent::config_builder()
+            .http_status_as_error(false)
+            .build();
+        let agent = ureq::Agent::with_parts(
+            config,
+            connector(Duration::from_millis(300)),
+            DefaultResolver::default(),
+        );
+        let started = Instant::now();
+        let response = agent
+            .get(&format!("http://127.0.0.1:{port}/"))
+            .call()
+            .expect("headers");
+        let mut body = Vec::new();
+        let read = response.into_body().into_reader().read_to_end(&mut body);
+        let elapsed = started.elapsed();
+        let _ = done_tx.send(());
+        let _ = peer.join();
+        let err = read.expect_err("the peer went silent");
+        // ureq hands a body timeout over as an io error that wraps its own `Timeout`.
+        let inner = err.get_ref().and_then(|e| e.downcast_ref::<ureq::Error>());
+        assert!(matches!(inner, Some(ureq::Error::Timeout(_))), "{err}");
+        assert!(elapsed < Duration::from_secs(10), "{elapsed:?}");
     }
 
     #[test]
