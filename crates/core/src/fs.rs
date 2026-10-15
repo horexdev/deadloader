@@ -14,6 +14,18 @@ pub trait FileOps {
     fn hard_link(&self, original: &Path, link: &Path) -> io::Result<()>;
     /// Copies `from` to the new file `to`, flushes it to disk and returns its size and SHA-256.
     fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])>;
+    /// [`FileOps::copy_verified`], telling `on_bytes` how many bytes were written as the copy goes (progress for the
+    /// UI). By default all of them at the end.
+    fn copy_verified_with(
+        &self,
+        from: &Path,
+        to: &Path,
+        on_bytes: &mut dyn FnMut(u64),
+    ) -> io::Result<(u64, [u8; 32])> {
+        let done = self.copy_verified(from, to)?;
+        on_bytes(done.0);
+        Ok(done)
+    }
     fn remove_file(&self, path: &Path) -> io::Result<()>;
     /// Renames without replacing: fails with `AlreadyExists` if `to` exists.
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
@@ -99,6 +111,15 @@ impl FileOps for Disk {
     }
 
     fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])> {
+        self.copy_verified_with(from, to, &mut |_| {})
+    }
+
+    fn copy_verified_with(
+        &self,
+        from: &Path,
+        to: &Path,
+        on_bytes: &mut dyn FnMut(u64),
+    ) -> io::Result<(u64, [u8; 32])> {
         let mut src = std::fs::File::open(from)?;
         let mut dst = std::fs::OpenOptions::new()
             .write(true)
@@ -115,6 +136,7 @@ impl FileOps for Disk {
             hasher.update(&buf[..n]);
             dst.write_all(&buf[..n])?;
             total += n as u64;
+            on_bytes(n as u64);
         }
         dst.sync_all()?;
         Ok((total, hasher.finalize().into()))
@@ -225,9 +247,19 @@ impl<F: FileOps, L: crate::log::FileLog + ?Sized> FileOps for Logged<'_, F, L> {
     }
 
     fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])> {
+        self.copy_verified_with(from, to, &mut |_| {})
+    }
+
+    fn copy_verified_with(
+        &self,
+        from: &Path,
+        to: &Path,
+        on_bytes: &mut dyn FnMut(u64),
+    ) -> io::Result<(u64, [u8; 32])> {
         use crate::log::FileOp;
         let e = event(FileOp::Copy, Some(from), Some(to));
-        self.report(e, self.fs.copy_verified(from, to), |(len, hash), e| {
+        let result = self.fs.copy_verified_with(from, to, on_bytes);
+        self.report(e, result, |(len, hash), e| {
             e.bytes = Some(*len);
             e.sha256 = Some(*hash);
         })
@@ -322,7 +354,16 @@ impl<F: FileOps> FileOps for Counted<'_, F> {
     }
 
     fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])> {
-        let result = self.fs.copy_verified(from, to);
+        self.copy_verified_with(from, to, &mut |_| {})
+    }
+
+    fn copy_verified_with(
+        &self,
+        from: &Path,
+        to: &Path,
+        on_bytes: &mut dyn FnMut(u64),
+    ) -> io::Result<(u64, [u8; 32])> {
+        let result = self.fs.copy_verified_with(from, to, on_bytes);
         if result.is_ok() {
             self.copied.set(self.copied.get() + 1);
         }
@@ -413,6 +454,45 @@ mod counted_tests {
         )
         .expect("copied");
         assert_eq!((counted.linked(), counted.copied()), (1, 1));
+    }
+
+    #[test]
+    fn a_copy_reports_its_bytes_as_they_are_written() {
+        let dir = crate::testing::temp_dir("fs", "copybytes");
+        let (from, to) = (dir.join("a.vpk"), dir.join("b.vpk"));
+        let data = vec![3u8; (5 << 20) / 2];
+        std::fs::write(&from, &data).expect("write");
+        let mut chunks = Vec::new();
+        let (len, hash) = Disk
+            .copy_verified_with(&from, &to, &mut |n| chunks.push(n))
+            .expect("copied");
+        assert_eq!(len, data.len() as u64);
+        assert_eq!(hash, sha256(&data));
+        assert!(chunks.len() >= 3, "{chunks:?}");
+        assert_eq!(chunks.iter().sum::<u64>(), len);
+        crate::testing::remove_all(&dir);
+    }
+
+    #[test]
+    fn wrappers_pass_the_bytes_of_a_copy_through() {
+        let fs = MemFs::default()
+            .volume(r"C:\", true)
+            .volume(r"E:\", true)
+            .with(r"C:\lib\a.vpk", b"aaaa");
+        let log = crate::log::MemFileLog::default();
+        let logged = Logged { fs: &fs, log: &log };
+        let counted = Counted::new(&logged);
+        let mut bytes = 0;
+        counted
+            .copy_verified_with(
+                Path::new(r"C:\lib\a.vpk"),
+                Path::new(r"E:\game\a.vpk"),
+                &mut |n| bytes += n,
+            )
+            .expect("copied");
+        assert_eq!(bytes, 4);
+        assert_eq!(counted.copied(), 1);
+        assert_eq!(log.events().len(), 1, "the copy is logged once");
     }
 }
 

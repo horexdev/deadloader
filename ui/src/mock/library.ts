@@ -6,6 +6,7 @@
 // mapping). The shared `switched` scenario shows the profile switch.
 
 import type {
+  Applying,
   Changed,
   ConflictView,
   FileView,
@@ -324,6 +325,8 @@ export class LibraryMock {
   undoing: number | null = null;
   /** The game closes when the UI subscribes (`library-applied`). */
   closeOnSubscribe = false;
+  /** An apply runs when the UI subscribes (`library-applying`), as after the game closed. */
+  applyOnSubscribe = false;
 
   /** Pairs of mods that change the same files; who wins follows the order, like the core's overlap check. */
   private readonly overlaps: ConflictView[];
@@ -344,8 +347,43 @@ export class LibraryMock {
       this.host.push({ event: 'game', data: { running: false } });
       this.gameClosed();
     }
+    if (this.applyOnSubscribe) {
+      this.applyOnSubscribe = false;
+      this.reportApply();
+    }
     if (this.host.catalogEnabled() && this.host.library.mods.length > 0) {
       this.host.push({ event: 'updates', data: structuredClone(this.updates) });
+    }
+  }
+
+  /** A slow apply's progress (as `wait` takes): 9 files linked at once, then two copies of 200 MB, the renames, the end. */
+  reportApply(): void {
+    const frames = 20;
+    const every = 8000 / frames;
+    const copy = 200 * MB;
+    const report = (k: number): Applying => {
+      const linked = Math.min(9, k * 3);
+      const copying = Math.max(0, k - 3);
+      const bytesCopied = Math.min(2 * copy, Math.round((copying * 2 * copy) / 14));
+      const copied = Math.floor(bytesCopied / copy);
+      const rate = copying * every >= 1000 ? bytesCopied / (copying * every) : 0;
+      return {
+        done: Math.min(13, linked + copied + (k >= 18 ? 2 : 0)),
+        total: 13,
+        linked,
+        copied,
+        bytes_done: linked * 20 * MB + bytesCopied,
+        bytes_total: 9 * 20 * MB + 2 * copy,
+        bytes_copied: bytesCopied,
+        left_ms: rate > 0 ? Math.round((2 * copy - bytesCopied) / rate) : null,
+        finished: false,
+      };
+    };
+    for (let k = 1; k <= frames; k += 1) {
+      setTimeout(() => {
+        const data = report(k);
+        this.host.push({ event: 'applying', data: k === frames ? { ...data, left_ms: null, finished: true } : data });
+      }, k * every);
     }
   }
 
@@ -381,6 +419,9 @@ export class LibraryMock {
         break;
       }
       case 'library-applying':
+        this.slow = true;
+        this.applyOnSubscribe = true;
+        break;
       case 'library-checking':
         this.slow = true;
         break;
@@ -513,6 +554,9 @@ export class LibraryMock {
         this.game = snapshotOf(lib().mods);
         this.undoing = null;
         this.refresh();
+        if (this.slow) {
+          this.reportApply();
+        }
         return this.wait({ library: structuredClone(lib()), changed: true, gameinfo_foreign: this.gameinfo.state === 'foreign' });
       },
       pending: (): Pending => {

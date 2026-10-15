@@ -9,9 +9,11 @@ use crate::addons::{AppliedFile, ForeignItem, ForeignKind, scan};
 use crate::apply::{Direction, PlanError, Wanted, layout, plan};
 use crate::fs::FileOps;
 use crate::gamedir::addons_path;
-use crate::journal::{self, JournalStore, Recovery, Step, TxError};
+use crate::journal::{self, JournalStore, Recovery, Step, StepEvent, TxError};
 use crate::library::{AppliedRecord, InstallationState, Manifest, Profile};
+use crate::place::Placement;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
@@ -33,6 +35,22 @@ pub struct ApplyReport {
     pub leftovers_removed: usize,
     /// What the start-of-apply recovery found.
     pub recovered: Recovery,
+}
+
+/// How far an apply is, for the Library's applying banner: steps of the change, files linked or copied, bytes placed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct ApplyProgress {
+    /// Steps done of the change's steps (files placed under temporary names, renamed into their slots, removed).
+    pub done: usize,
+    pub total: usize,
+    /// Files put into the game folder so far: hard links take no time or space, copies do (124).
+    pub linked: usize,
+    pub copied: usize,
+    /// The size of the files placed so far (a copy as far as it is written) and of every file the change places.
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    /// Of `bytes_done`, the bytes copied: what takes the time.
+    pub bytes_copied: u64,
 }
 
 #[derive(Debug)]
@@ -122,7 +140,31 @@ impl<F: FileOps, J: JournalStore> Engine<'_, F, J> {
         game_root: &Path,
         game_running: bool,
         tx: u64,
+        save: impl FnMut(&Manifest) -> io::Result<()>,
+    ) -> Result<ApplyReport, EngineError> {
+        self.apply_reporting(
+            manifest,
+            profile,
+            game_root,
+            game_running,
+            tx,
+            save,
+            &mut |_| {},
+        )
+    }
+
+    /// [`Engine::apply`], telling `on_progress` how far it is: once before the first step, after each step and while a
+    /// copy is written. Nothing when there is nothing to change.
+    #[allow(clippy::too_many_arguments)]
+    pub fn apply_reporting(
+        &self,
+        manifest: &mut Manifest,
+        profile: &Profile,
+        game_root: &Path,
+        game_running: bool,
+        tx: u64,
         mut save: impl FnMut(&Manifest) -> io::Result<()>,
+        on_progress: &mut dyn FnMut(&ApplyProgress),
     ) -> Result<ApplyReport, EngineError> {
         if game_running {
             return Err(EngineError::GameRunning);
@@ -196,10 +238,61 @@ impl<F: FileOps, J: JournalStore> Engine<'_, F, J> {
         })
         .map_err(|e| EngineError::Meta(e.to_string()))?;
         let count = steps.len();
-        journal::run_with(self.fs, self.journal, tx, &steps, meta, || {
-            record(manifest, &root, Some(&profile.name), records);
-            save(manifest)
-        })
+        let sizes: HashMap<&Path, u64> = wanted
+            .iter()
+            .map(|w| {
+                let len = manifest.file(&w.id).map_or(0, |(_, f)| f.len);
+                (w.source.as_path(), len)
+            })
+            .collect();
+        let size_of = |step: &Step| match step {
+            Step::Place { source, .. } => sizes.get(source.as_path()).copied().unwrap_or(0),
+            _ => 0,
+        };
+        let step_sizes: Vec<u64> = steps.iter().map(size_of).collect();
+        let mut progress = ApplyProgress {
+            total: count,
+            bytes_total: step_sizes.iter().sum(),
+            ..ApplyProgress::default()
+        };
+        on_progress(&progress);
+        // The bytes of the copy in progress, replaced by the file's size once it is done.
+        let mut partial = 0u64;
+        let mut on_step = |event: StepEvent| {
+            match event {
+                StepEvent::Bytes(n) => {
+                    partial += n;
+                    progress.bytes_done += n;
+                    progress.bytes_copied += n;
+                }
+                StepEvent::Done { index, placement } => {
+                    progress.done += 1;
+                    let size = step_sizes.get(index).copied().unwrap_or(0);
+                    match placement {
+                        Some(Placement::Linked) => progress.linked += 1,
+                        Some(Placement::Copied { .. }) => progress.copied += 1,
+                        None => {}
+                    }
+                    if placement.is_some() {
+                        progress.bytes_done = progress.bytes_done - partial + size;
+                    }
+                    partial = 0;
+                }
+            }
+            on_progress(&progress);
+        };
+        journal::run_reporting(
+            self.fs,
+            self.journal,
+            tx,
+            &steps,
+            meta,
+            || {
+                record(manifest, &root, Some(&profile.name), records);
+                save(manifest)
+            },
+            &mut on_step,
+        )
         .map_err(EngineError::Tx)?;
         Ok(report(true, count))
     }
@@ -546,6 +639,96 @@ mod tests {
         assert_eq!(saves, 1);
         assert!(report.changed);
         assert!(store.read_all().expect("read").is_empty());
+    }
+
+    #[test]
+    fn applying_reports_its_progress_from_start_to_end() {
+        let (fs, store) = (fs(), MemStore::default());
+        let mut m = manifest();
+        let mut seen = Vec::new();
+        engine(&fs, &store)
+            .apply_reporting(
+                &mut m,
+                &profile(&[("b", &["b2"]), ("a", &["a1"])]),
+                Path::new(ROOT),
+                false,
+                1,
+                |_| Ok(()),
+                &mut |p| seen.push(*p),
+            )
+            .expect("applied");
+        let first = seen.first().expect("a report before the first step");
+        // Two files placed under temporary names, then renamed into their slots.
+        assert_eq!((first.done, first.total), (0, 4));
+        assert_eq!(first.bytes_total, 4);
+        let last = seen.last().expect("last");
+        assert_eq!(
+            *last,
+            ApplyProgress {
+                done: 4,
+                total: 4,
+                linked: 2,
+                copied: 0,
+                bytes_done: 4,
+                bytes_total: 4,
+                bytes_copied: 0,
+            }
+        );
+        assert!(seen.windows(2).all(|w| w[0].done <= w[1].done));
+    }
+
+    #[test]
+    fn copies_report_their_bytes_as_they_go() {
+        // A drive without hard links: every file is copied.
+        let mut fs = MemFs::default().volume("D:", false);
+        for id in ["a1", "b1", "b2"] {
+            fs = fs.with(&format!(r"{DATA}\library\{id}.vpk"), id.as_bytes());
+        }
+        let store = MemStore::default();
+        let mut seen = Vec::new();
+        engine(&fs, &store)
+            .apply_reporting(
+                &mut manifest(),
+                &profile(&[("b", &["b2"]), ("a", &["a1"])]),
+                Path::new(ROOT),
+                false,
+                1,
+                |_| Ok(()),
+                &mut |p| seen.push(*p),
+            )
+            .expect("applied");
+        let last = seen.last().expect("last");
+        assert_eq!((last.linked, last.copied), (0, 2));
+        assert_eq!((last.bytes_done, last.bytes_copied), (4, 4));
+        // A report while a copy was written, before its step was done.
+        assert!(
+            seen.iter()
+                .any(|p| p.bytes_copied > 0 && p.copied == 0 && p.done < p.total),
+            "{seen:?}"
+        );
+    }
+
+    #[test]
+    fn an_apply_with_nothing_to_do_reports_nothing() {
+        let (fs, store) = (fs(), MemStore::default());
+        let mut m = manifest();
+        let p = profile(&[("a", &["a1"])]);
+        engine(&fs, &store)
+            .apply(&mut m, &p, Path::new(ROOT), false, 1, |_| Ok(()))
+            .expect("first");
+        let mut seen = Vec::new();
+        engine(&fs, &store)
+            .apply_reporting(
+                &mut m,
+                &p,
+                Path::new(ROOT),
+                false,
+                2,
+                |_| Ok(()),
+                &mut |p| seen.push(*p),
+            )
+            .expect("again");
+        assert!(seen.is_empty(), "{seen:?}");
     }
 
     #[test]
