@@ -109,7 +109,7 @@ impl fmt::Display for ArchiveError {
 impl fmt::Display for LimitExceeded {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         const ADVICE: &str = "it is probably damaged or not a mod; if you trust this file, raise the limit \
-                              in Advanced settings";
+                              in Settings → Downloads";
         match self {
             Self::TotalSize { limit, entry } => write!(
                 f,
@@ -189,7 +189,7 @@ mod tests {
         .to_string();
         assert!(text.contains("2.0 GB"), "{text}");
         assert!(text.contains("big.vpk"), "{text}");
-        assert!(text.contains("Advanced"), "{text}");
+        assert!(text.contains("Settings → Downloads"), "{text}");
 
         let text = LimitExceeded::TooManyVpks {
             limit: 256,

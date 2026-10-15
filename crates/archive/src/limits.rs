@@ -5,7 +5,7 @@
 
 use crate::error::LimitExceeded;
 
-/// Configurable in Advanced settings; [`Limits::default`] is decision 127.
+/// Configurable in Settings → Downloads; [`Limits::default`] is decision 127.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Limits {
     /// Absolute cap on bytes unpacked from one archive.
