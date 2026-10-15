@@ -2,7 +2,9 @@
      (or the one marked data-autofocus, e.g. Cancel in destructive dialogs), traps Tab, cancels on Esc and gives focus
      back to the opener when it closes. The scrim has no blur and does not close the dialog. -->
 <script lang="ts">
+  import X from '@lucide/svelte/icons/x';
   import { onDestroy, onMount, type Snippet } from 'svelte';
+  import Button from './Button.svelte';
   import { initialFocus, trapTab } from './focus';
   import type { IconComponent } from './types';
 
@@ -20,6 +22,8 @@
     icon?: IconComponent;
     /** Esc cancels; turn it off while an action cannot be interrupted (D8 while deleting). */
     closeOnEscape?: boolean;
+    /** With a label, a close button in the head ("Close (Esc)") that cancels. */
+    closeLabel?: string;
     oncancel: () => void;
     /** The body; it scrolls while head and foot stay. */
     children: Snippet;
@@ -36,6 +40,7 @@
     role,
     icon: Icon,
     closeOnEscape = true,
+    closeLabel,
     oncancel,
     children,
     footer,
@@ -90,6 +95,9 @@
     <div class="dl-dialog__head">
       {#if Icon}<Icon class="dl-icon dl-icon--md dl-dialog__icon" />{/if}
       <h2 class="dl-dialog__title" id={titleId}>{title}</h2>
+      {#if closeLabel}
+        <Button variant="ghost" size="sm" iconOnly icon={X} label={closeLabel} title={closeLabel} onclick={oncancel} />
+      {/if}
     </div>
     <div class="dl-dialog__body" id={bodyId}>{@render children()}</div>
     {#if footer || footerStart}

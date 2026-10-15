@@ -1,6 +1,7 @@
 // What every screen shares: the library, the settings, the game, the network, running downloads and toasts. Filled
 // at start and kept current by the core's pushes (`subscribe`); screens read it and call `api` for their own data.
 
+import type { ErrorAction } from './components/ErrorDialog.svelte';
 import type { ToastData } from './components/ToastStack.svelte';
 import { describe } from '../i18n';
 import {
@@ -26,6 +27,12 @@ export interface PlayConfirmation extends ApplyPreview {
   applied: string;
 }
 
+/** D12: an error the user asked to see in full, with the actions that fit it. */
+export interface ShownError {
+  message: UserMessage;
+  actions: ErrorAction[];
+}
+
 export class AppState {
   library: LibraryView | null = $state(null);
   settings: Settings | null = $state(null);
@@ -36,6 +43,8 @@ export class AppState {
   playing = $state(false);
   confirm: PlayConfirmation | null = $state(null);
   toasts: ToastData[] = $state([]);
+  /** D12, shown by the shell. */
+  error: ShownError | null = $state(null);
   #toastId = 0;
 
   /** Running downloads, for the sidebar. */
@@ -181,6 +190,17 @@ export class AppState {
     const message: UserMessage = isUserMessage(error) ? error : { id: 'Internal', args: { detail: String(error) } };
     const text = describe(message);
     this.toast({ kind: 'error', title: text.what, text: [text.why, text.todo].filter(Boolean).join(' ') });
+  }
+
+  /** D12: the whole story of an error (what, why, what to do, Details) with its actions. Open it on the user's
+   *  request, e.g. "Show details", never by itself while the user browses (155). */
+  showError(error: unknown, actions: ErrorAction[] = []): void {
+    const message: UserMessage = isUserMessage(error) ? error : { id: 'Internal', args: { detail: String(error) } };
+    this.error = { message, actions };
+  }
+
+  closeError(): void {
+    this.error = null;
   }
 }
 

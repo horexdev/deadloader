@@ -18,6 +18,7 @@ use std::sync::Arc;
 use tauri::State;
 use tauri::ipc::Channel;
 
+pub mod activity;
 pub mod catalog;
 pub mod downloads;
 pub mod library;
