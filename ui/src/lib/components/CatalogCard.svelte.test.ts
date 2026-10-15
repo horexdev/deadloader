@@ -3,6 +3,7 @@ import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
 import { flushSync, type ComponentProps } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { all, click, fire, hoverTooltip, one, render } from '../test/render';
+import components from '../../theme/components.css?raw';
 import CatalogCard from './CatalogCard.svelte';
 
 type CardProps = ComponentProps<typeof CatalogCard>;
@@ -173,5 +174,12 @@ describe('CatalogCard', () => {
     const { card } = setup({ tabindex: -1, favourite: false, favouriteLabel: 'Fav', quickInstall: { label: 'Install' } });
     const tabbable = [one(card, '.dl-card__link'), one(card, '.dl-card__fav'), one(card, '.dl-card__quick')];
     expect(tabbable.map((el) => el.tabIndex)).toEqual([-1, -1, -1]);
+  });
+
+  it("shows when the heart is pointed at, like the icon buttons' hover (decision 194)", () => {
+    const hover = /\.dl-card__fav:hover[^{]*\{([^}]*)\}/.exec(components)?.[1] ?? '';
+    expect(hover).toMatch(/background:\s*var\(--surface-hover\)/);
+    expect(hover).toMatch(/color:\s*var\(--accent-text\)/);
+    expect(hover).not.toMatch(/transform|scale/);
   });
 });

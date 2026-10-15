@@ -494,12 +494,13 @@
 .dl-card__fav {
   display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
   color: var(--ink); background: var(--scrim); border: 0; border-radius: var(--radius-pill); cursor: pointer;
-  opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard);
+  opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 .dl-card:hover .dl-card__fav, .dl-card.is-hover .dl-card__fav, .dl-card:focus-within .dl-card__fav, .dl-card.is-focus .dl-card__fav,
 .dl-card__fav[aria-pressed="true"] { opacity: 1; }
 .dl-card__fav[aria-pressed="true"] { color: var(--accent-to); }
 .dl-card__fav[aria-pressed="true"] .dl-icon { fill: currentColor; }
+.dl-card__fav:hover, .dl-card__fav.is-hover { background: var(--surface-hover); color: var(--accent-text); }
 .dl-card__fav:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; opacity: 1; }
 .dl-card__badges { position: absolute; left: var(--space-2); bottom: var(--space-2); display: flex; gap: var(--space-1); }
 .dl-card__badges .dl-badge { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
