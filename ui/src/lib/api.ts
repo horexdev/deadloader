@@ -137,7 +137,8 @@ export type UiEvent =
   | { event: 'drag_hover'; data: { over: boolean } }
   | { event: 'dropped'; data: { outcomes: ImportResult[] } }
   | { event: 'drop_failed'; data: { message: UserMessage } }
-  | { event: 'notice'; data: Notice };
+  | { event: 'notice'; data: Notice }
+  | { event: 'catalog'; data: CatalogEvent };
 
 /**
  * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.
@@ -147,6 +148,223 @@ export async function subscribe(onEvent: (event: UiEvent) => void): Promise<void
   events.onmessage = onEvent;
   await call<null>('subscribe', { events });
 }
+
+// ---- the catalog (crates/catalog/src/view.rs, error.rs; crates/app/src/catalog.rs)
+
+export type Section = 'mod' | 'sound';
+export type Sort =
+  | 'newest'
+  | 'latest_updated'
+  | 'most_downloaded'
+  | 'most_liked'
+  | 'most_viewed'
+  | 'most_commented'
+  | 'oldest';
+
+export type Filter = { kind: 'browse'; sort: Sort; category: number | null } | { kind: 'search'; text: string };
+
+export interface Query {
+  section: Section;
+  filter: Filter;
+  /** 1-based. */
+  page: number;
+}
+
+/** An opaque picture id; show it with `imageUrl`. */
+export type ImageId = string;
+
+export type Origin = { kind: 'network' } | { kind: 'cache'; fetched_at_unix_ms: number; stale: boolean };
+
+export interface CategoryRef {
+  id: number;
+  name: string;
+}
+
+export interface Thumbnail {
+  /** 220 px; use while card width × display scale ≤ 220 (decision 152). */
+  small: ImageId;
+  /** 530 px. */
+  large: ImageId;
+}
+
+export interface Card {
+  id: number;
+  section: Section;
+  name: string;
+  author: string | null;
+  root_category: CategoryRef | null;
+  subcategory: CategoryRef | null;
+  likes: number;
+  views: number;
+  date_added: number | null;
+  date_updated: number | null;
+  thumbnail: Thumbnail | null;
+  has_audio_preview: boolean;
+  nsfw: boolean;
+  obsolete: boolean;
+  featured: boolean;
+  has_files: boolean;
+}
+
+export interface Listing {
+  items: Card[];
+  hidden_nsfw: number;
+  total: number;
+  page: number;
+  has_more: boolean;
+  origin: Origin;
+}
+
+export interface Categories {
+  items: Record<string, unknown>[];
+  origin: Origin;
+}
+
+export interface GalleryImage {
+  preview: ImageId;
+  original: ImageId;
+  caption: string | null;
+}
+
+export interface CatalogFile {
+  id: number;
+  file_name: string;
+  size_bytes: number;
+  date_added: number | null;
+  download_count: number;
+  description: string | null;
+  version: string | null;
+  md5: string | null;
+  antivirus: unknown;
+}
+
+export type Access = 'load' | 'click' | 'consent';
+
+export interface DescriptionImage {
+  id: ImageId;
+  host: string;
+  alt: string | null;
+  access: Access;
+}
+
+export interface Description {
+  /** Sanitised HTML with `data-dl-link` / `data-dl-image` placeholders. */
+  html: string;
+  links: { url: string; host: string; internal_mod_id: number | null }[];
+  images: DescriptionImage[];
+  consent: { host: string; images: ImageId[] }[];
+  truncated: boolean;
+}
+
+export interface ModPage {
+  id: number;
+  section: Section;
+  name: string;
+  version: string | null;
+  author: string | null;
+  credits: unknown[];
+  category_path: CategoryRef[];
+  gallery: GalleryImage[];
+  has_audio_preview: boolean;
+  short_description: string | null;
+  description: Description;
+  licence: Description | null;
+  likes: number;
+  views: number;
+  downloads: number;
+  date_added: number | null;
+  date_modified: number | null;
+  date_updated: number | null;
+  nsfw: boolean;
+  nsfw_hidden: boolean;
+  content_ratings: unknown[];
+  obsolete: boolean;
+  embedded_media: string[];
+  alternate_sources: unknown[];
+  files: CatalogFile[];
+  archived_files: CatalogFile[];
+  origin: Origin;
+}
+
+/** The global network indicator. */
+export type CatalogStatus =
+  | { kind: 'local_mode' }
+  | { kind: 'online' }
+  | { kind: 'offline'; since_unix_ms: number }
+  | { kind: 'rate_limited'; until_unix_ms: number; message: UserMessage }
+  | { kind: 'api_changed'; message: UserMessage };
+
+/** Why a listing, categories or a mod page can't be shown; the states without a message are shown in place. */
+export type CatalogError =
+  | { kind: 'local_mode' }
+  | { kind: 'offline'; since_unix_ms: number }
+  | { kind: 'rate_limited'; retry_in_s: number; message: UserMessage }
+  | { kind: 'api_changed'; message: UserMessage }
+  | { kind: 'blocked'; message: UserMessage }
+  | { kind: 'not_found'; other_game: number | null }
+  | { kind: 'invalid_search'; problem: 'too_short' | 'too_long' }
+  | { kind: 'internal'; message: UserMessage };
+
+export type ConsentError =
+  | { kind: 'unknown_id' }
+  | { kind: 'not_a_description_image' }
+  | { kind: 'needs_consent'; host: string }
+  | { kind: 'save'; message: UserMessage };
+
+export interface ConsentPrompt {
+  host: string;
+  always_allow_prechecked: boolean;
+}
+
+export type Scope = 'once' | 'always';
+
+export interface Granted {
+  activated: ImageId[];
+}
+
+export type CatalogEvent =
+  | { event: 'status'; data: CatalogStatus }
+  | { event: 'page_updated'; data: Query }
+  | { event: 'categories_updated'; data: { section: Section; parent: number | null } }
+  | { event: 'details_updated'; data: { section: Section; id: number } };
+
+/** Where a catalog picture is loaded from: the core's image protocol, never the internet (ADR 0001). */
+export function imageUrl(id: ImageId): string {
+  return `https://dl.localhost/img/${id}`;
+}
+
+function isCatalogAnswer(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && typeof (value as { kind?: unknown }).kind === 'string';
+}
+
+/** Like `call`, but the catalog's own answers (`{ kind, … }`) pass through as they are. */
+async function callCatalog<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error: unknown) {
+    if (isUserMessage(error) || isCatalogAnswer(error)) {
+      throw error;
+    }
+    const internal: UserMessage = { id: 'Internal', args: { detail: String(error) } };
+    throw internal;
+  }
+}
+
+/** Failures are a `CatalogError` / `ConsentError` (`kind`) or a `UserMessage` (`id`) when the catalog is unavailable. */
+export const catalog = {
+  list: (query: Query, byUser: boolean) => callCatalog<Listing>('catalog_list', { query, byUser }),
+  refresh: (query: Query) => callCatalog<Listing>('catalog_refresh', { query }),
+  prefetch: (query: Query) => callCatalog<boolean>('catalog_prefetch', { query }),
+  categories: (section: Section, parent: number | null) =>
+    callCatalog<Categories>('catalog_categories', { section, parent }),
+  details: (section: Section, id: number, listedUpdated: number | null) =>
+    callCatalog<ModPage>('catalog_details', { section, id, listedUpdated }),
+  status: () => callCatalog<CatalogStatus>('catalog_status'),
+  retryNow: () => callCatalog<null>('catalog_retry_now'),
+  activate: (id: ImageId) => callCatalog<null>('catalog_activate', { id }),
+  consentPrompt: (id: ImageId) => callCatalog<ConsentPrompt>('catalog_consent_prompt', { id }),
+  grant: (id: ImageId, scope: Scope) => callCatalog<Granted>('catalog_grant', { id, scope }),
+};
 
 export function isUserMessage(value: unknown): value is UserMessage {
   return (

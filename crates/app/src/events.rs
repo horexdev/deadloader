@@ -38,6 +38,8 @@ pub enum UiEvent {
     DropFailed { message: UserMessage },
     /// Something found while starting.
     Notice(Notice),
+    /// The catalog's network status changed, or a background refresh saved a newer copy of something on screen.
+    Catalog(deadloader_catalog::Event),
 }
 
 /// What the start found, for a toast or a banner.

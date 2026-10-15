@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   Channel: FakeChannel,
 }));
 
-const { api, isUserMessage, subscribe } = await import('./api');
+const { api, catalog, imageUrl, isUserMessage, subscribe } = await import('./api');
 
 describe('api', () => {
   beforeEach(() => {
@@ -95,6 +95,50 @@ describe('api', () => {
       { event: 'game', data: { running: true } },
       { event: 'drag_hover', data: { over: false } },
     ]);
+  });
+
+  it('calls the catalog commands by their Rust names', async () => {
+    invoke.mockResolvedValue({});
+    const query = { section: 'mod' as const, filter: { kind: 'search' as const, text: 'haze' }, page: 2 };
+    const id = '0123456789abcdef0123456789abcdef';
+    await catalog.list(query, true);
+    await catalog.refresh(query);
+    await catalog.prefetch(query);
+    await catalog.categories('mod', 4321);
+    await catalog.details('mod', 655209, 1792060000);
+    await catalog.status();
+    await catalog.retryNow();
+    await catalog.activate(id);
+    await catalog.consentPrompt(id);
+    await catalog.grant(id, 'always');
+    expect(invoke.mock.calls).toEqual([
+      ['catalog_list', { query, byUser: true }],
+      ['catalog_refresh', { query }],
+      ['catalog_prefetch', { query }],
+      ['catalog_categories', { section: 'mod', parent: 4321 }],
+      ['catalog_details', { section: 'mod', id: 655209, listedUpdated: 1792060000 }],
+      ['catalog_status', {}],
+      ['catalog_retry_now', {}],
+      ['catalog_activate', { id }],
+      ['catalog_consent_prompt', { id }],
+      ['catalog_grant', { id, scope: 'always' }],
+    ]);
+  });
+
+  it('passes the catalog states through instead of calling them internal errors', async () => {
+    const query = { section: 'mod' as const, filter: { kind: 'browse' as const, sort: 'newest' as const, category: null }, page: 1 };
+    invoke.mockRejectedValue({ kind: 'local_mode' });
+    await expect(catalog.list(query, false)).rejects.toEqual({ kind: 'local_mode' });
+    invoke.mockRejectedValue({ id: 'E1', args: {} });
+    await expect(catalog.status()).rejects.toEqual({ id: 'E1', args: {} });
+    invoke.mockRejectedValue('broken');
+    await expect(catalog.status()).rejects.toEqual({ id: 'Internal', args: { detail: 'broken' } });
+  });
+
+  it('builds picture addresses on the image protocol only', () => {
+    expect(imageUrl('0123456789abcdef0123456789abcdef')).toBe(
+      'https://dl.localhost/img/0123456789abcdef0123456789abcdef',
+    );
   });
 
   it('recognises core messages', () => {
