@@ -107,7 +107,21 @@ describe('the Activity screen', () => {
     const root = await open('activity-local');
     expect(text(root)).toContain('Local mode — no requests are made');
     expect(one(root, '[role="tab"]').textContent).toContain('off');
-    expect(one<HTMLInputElement>(root, 'input[type="search"]').disabled).toBe(true);
+    expect(all(root, '.act-row')).toHaveLength(0);
+    // The filters stay, so a longer range can show requests made before local mode (185).
+    expect(one<HTMLInputElement>(root, 'input[type="search"]').disabled).toBe(false);
+  });
+
+  it('keeps the requests made before local mode in view, under the local-mode banner (185)', async () => {
+    const root = await open('activity-local-history');
+    const banner = one(root, '.dl-banner');
+    expect(text(banner)).toContain('Local mode — no requests are made');
+    expect(text(banner)).toContain('made before local mode was turned on');
+    expect(all(root, '.act-row').length).toBeGreaterThan(0);
+    expect(one(root, '[role="tab"]').textContent).not.toContain('off');
+    // Today's summary counts them too instead of saying there were none.
+    expect(text(one(root, '.act-sum'))).toContain('images.gamebanana.com');
+    expect(text(one(root, '.act-sum'))).not.toContain('No requests today');
   });
 
   it('says there is nothing yet on a fresh install', async () => {

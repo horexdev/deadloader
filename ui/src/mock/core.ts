@@ -170,8 +170,10 @@ function applyScenario(s: State): State {
     case 'running':
       s.gameRunning = true;
       break;
+    // Local mode; `activity-local-history` also has requests from before it was turned on (185).
     case 'local':
     case 'activity-local':
+    case 'activity-local-history':
     case 'library-local':
       s.settings.catalog = { ...s.settings.catalog, enabled: false };
       break;

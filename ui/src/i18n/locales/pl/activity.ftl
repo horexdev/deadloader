@@ -220,6 +220,7 @@ activity-empty-text = deadloader zapisuje tu każde żądanie sieciowe, każdą 
 activity-local-title = Tryb lokalny — żadne żądania nie są wysyłane
 activity-local-why = Katalog jest wyłączony, więc deadloader z niczym się nie łączy — ani z GameBanana, ani z niczym innym. Zmiany plików i zdarzenia aplikacji są nadal zapisywane w pozostałych kartach.
 activity-local-do = Włącz katalog w ustawieniach, aby przeglądać GameBanana. Każde żądanie pojawi się wtedy tutaj.
+activity-local-history = Poniższe żądania zostały wysłane przed włączeniem trybu lokalnego.
 activity-enable-catalog = Włącz katalog
 activity-details = Szczegóły wpisu dziennika
 activity-close-details = Zamknij szczegóły

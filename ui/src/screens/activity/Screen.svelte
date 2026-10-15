@@ -22,6 +22,7 @@
   import Unplug from '@lucide/svelte/icons/unplug';
   import { onMount } from 'svelte';
   import './activity.css';
+  import Banner from '../../lib/components/Banner.svelte';
   import EmptyState from '../../lib/components/EmptyState.svelte';
   import PathTooltip from '../../lib/components/PathTooltip.svelte';
   import SearchField from '../../lib/components/SearchField.svelte';
@@ -86,7 +87,10 @@
   const retention = $derived(Number(app.settings?.logs?.retention_days ?? 30));
   const empty = $derived(view.summary?.empty === true);
   const localNet = $derived(local && view.tab === 'network');
-  const showFilters = $derived(!empty && !localNet);
+  // 185: in local mode the requests made before it was turned on stay listed under the local-mode banner; the panel
+  // alone shows only when nothing was found without filters. The filters stay, so a longer range finds older ones.
+  const localPanel = $derived(localNet && view.entries.length === 0 && !view.loading && !anyFilter(view.tab, view.filters) && !view.text);
+  const showFilters = $derived(!empty);
   const narrow = $derived(innerWidth < 1100);
   const entry = $derived(view.selectedEntry);
   // The design's breakpoints are on the list's width: the window minus the sidebar, the details and the padding.
@@ -106,7 +110,12 @@
     const c = view.counts;
     const make = (key: Tab, label: string, count: string, errors: number) => ({ key, label, count, errors });
     return [
-      make('network', t('activity-tab-network'), local ? t('activity-tab-off') : formatNumber(c?.network.requests ?? 0), local ? 0 : (c?.network.failed ?? 0)),
+      make(
+        'network',
+        t('activity-tab-network'),
+        local && !c?.network.requests ? t('activity-tab-off') : formatNumber(c?.network.requests ?? 0),
+        c?.network.failed ?? 0,
+      ),
       make('files', t('activity-tab-files'), formatNumber(c?.files.operations ?? 0), c?.files.failed ?? 0),
       make('app', t('activity-tab-app'), formatNumber(c?.app.events ?? 0), c?.app.errors ?? 0),
     ];
@@ -391,7 +400,7 @@
       <div class="act-table act-table--center">
         <EmptyState icon={ActivityIcon} level={2} title={t('activity-empty-title')} text={t('activity-empty-text')} />
       </div>
-    {:else if localNet}
+    {:else if localPanel}
       <div class="act-table act-table--center">
         <!-- EmptyState with the design's two paragraphs (why, then what to do). -->
         <div class="dl-empty">
@@ -407,6 +416,13 @@
         </div>
       </div>
     {:else}
+      {#if localNet}
+        <Banner kind="neutral" icon={Unplug} title={t('activity-local-title')} text={t('activity-local-history')}>
+          {#snippet actions()}
+            <button type="button" class="dl-btn" onclick={() => router.go('settings')}>{t('activity-enable-catalog')}</button>
+          {/snippet}
+        </Banner>
+      {/if}
       {@const aria = t(`activity-${view.tab === 'network' ? 'net' : view.tab}-aria`)}
       {@const grid = view.tab === 'network' ? gridNet : view.tab === 'files' ? gridFiles : gridApp}
       <div class="act-table" aria-label={aria}>

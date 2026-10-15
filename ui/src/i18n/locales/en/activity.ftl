@@ -198,6 +198,7 @@ activity-empty-text = deadloader writes every network request, every file change
 activity-local-title = Local mode — no requests are made
 activity-local-why = The catalog is off, so deadloader doesn’t connect to anything — not to GameBanana, not anywhere else. File changes and app events are still logged in the other tabs.
 activity-local-do = Turn the catalog on in Settings to browse GameBanana. Every request will then show up here.
+activity-local-history = The requests below were made before local mode was turned on.
 activity-enable-catalog = Enable catalog
 
 ## Entry details

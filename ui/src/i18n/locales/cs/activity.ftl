@@ -220,6 +220,7 @@ activity-empty-text = deadloader sem zapisuje každý síťový požadavek, kaž
 activity-local-title = Místní režim — žádné požadavky se neodesílají
 activity-local-why = Katalog je vypnutý, takže se deadloader k ničemu nepřipojuje — ani ke GameBanana, ani nikam jinam. Změny souborů a události aplikace se dál zapisují na ostatních kartách.
 activity-local-do = Zapněte katalog v nastavení, abyste mohli procházet GameBanana. Každý požadavek se pak zobrazí tady.
+activity-local-history = Požadavky níže byly odeslány dříve, než byl zapnut místní režim.
 activity-enable-catalog = Zapnout katalog
 activity-details = Podrobnosti záznamu protokolu
 activity-close-details = Zavřít podrobnosti
