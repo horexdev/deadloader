@@ -4,26 +4,42 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # Weekly: the WebView2 runtime updates itself, and its internal feature names can change with any update, so the
+    # zero-connection check must also run against the current runtime when nothing in the repository changed.
+    - cron: "23 4 * * 1"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  PNPM_VERSION: 12.8.2
 
 jobs:
   rust:
     name: Rust (fmt, clippy, test)
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ui/.node-version
+      - name: Install pnpm
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }}
+      - name: Build the UI (embedded into the app at compile time)
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
@@ -39,3 +55,65 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
+
+  frontend:
+    name: Frontend (type-check, lint, test, build)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ui/.node-version
+      - name: Install pnpm
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }}
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Type-check
+        run: pnpm check
+      - name: Lint
+        run: pnpm lint
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+
+  app:
+    name: App (exe budget, zero connections)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: release
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ui/.node-version
+      - name: Install pnpm
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }}
+      - name: Build the UI
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Build the release exe
+        run: cargo build --release -p deadloader --locked
+      - name: Exe size budget (12 MB) and version metadata
+        shell: pwsh
+        run: |
+          $exe = Get-Item target/release/deadloader.exe
+          $mb = [math]::Round($exe.Length / 1MB, 2)
+          $version = (cargo pkgid -p deadloader) -replace '.*[#@]', ''
+          "deadloader.exe: $mb MB, version $($exe.VersionInfo.ProductVersion) (Cargo.toml: $version)" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          if ($exe.Length -gt 12MB) { "::error::deadloader.exe is $mb MB, over the 12 MB budget"; exit 1 }
+          if ($exe.VersionInfo.ProductVersion -ne $version -or $exe.VersionInfo.FileVersion -ne $version) {
+            "::error::the exe's version metadata does not match Cargo.toml ($version)"; exit 1
+          }
+      - name: Zero remote connections from the whole process tree
+        shell: pwsh
+        run: .github/scripts/zero-connections.ps1 -Exe target/release/deadloader.exe -Seconds 20
