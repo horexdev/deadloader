@@ -14,6 +14,12 @@ impl Game for SteamGame {
         deadloader_platform_windows::process::game_running().unwrap_or(true)
     }
 
+    fn launch(&self) -> std::io::Result<()> {
+        deadloader_platform_windows::shell::open_url(
+            deadloader_platform_windows::shell::DEADLOCK_RUN_URL,
+        )
+    }
+
     fn move_to_recycle_bin(&self, path: &std::path::Path) -> std::io::Result<()> {
         deadloader_platform_windows::recycle::move_to_recycle_bin(path)
     }

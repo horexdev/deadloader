@@ -23,6 +23,7 @@ pub mod downloads;
 pub mod library;
 pub mod profiles;
 pub mod settings;
+pub mod shell;
 pub mod system;
 pub mod updates;
 

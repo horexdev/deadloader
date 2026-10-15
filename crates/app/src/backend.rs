@@ -19,6 +19,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub trait Game: Send + Sync {
     fn running(&self) -> bool;
     fn installations(&self) -> Vec<PathBuf>;
+    /// Starts Deadlock the way Steam does.
+    fn launch(&self) -> std::io::Result<()>;
     fn move_to_recycle_bin(&self, path: &Path) -> std::io::Result<()>;
 }
 
@@ -470,6 +472,26 @@ impl Backend {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// Play (F4): the selected profile goes into the game folder, then Steam starts Deadlock. The UI asks first when
+    /// [`Backend::turned_off_by_apply`] isn't empty for a profile switch (D13, 146).
+    pub fn play(&self) -> Result<ApplyResult, UserMessage> {
+        if self.game.running() {
+            return Err(UserMessage::new(MessageId::E13));
+        }
+        let applied = self.apply()?;
+        self.game.launch().map_err(|e| {
+            UserMessage::new(MessageId::Internal)
+                .arg("detail", format!("Steam could not start Deadlock: {e}"))
+        })?;
+        Ok(applied)
+    }
+
+    /// D13: the mods Apply or Play would take out of the game.
+    pub fn turned_off_by_apply(&self) -> Result<Vec<String>, UserMessage> {
+        let fallback = self.game.installations().into_iter().next();
+        self.with(|s| Ok(s.turned_off_by_apply(fallback.as_deref())))
+    }
+
     /// Apply / Play: the selected profile goes into its game folder, or the first one Steam knows.
     pub fn apply(&self) -> Result<ApplyResult, UserMessage> {
         let running = self.game.running();
@@ -600,6 +622,7 @@ pub(crate) mod tests {
     #[derive(Clone, Default)]
     pub(crate) struct FakeGame {
         pub running: Arc<AtomicBool>,
+        pub launched: Arc<std::sync::atomic::AtomicUsize>,
         pub installs: Vec<PathBuf>,
         pub recycled: Arc<std::sync::Mutex<Vec<PathBuf>>>,
     }
@@ -610,6 +633,10 @@ pub(crate) mod tests {
         }
         fn installations(&self) -> Vec<PathBuf> {
             self.installs.clone()
+        }
+        fn launch(&self) -> std::io::Result<()> {
+            self.launched.fetch_add(1, Ordering::Relaxed);
+            Ok(())
         }
         fn move_to_recycle_bin(&self, path: &Path) -> std::io::Result<()> {
             self.recycled.lock().expect("lock").push(path.to_path_buf());
@@ -1037,6 +1064,34 @@ pub(crate) mod tests {
             .find(|x| x.id == proposals[0].old)
             .expect("kept");
         assert_eq!(old.newer_in_library.as_ref(), Some(&new_files[0]));
+    }
+
+    #[test]
+    fn play_applies_the_profile_then_starts_the_game() {
+        let f = Fixture::new("play");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let played = backend.play().expect("played");
+        assert!(played.changed);
+        assert!(
+            f.addons().join("pak01_dir.vpk").exists(),
+            "applied before the start"
+        );
+        assert_eq!(game.launched.load(Ordering::Relaxed), 1);
+
+        game.running.store(true, Ordering::Relaxed);
+        assert_eq!(backend.play().expect_err("running").id, MessageId::E13);
+        assert_eq!(
+            game.launched.load(Ordering::Relaxed),
+            1,
+            "not started twice"
+        );
     }
 
     #[test]

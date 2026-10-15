@@ -914,6 +914,42 @@ impl Session {
         Ok(())
     }
 
+    /// D13: the mods whose files are in the game folder now but won't be after applying the selected profile (by
+    /// name, in library order). Play asks before taking them out when the selected profile isn't the applied one.
+    /// `fallback_root` is where Apply goes for a profile that has no game folder yet (the first one Steam knows).
+    pub fn turned_off_by_apply(&self, fallback_root: Option<&Path>) -> Vec<String> {
+        let Some(root) = self
+            .game_root()
+            .or_else(|| fallback_root.map(Path::to_path_buf))
+        else {
+            return Vec::new();
+        };
+        let root = root.display().to_string();
+        let Some(installation) = self
+            .manifest
+            .installations
+            .iter()
+            .find(|i| i.game_root == root)
+        else {
+            return Vec::new();
+        };
+        let in_game: HashSet<&str> = installation
+            .applied
+            .iter()
+            .map(|r| r.file.as_str())
+            .collect();
+        let wanted: HashSet<String> = self.wanted_files().into_iter().collect();
+        self.manifest
+            .mods
+            .iter()
+            .filter(|m| {
+                m.files.iter().any(|f| in_game.contains(f.id.as_str()))
+                    && !m.files.iter().any(|f| wanted.contains(&f.id))
+            })
+            .map(|m| m.name.clone())
+            .collect()
+    }
+
     /// "Hide" on "new files available" (168): these GameBanana files of the mod are not reported again.
     pub fn dismiss_new_files(
         &mut self,
@@ -1752,6 +1788,39 @@ mod tests {
     }
 
     const HAZE: (crate::library::Section, u64) = (crate::library::Section::Mod, 655_209);
+
+    #[test]
+    fn applying_a_switched_profile_says_which_mods_leave_the_game() {
+        let f = Fixture::new("turnoff");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("haze");
+        s.import_file(
+            &f.source("seven.vpk", &[("models/seven/body.vmdl_c", 1)]),
+            "Seven",
+        )
+        .expect("seven");
+        let game = f.game();
+        s.apply(&game, false).expect("applied");
+        assert!(
+            s.turned_off_by_apply(Some(&game)).is_empty(),
+            "nothing waits"
+        );
+
+        // D13: a new, empty profile would take both out of the game.
+        s.create_profile("Evening").expect("created");
+        s.select_profile("Evening").expect("selected");
+        s.set_enabled("local-2", true).expect("seven on");
+        // The new profile has no game folder yet: Apply would use the one Steam knows.
+        assert_eq!(s.turned_off_by_apply(Some(&game)), ["Haze"]);
+        assert!(
+            s.turned_off_by_apply(None).is_empty(),
+            "no game folder at all"
+        );
+    }
 
     #[test]
     fn a_local_mod_is_linked_by_the_md5_of_its_archive() {

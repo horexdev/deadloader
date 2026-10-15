@@ -559,6 +559,20 @@ export const links = {
   rename: (modId: string, name: string) => call<LibraryView>('mod_rename', { modId, name }),
 };
 
+// ---- the window frame and the sidebar (crates/app/src/commands/shell.rs)
+
+export const shell = {
+  /** Play (F4): applies the selected profile, then Steam starts Deadlock. Ask with D13 first (`turnedOffByApply`). */
+  play: () => call<ApplyResult>('play'),
+  /** D13: the mods Apply or Play would take out of the game, by name. */
+  turnedOffByApply: () => call<string[]>('turned_off_by_apply'),
+  minimize: () => call<null>('window_minimize'),
+  toggleMaximize: () => call<null>('window_toggle_maximize'),
+  close: () => call<null>('window_close'),
+  /** On a press on the title bar's empty area. */
+  startDrag: () => call<null>('window_start_drag'),
+};
+
 export function isUserMessage(value: unknown): value is UserMessage {
   return (
     typeof value === 'object' &&
