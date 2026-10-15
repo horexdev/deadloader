@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 // Every tooltip is the design system's (`tooltip` attachment): a native `title` shows Windows' own tooltip instead.
 const sources = import.meta.glob<string>(['./**/*.svelte'], { query: '?raw', import: 'default', eager: true });
+// Code that builds DOM itself (the mod description) sets titles with DOM calls instead of markup.
+const scripts = import.meta.glob<string>(['./**/*.ts', '!./**/*.test.ts'], {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+/** A native title set from code: `element.title = …` or `setAttribute('title', …)` (`document.title` is the window's). */
+function scriptTitles(source: string): string[] {
+  return [...source.matchAll(/(?<!document)\.title\s*=(?!=)|setAttribute\(\s*['"]title['"]/g)].map(
+    (match) => `line ${source.slice(0, match.index).split('\n').length}`,
+  );
+}
 
 /** `title=` on a plain HTML element in a component's markup (components like Dialog or Banner take `title` as a
  *  heading, which is fine). */
@@ -22,6 +35,17 @@ describe('tooltips', () => {
   it('are never native title attributes', () => {
     const offenders = Object.entries(sources)
       .map(([file, source]) => nativeTitles(source).map((where) => `${file}: ${where}`))
+      .flat();
+    expect(offenders).toEqual([]);
+  });
+
+  it('are never native titles set from code', () => {
+    expect(scriptTitles("a.title = url;\nb.setAttribute('title', x);\ndocument.title = 'deadloader';")).toEqual([
+      'line 1',
+      'line 2',
+    ]);
+    const offenders = Object.entries(scripts)
+      .map(([file, source]) => scriptTitles(source).map((where) => `${file}: ${where}`))
       .flat();
     expect(offenders).toEqual([]);
   });

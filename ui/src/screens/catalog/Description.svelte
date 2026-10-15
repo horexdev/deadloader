@@ -58,6 +58,8 @@
         imageUrl,
       },
     );
+    const shown = controller;
+    return () => shown.destroy();
   });
 
   async function load(image: DescriptionImage): Promise<void> {

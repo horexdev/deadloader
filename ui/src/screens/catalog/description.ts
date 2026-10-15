@@ -5,6 +5,7 @@
 // Everything is built with DOM calls and text nodes, never from strings of HTML.
 
 import type { Description, DescriptionImage, ImageId } from '../../lib/api';
+import { tooltip } from '../../lib/components/tooltip';
 
 export interface DescriptionTexts {
   opensBrowser: string;
@@ -31,6 +32,8 @@ export interface DescriptionHandlers {
 export interface DescriptionController {
   /** Shows the picture `id` in place of its placeholder. */
   show: (id: ImageId) => void;
+  /** Takes down what it added outside the description (its tooltips); call before the description goes. */
+  destroy: () => void;
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -103,6 +106,15 @@ export function enhanceDescription(
   texts: DescriptionTexts,
   handlers: DescriptionHandlers,
 ): DescriptionController {
+  // The design system's tooltips, never a native `title` (Windows' own tooltip).
+  const detach: (() => void)[] = [];
+  const tip = (element: HTMLElement, text: string) => {
+    const cleanup = tooltip({ text })(element);
+    if (cleanup) {
+      detach.push(cleanup);
+    }
+  };
+
   for (const link of root.querySelectorAll<HTMLElement>('a[data-dl-link]')) {
     const target = description.links[index(link, 'data-dl-link')];
     if (!target) {
@@ -112,10 +124,10 @@ export function enhanceDescription(
     link.tabIndex = 0;
     link.setAttribute('role', 'link');
     if (target.internal_mod_id !== null) {
-      link.title = texts.opensHere;
+      tip(link, texts.opensHere);
       activate(link, () => handlers.onmod(target.internal_mod_id as number));
     } else {
-      link.title = target.url;
+      tip(link, target.url);
       link.append(icon(EXTERNAL, texts.opensBrowser));
       activate(link, () => handlers.onlink(target.url));
     }
@@ -200,7 +212,7 @@ export function enhanceDescription(
     host.textContent = target.host;
     text.append(title, host);
     card.append(icon(PLAY), text, icon(EXTERNAL, texts.opensBrowser));
-    card.title = target.url;
+    tip(card, target.url);
     card.addEventListener('click', () => handlers.onlink(target.url));
     holder.replaceChildren(card);
   }
@@ -232,6 +244,11 @@ export function enhanceDescription(
       const image = description.images.find((i) => i.id === id);
       if (holder && image) {
         showImage(holder, image);
+      }
+    },
+    destroy() {
+      for (const cleanup of detach.splice(0)) {
+        cleanup();
       }
     },
   };
