@@ -655,6 +655,14 @@ const handlers: Record<string, (args: Args) => unknown> = {
     }
     return null;
   },
+  // Like the core: only a task that keeps its downloaded archive (a failed install) has one to show.
+  download_show_archive: (args) => {
+    const task = state.tasks.find((t) => t.id === args.id);
+    if (task?.state.state !== 'failed') {
+      throw { id: 'Internal', args: { detail: `mock: download ${String(args.id)} keeps no archive` } };
+    }
+    return null;
+  },
   updates_check: () => ({ checks: [], available: 0, stopped: null }),
   game_status: () => ({
     running: state.gameRunning,

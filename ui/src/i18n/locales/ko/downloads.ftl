@@ -102,3 +102,5 @@ downloads-d4-install = 설치
 downloads-d4-installed = 변형 “{ $variant }” · 프로필 “{ $profile }”의 맨 위.
 downloads-cancel = 취소
 downloads-close-esc = 닫기 (Esc)
+downloads-open-folder = 폴더 열기
+downloads-opened = 파일 탐색기에서 열었습니다

@@ -644,6 +644,20 @@ impl Downloads {
         self.saved()
     }
 
+    /// The verified archive a task keeps on disk (its install failed, E11's "Open folder"), for File Explorer. `None`
+    /// for an unknown task or when no complete archive is there; the path is always ours, never one from the UI.
+    pub fn archive(&self, id: TaskId) -> Option<PathBuf> {
+        let file_name = self
+            .shared
+            .lock()
+            .tasks
+            .iter()
+            .find(|t| t.record.id == id)
+            .map(|t| t.record.file_name.clone())?;
+        let path = self.shared.store().archive_path(id, &file_name);
+        path.is_file().then_some(path)
+    }
+
     /// Every task, in queue order.
     pub fn tasks(&self) -> Vec<TaskSnapshot> {
         let now = self.shared.now();

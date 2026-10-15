@@ -141,3 +141,5 @@ profiles-undo = 실행 취소
 profiles-check-update = deadloader 업데이트 확인
 profiles-choose-another = 다른 파일 선택
 profiles-switcher = 프로필 관리
+profiles-saved-as = 저장 위치:
+profiles-show-folder = 폴더에서 보기

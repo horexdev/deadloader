@@ -116,6 +116,30 @@ describe('the Profiles screen (S5)', () => {
     await vi.waitFor(() => expect(one<HTMLInputElement>(target, 'input[data-rename]').value).toBe('Evening (copy)'));
   });
 
+  it('exports a profile, says where the file went and shows it in its folder', async () => {
+    const { app, target } = await start();
+    click(menuItem(target, 'Evening', 'Export as file…'));
+    await vi.waitFor(() => expect(app.toasts.at(-1)?.title).toBe('Profile “Evening” exported.'));
+    expect(calls.find((c) => c.command === 'export_profile_dialog')?.args).toMatchObject({ name: 'Evening' });
+    const toast = app.toasts.at(-1);
+    expect(toast?.text).toBe('Saved as');
+    expect(toast?.file).toBe(String.raw`C:\Users\Player\Documents\Evening.json`);
+    expect(toast?.action?.label).toBe('Show in folder');
+    toast?.action?.onclick();
+    await vi.waitFor(() =>
+      expect(calls.find((c) => c.command === 'show_place')?.args).toEqual({ place: { kind: 'exported_profile' }, asFile: false }),
+    );
+  });
+
+  it('says nothing when the export is cancelled in the save dialog', async () => {
+    const { app, target } = await start('profiles-export-cancelled');
+    const before = app.toasts.length;
+    click(menuItem(target, 'Evening', 'Export as file…'));
+    await vi.waitFor(() => expect(commands()).toContain('export_profile_dialog'));
+    await Promise.resolve();
+    expect(app.toasts.length).toBe(before);
+  });
+
   it('deletes a profile that isn’t applied at once, with Undo', async () => {
     const { app, target } = await start();
     click(menuItem(target, 'Ranked', 'Delete'));

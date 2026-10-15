@@ -179,7 +179,7 @@ pub async fn gameinfo_status(
     blocking(backend, move |b| b.gameinfo_status(fix)).await
 }
 
-type AppLog = Arc<
+pub(super) type AppLog = Arc<
     deadloader_core::log::Logger<
         deadloader_core::log::SystemClock,
         deadloader_core::log::DiskLogDir,
@@ -187,7 +187,7 @@ type AppLog = Arc<
 >;
 
 /// Logs an external program deadloader started (ADR 0009).
-fn log_shell(log: &AppLog, result: &Reply<crate::backend::ShellRequest>) {
+pub(super) fn log_shell(log: &AppLog, result: &Reply<crate::backend::ShellRequest>) {
     use deadloader_core::log::Level;
     if let Ok(request) = result {
         let (program, arguments) = request.describe();

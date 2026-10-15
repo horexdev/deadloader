@@ -127,6 +127,17 @@
     app.showError(message, [remove, primary]);
   }
 
+  /** E11's "Open folder": File Explorer with the kept archive selected. */
+  async function showArchive(task: TaskSnapshot): Promise<boolean> {
+    try {
+      await downloads.showArchive(task.id);
+      return true;
+    } catch (error) {
+      app.fail(error);
+      return false;
+    }
+  }
+
   function retryDisk(): void {
     for (const task of app.tasks) {
       const state = task.state;
@@ -279,6 +290,7 @@
                 onretry={() => row.kind === 'task' && control(row.task, 'retry')}
                 ondetails={() => row.kind === 'task' && details(row.task)}
                 onchoose={() => (choosing = row.kind === 'choice' ? row.choice : null)}
+                onopenfolder={() => (row.kind === 'task' ? showArchive(row.task) : Promise.resolve(false))}
               />
             {/each}
           </div>

@@ -108,3 +108,5 @@ downloads-d4-install = Nainstalovat
 downloads-d4-installed = Varianta „{ $variant }“ · na začátku profilu „{ $profile }“.
 downloads-cancel = Zrušit
 downloads-close-esc = Zavřít (Esc)
+downloads-open-folder = Otevřít složku
+downloads-opened = Otevřeno v Průzkumníkovi souborů

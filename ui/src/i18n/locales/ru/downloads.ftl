@@ -108,3 +108,5 @@ downloads-d4-install = Установить
 downloads-d4-installed = Вариант «{ $variant }» · первым в профиле «{ $profile }».
 downloads-cancel = Отмена
 downloads-close-esc = Закрыть (Esc)
+downloads-open-folder = Открыть папку
+downloads-opened = Открыто в Проводнике

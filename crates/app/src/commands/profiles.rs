@@ -46,14 +46,15 @@ pub async fn import_profile(backend: Shared<'_>, text: String) -> Reply<ProfileI
     blocking(backend, move |b| b.import_profile(&text)).await
 }
 
-/// Profiles → Export: the system save dialog, proposing `<name>.json`. `false` if the user cancelled.
+/// Profiles → Export: the system save dialog, proposing `<name>.json`. The saved file's path, for the toast; `None` if
+/// the user cancelled.
 #[tauri::command]
 pub async fn export_profile_dialog(
     window: tauri::WebviewWindow,
     backend: Shared<'_>,
     name: String,
     text: DialogText,
-) -> Reply<bool> {
+) -> Reply<Option<String>> {
     blocking(backend, move |b| {
         let chosen = rfd::FileDialog::new()
             .set_parent(&window)
@@ -62,8 +63,8 @@ pub async fn export_profile_dialog(
             .add_filter(&text.filter, &["json"])
             .save_file();
         match chosen {
-            Some(path) => b.export_profile_to(&name, &path).map(|()| true),
-            None => Ok(false),
+            Some(path) => b.export_profile_to(&name, &path).map(Some),
+            None => Ok(None),
         }
     })
     .await

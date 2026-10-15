@@ -33,6 +33,19 @@ describe('Toast', () => {
     expect(ondismiss).toHaveBeenCalledOnce();
   });
 
+  it('names a file after the text in a monospace font', () => {
+    const { target } = render(Toast, {
+      title: 'Profile “Evening” exported.',
+      text: 'Saved as',
+      file: String.raw`D:\Shared\Evening.json`,
+      dismissLabel: 'Dismiss',
+      ondismiss: vi.fn(),
+    });
+    const text = one(target, '.dl-toast__text');
+    expect(text.textContent).toBe(String.raw`Saved as D:\Shared\Evening.json`);
+    expect(one(text, '.dl-mono').textContent).toBe(String.raw`D:\Shared\Evening.json`);
+  });
+
   it('uses the alert role for errors and never times them out', () => {
     const ondismiss = vi.fn();
     const { target } = render(Toast, { kind: 'error', title: 'Download failed.', dismissLabel: 'Dismiss', ondismiss });

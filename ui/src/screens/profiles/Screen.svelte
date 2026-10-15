@@ -4,6 +4,7 @@
 <script lang="ts">
   import Download from '@lucide/svelte/icons/download';
   import FileInput from '@lucide/svelte/icons/file-input';
+  import FolderOpen from '@lucide/svelte/icons/folder-open';
   import Gamepad from '@lucide/svelte/icons/gamepad-2';
   import Info from '@lucide/svelte/icons/info';
   import ListTodo from '@lucide/svelte/icons/list-todo';
@@ -12,7 +13,15 @@
   import { onMount } from 'svelte';
   import Banner from '../../lib/components/Banner.svelte';
   import Button from '../../lib/components/Button.svelte';
-  import { api, isUserMessage, shell, type ProfileImported, type ProfileOverview, type ProfilesView } from '../../lib/api';
+  import {
+    api,
+    isUserMessage,
+    library,
+    shell,
+    type ProfileImported,
+    type ProfileOverview,
+    type ProfilesView,
+  } from '../../lib/api';
   import { app as shared, type AppState } from '../../lib/app.svelte';
   import { describe, t } from '../../i18n';
   import DeleteDialog from './DeleteDialog.svelte';
@@ -183,8 +192,18 @@
         title: t('profiles-export-dialog'),
         filter: t('profiles-file-filter'),
       });
-      if (saved) {
-        app.toast({ kind: 'neutral', title: t('profiles-exported', { name: profile.name }) });
+      if (saved !== null) {
+        app.toast({
+          kind: 'neutral',
+          title: t('profiles-exported', { name: profile.name }),
+          text: t('profiles-saved-as'),
+          file: saved,
+          action: {
+            label: t('profiles-show-folder'),
+            icon: FolderOpen,
+            onclick: () => void library.show({ kind: 'exported_profile' }, false).catch((e: unknown) => app.fail(e)),
+          },
+        });
       }
     });
   }

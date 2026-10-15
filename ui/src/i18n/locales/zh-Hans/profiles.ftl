@@ -141,3 +141,5 @@ profiles-undo = 撤销
 profiles-check-update = 检查 deadloader 更新
 profiles-choose-another = 选择其他文件
 profiles-switcher = 管理配置方案
+profiles-saved-as = 已保存为
+profiles-show-folder = 在文件夹中显示

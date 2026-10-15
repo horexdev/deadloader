@@ -171,3 +171,5 @@ profiles-undo = Скасувати
 profiles-check-update = Перевірити оновлення deadloader
 profiles-choose-another = Вибрати інший файл
 profiles-switcher = Керувати профілями
+profiles-saved-as = Збережено як
+profiles-show-folder = Показати в теці

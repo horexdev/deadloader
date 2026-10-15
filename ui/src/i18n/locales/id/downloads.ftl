@@ -102,3 +102,5 @@ downloads-d4-install = Pasang
 downloads-d4-installed = Varian “{ $variant }” · teratas di profil “{ $profile }”.
 downloads-cancel = Batal
 downloads-close-esc = Tutup (Esc)
+downloads-open-folder = Buka folder
+downloads-opened = Dibuka di File Explorer

@@ -102,3 +102,5 @@ downloads-d4-install = 安装
 downloads-d4-installed = 变体“{ $variant }” · 位于配置方案“{ $profile }”的最前面。
 downloads-cancel = 取消
 downloads-close-esc = 关闭 (Esc)
+downloads-open-folder = 打开文件夹
+downloads-opened = 已在文件资源管理器中打开

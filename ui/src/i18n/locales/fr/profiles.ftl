@@ -151,3 +151,5 @@ profiles-undo = Annuler
 profiles-check-update = Rechercher une mise à jour de deadloader
 profiles-choose-another = Choisir un autre fichier
 profiles-switcher = Gérer les profils
+profiles-saved-as = Enregistré sous
+profiles-show-folder = Afficher dans le dossier

@@ -151,3 +151,5 @@ profiles-undo = Geri al
 profiles-check-update = deadloader güncellemesini denetle
 profiles-choose-another = Başka dosya seç
 profiles-switcher = Profilleri yönet
+profiles-saved-as = Kaydedildiği yer:
+profiles-show-folder = Klasörde göster

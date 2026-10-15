@@ -142,7 +142,9 @@ export function handlers(host: Host): Record<string, (args: Record<string, unkno
       library.pending = library.selected_profile !== library.applied_profile;
       return host.names();
     },
-    export_profile_dialog: () => true,
+    // The path the user picked in the save dialog; `profiles-export-cancelled`: the dialog was cancelled.
+    export_profile_dialog: (args) =>
+      host.scenario() === 'profiles-export-cancelled' ? null : `${String.raw`C:\Users\Player\Documents`}\\${String(args.name)}.json`,
     export_profile: (args) => JSON.stringify({ deadloader_profile: 1, name: String(args.name), mods: [] }),
     import_profile: (args): ProfileImported => {
       const base = String((JSON.parse(String(args.text)) as { name?: string }).name ?? 'Imported');

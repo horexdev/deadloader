@@ -73,3 +73,25 @@ pub enum DownloadAction {
     Retry,
     Cancel,
 }
+
+/// E11's "Open folder": File Explorer with the download's kept archive selected. The core finds the file by the task;
+/// the UI never names a path. Logged as an external program (ADR 0009).
+#[tauri::command]
+pub async fn download_show_archive(
+    backend: Shared<'_>,
+    log: State<'_, super::library::AppLog>,
+    downloads: State<'_, Arc<deadloader_downloads::Downloads>>,
+    id: deadloader_downloads::TaskId,
+) -> Reply<()> {
+    let archive = downloads.archive(id).ok_or_else(|| {
+        UserMessage::new(MessageId::Internal)
+            .arg("detail", format!("download {id} keeps no archive"))
+    })?;
+    let log = Arc::clone(log.inner());
+    blocking(backend, move |b| {
+        let result = b.show_file(archive);
+        super::library::log_shell(&log, &result);
+        result.map(|_| ())
+    })
+    .await
+}

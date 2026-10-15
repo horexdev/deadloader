@@ -112,6 +112,21 @@ describe('the Downloads screen (S6)', () => {
     expect(app.error?.actions[1]?.href).toBe('#/settings/downloads');
   });
 
+  it('shows the kept archive of a RAR that can’t be unpacked in File Explorer (E11)', async () => {
+    const app = await start('downloads');
+    const { target } = render(Screen, { app });
+    const row = rowNamed(target, 'Dynamo — Neon Rider');
+    const task = app.tasks.find((t) => t.meta.mod_name === 'Dynamo — Neon Rider');
+    const open = all(row, '.error button').find((b) => b.textContent?.includes('Open folder'));
+    expect(open).toBeDefined();
+    expect(row.querySelector('[role="status"]')).toBeNull();
+    click(open as HTMLElement);
+    await vi.waitFor(() => expect(calls.find((c) => c.command === 'download_show_archive')?.args).toEqual({ id: task?.id }));
+    await vi.waitFor(() => expect(plain(one(row, '.error [role="status"]').textContent)).toBe('Opened in File Explorer'));
+    const other = rowNamed(target, 'Lady Geist — Ember Coat');
+    expect(all(other, '.error button').some((b) => b.textContent?.includes('Open folder'))).toBe(false);
+  });
+
   it('lets the user pick a variant in D4 and turns it on', async () => {
     const app = await start('downloads-choice');
     const { target } = render(Screen, { app });

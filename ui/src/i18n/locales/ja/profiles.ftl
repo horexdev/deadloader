@@ -141,3 +141,5 @@ profiles-undo = 元に戻す
 profiles-check-update = deadloader の更新を確認
 profiles-choose-another = 別のファイルを選ぶ
 profiles-switcher = プロファイルを管理
+profiles-saved-as = 保存先:
+profiles-show-folder = フォルダーで表示

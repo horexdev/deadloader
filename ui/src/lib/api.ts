@@ -530,6 +530,8 @@ export const downloads = {
     call<TaskId>('download_install', { section, modId, fileId, name, author }),
   list: () => call<TaskSnapshot[]>('downloads'),
   control: (id: TaskId, action: DownloadAction) => call<null>('download_control', { id, action }),
+  /** E11's "Open folder": File Explorer with the task's kept archive selected (the core finds the file). */
+  showArchive: (id: TaskId) => call<null>('download_show_archive', { id }),
 };
 
 // ---- mod updates (crates/core/src/updates.rs; crates/app/src/updates.rs)
@@ -733,7 +735,12 @@ export interface GameinfoStatus {
 }
 
 /** Where "Open file" / "Open folder" point: places the core knows, never a raw path. */
-export type Place = { kind: 'gameinfo' } | { kind: 'foreign'; name: string } | { kind: 'mod_files'; mod_id: string };
+export type Place =
+  | { kind: 'gameinfo' }
+  | { kind: 'foreign'; name: string }
+  | { kind: 'mod_files'; mod_id: string }
+  /** The file the last profile export wrote. */
+  | { kind: 'exported_profile' };
 
 export const library = {
   /** S9. */
@@ -831,7 +838,9 @@ export const api = {
   settings: () => call<Settings>('settings'),
   updateSettings: (settings: Settings) => call<Settings>('update_settings', { settings }),
   addFromDisk: (text: DialogText) => call<ImportResult[]>('add_from_disk', { text }),
-  exportProfileDialog: (name: string, text: DialogText) => call<boolean>('export_profile_dialog', { name, text }),
+  /** The saved file's path, or null when the user cancelled the save dialog. */
+  exportProfileDialog: (name: string, text: DialogText) =>
+    call<string | null>('export_profile_dialog', { name, text }),
   importProfileDialog: (text: DialogText) => call<ProfileImported | null>('import_profile_dialog', { text }),
   /** D3 (109): the user confirmed legal age; the saved settings come back. */
   confirmAge: () => call<Settings>('confirm_age'),

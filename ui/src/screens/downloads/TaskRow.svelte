@@ -7,6 +7,7 @@
   import CircleX from '@lucide/svelte/icons/circle-x';
   import Clock from '@lucide/svelte/icons/clock';
   import Download from '@lucide/svelte/icons/download';
+  import FolderOpen from '@lucide/svelte/icons/folder-open';
   import Package from '@lucide/svelte/icons/package';
   import Pause from '@lucide/svelte/icons/pause';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -14,6 +15,7 @@
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import WifiOff from '@lucide/svelte/icons/wifi-off';
   import X from '@lucide/svelte/icons/x';
+  import { onDestroy } from 'svelte';
   import Badge from '../../lib/components/Badge.svelte';
   import Button from '../../lib/components/Button.svelte';
   import Spinner from '../../lib/components/Spinner.svelte';
@@ -35,10 +37,25 @@
     onretry: () => void;
     ondetails: () => void;
     onchoose: () => void;
+    /** E11's "Open folder": shows the kept archive; true when File Explorer opened. */
+    onopenfolder?: () => Promise<boolean>;
   }
 
-  const { row, position, parallel, offline, onpause, onresume, oncancel, onretry, ondetails, onchoose }: Props =
-    $props();
+  const {
+    row,
+    position,
+    parallel,
+    offline,
+    onpause,
+    onresume,
+    oncancel,
+    onretry,
+    ondetails,
+    onchoose,
+    onopenfolder,
+  }: Props = $props();
+
+  const OPENED_MS = 2400;
 
   const ICONS: Partial<Record<Stage, IconComponent>> = {
     downloading: Download,
@@ -64,6 +81,20 @@
   // The mod's picture (the catalog's id from the saved mod page); the placeholder without one or when it fails.
   const thumbnail = $derived(row.kind === 'task' ? (row.task.meta.thumbnail ?? null) : null);
   let failedPicture: string | null = $state(null);
+  // E11 keeps the downloaded file: "Open folder" shows it, and says so for a moment (the design's "Opened").
+  const keepsArchive = $derived(row.kind === 'task' && row.task.state.state === 'failed' && row.task.state.message.id === 'E11');
+  let opened = $state(false);
+  let openedTimer: ReturnType<typeof setTimeout> | undefined;
+  onDestroy(() => clearTimeout(openedTimer));
+
+  async function openFolder(): Promise<void> {
+    if (onopenfolder && (await onopenfolder())) {
+      opened = true;
+      clearTimeout(openedTimer);
+      openedTimer = setTimeout(() => (opened = false), OPENED_MS);
+    }
+  }
+
   const barState = $derived(
     meta.indeterminate ? 'dl-progress--indeterminate' : ['paused', 'offline', 'disk', 'retrying'].includes(row.stage) ? 'dl-progress--paused' : '',
   );
@@ -118,6 +149,16 @@
         {#if failure.todo}<span class="todo">{failure.todo}</span>{/if}
         <div class="error-actions">
           <Button size="sm" icon={RefreshCw} label={t('downloads-retry')} onclick={onretry} />
+          {#if keepsArchive}
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={FolderOpen}
+              label={t('downloads-open-folder')}
+              onclick={() => void openFolder()}
+            />
+            {#if opened}<span class="opened" role="status">{t('downloads-opened')}</span>{/if}
+          {/if}
           <Button size="sm" variant="ghost" label={t('downloads-show-details')} aria-haspopup="dialog" onclick={ondetails} />
         </div>
       </div>
@@ -337,6 +378,11 @@
     align-items: center;
     gap: 8px 12px;
     margin-top: 4px;
+  }
+
+  .opened {
+    font: var(--type-caption);
+    color: var(--ink-subtle);
   }
 
   .actions {
