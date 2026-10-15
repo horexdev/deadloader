@@ -21,6 +21,7 @@ use crate::remove::{Permanently, sweep};
 use crate::selection;
 use crate::settings::{self, Settings, SettingsError, Warning};
 use crate::vpk::read_index;
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -113,7 +114,7 @@ impl From<io::Error> for SessionError {
 }
 
 /// The Library screen's content for the selected profile (S4).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LibraryView {
     pub selected_profile: String,
     /// The profile last applied to the game folder this profile uses, if any.
@@ -125,7 +126,7 @@ pub struct LibraryView {
     pub conflicts: Vec<ConflictView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModView {
     pub id: String,
     pub name: String,
@@ -140,7 +141,7 @@ pub struct ModView {
     pub bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileView {
     pub id: String,
     pub archive_name: String,
@@ -151,13 +152,13 @@ pub struct FileView {
     pub damaged: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VariantGroupView {
     pub files: Vec<String>,
     pub active: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ConflictView {
     pub winner_mod: String,
     pub winner_file: String,
@@ -166,7 +167,7 @@ pub struct ConflictView {
     pub paths: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ImportOutcome {
     pub mod_id: String,
     pub new_files: Vec<String>,
@@ -302,6 +303,15 @@ impl Session {
 
     pub fn profile_names(&self) -> Vec<String> {
         self.profiles.iter().map(|p| p.name.clone()).collect()
+    }
+
+    /// The game folder the selected profile uses: its own (set when it was applied), else the one it was last
+    /// applied to. `None` until the user picks or applies one.
+    pub fn game_root(&self) -> Option<PathBuf> {
+        self.profile()
+            .and_then(|p| p.game_root.clone())
+            .or_else(|| self.installation().map(|i| i.game_root.clone()))
+            .map(PathBuf::from)
     }
 
     pub fn library(&self) -> LibraryView {
@@ -981,6 +991,17 @@ mod tests {
         assert!(s.library().pending);
         s.apply(&game, false).expect("applied");
         assert!(!addons.join("pak01_dir.vpk").exists());
+    }
+
+    #[test]
+    fn the_game_folder_is_remembered_by_the_profile_after_applying() {
+        let f = Fixture::new("root");
+        let mut s = open(&f);
+        assert_eq!(s.game_root(), None, "nothing chosen yet");
+        let game = f.game();
+        s.apply(&game, false).expect("applied");
+        assert_eq!(s.game_root(), Some(game.clone()));
+        assert_eq!(open(&f).game_root(), Some(game));
     }
 
     #[test]
