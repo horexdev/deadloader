@@ -6,3 +6,5 @@ pub mod process;
 pub mod recycle;
 #[cfg(windows)]
 pub mod steam;
+#[cfg(windows)]
+pub mod webview2;
