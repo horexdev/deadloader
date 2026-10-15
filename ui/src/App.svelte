@@ -6,6 +6,7 @@
   import { router, type Route } from './lib/router.svelte';
   import { screenLoader } from './lib/screens';
   import { watchZoom } from './lib/zoom';
+  import Prompts from './lib/dialogs/Prompts.svelte';
   import Shell from './shell/Shell.svelte';
   import NoWrite from './wizard/NoWrite.svelte';
 
@@ -88,3 +89,6 @@
     {/await}
   </Shell>
 {/if}
+
+<!-- D1 and D3 answer `openLink` / `chooseNsfw` over whatever is on screen: the wizard, E1 or the shell. -->
+<Prompts />
