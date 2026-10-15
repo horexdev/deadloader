@@ -110,6 +110,9 @@ pub fn run() -> Result<(), StartError> {
             commands::catalog_activate,
             commands::catalog_consent_prompt,
             commands::catalog_grant,
+            commands::download_install,
+            commands::downloads,
+            commands::download_control,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
@@ -131,6 +134,37 @@ pub fn run() -> Result<(), StartError> {
     ));
     let follow = Arc::clone(&network);
     backend.on_settings(Box::new(move |settings| follow.apply(settings)));
+    let settings = backend.settings().unwrap_or_default();
+    let queue = crate::downloads::open(
+        layout.root().join("downloads"),
+        &settings,
+        Arc::clone(network.client()),
+        Arc::clone(&log) as Arc<dyn deadloader_downloads::DownloadLog>,
+        &backend,
+        Arc::clone(&outbox),
+    );
+    let downloads = match queue {
+        Ok(downloads) => Some(Arc::new(downloads)),
+        Err(message) => {
+            write(
+                &log,
+                Level::Error,
+                "the download queue could not be opened",
+                [(
+                    "message",
+                    serde_json::to_value(&message).unwrap_or_default(),
+                )],
+            );
+            None
+        }
+    };
+    if let Some(downloads) = &downloads {
+        backend.on_settings(crate::downloads::follow_settings(
+            Arc::clone(downloads),
+            &settings,
+        ));
+        app.manage(Arc::clone(downloads));
+    }
     let slot = Arc::new(CatalogSlot::new());
     app.manage(Arc::clone(&slot));
     let catalog_parts = CatalogParts {
@@ -154,7 +188,14 @@ pub fn run() -> Result<(), StartError> {
         return Err(StartError::Window(e));
     }
     open_catalog(app.handle().clone(), slot, catalog_parts, Arc::clone(&log));
-    app.run(|_, _| {});
+    app.run(move |_, event| {
+        // Running downloads save their position and stay queued for the next start.
+        if let tauri::RunEvent::Exit = event
+            && let Some(downloads) = &downloads
+        {
+            downloads.shutdown();
+        }
+    });
     Ok(())
 }
 

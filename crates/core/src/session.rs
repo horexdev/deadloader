@@ -12,7 +12,7 @@ use crate::gamedir::{GuardOutcome, ensure_mods_load};
 use crate::import::{ImportError, ImportRequest, Limits, NoHooks, import};
 use crate::journal::{FileJournal, Recovery};
 use crate::library::{
-    Manifest, ModelError, Profile, ProfileEntry, Source, load_manifest, save_manifest,
+    Manifest, ModelError, Profile, ProfileEntry, Section, Source, load_manifest, save_manifest,
 };
 use crate::log::{FileEvent, FileLog, FileOp, Outcome};
 use crate::message::{Area, MessageId, ToUserMessage, UserMessage, data_file, from_io};
@@ -33,6 +33,19 @@ use std::sync::Arc;
 
 /// Where the session reports file operations (the files log).
 pub type SharedLog = Arc<dyn FileLog + Send + Sync>;
+
+/// What the download queue knows about a verified download: which GameBanana file of which mod it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Download {
+    pub section: Section,
+    pub mod_id: u64,
+    pub file_id: u64,
+    /// The file's name on GameBanana.
+    pub file_name: String,
+    pub mod_name: String,
+    pub author: Option<String>,
+    pub version: Option<String>,
+}
 
 /// Something the user should hear about after start (a toast or banner).
 #[derive(Debug)]
@@ -442,22 +455,67 @@ impl Session {
         let mod_id = self.free_local_id();
         let req = ImportRequest {
             source: path.to_path_buf(),
-            mod_id: mod_id.clone(),
+            mod_id,
             name: name.to_owned(),
             mod_source: Source::Local {
                 imported_from: Some(path.display().to_string()),
             },
             version: None,
+            remote_file_id: None,
+            archive_name: None,
         };
+        self.import_request(&req, None)
+    }
+
+    /// A verified download from the catalog (F2): its files join the library mod of that GameBanana mod, a new one
+    /// the first time (144), with the GameBanana file id and name for update detection (164). Then as
+    /// [`Session::import_file`]: enabled on top (136), unless the user has to pick variants first.
+    pub fn import_download(
+        &mut self,
+        path: &Path,
+        download: &Download,
+    ) -> Result<ImportOutcome, SessionError> {
+        let mod_id = match download.section {
+            Section::Mod => format!("gb-{}", download.mod_id),
+            Section::Sound => format!("gb-sound-{}", download.mod_id),
+        };
+        let req = ImportRequest {
+            source: path.to_path_buf(),
+            mod_id,
+            name: download.mod_name.clone(),
+            mod_source: Source::GameBanana {
+                section: download.section,
+                mod_id: download.mod_id,
+            },
+            version: download.version.clone(),
+            remote_file_id: Some(download.file_id),
+            archive_name: Some(download.file_name.clone()),
+        };
+        self.import_request(&req, download.author.as_deref())
+    }
+
+    fn import_request(
+        &mut self,
+        req: &ImportRequest,
+        author: Option<&str>,
+    ) -> Result<ImportOutcome, SessionError> {
+        let path = &req.source;
+        let mod_id = req.mod_id.clone();
         let mut updated = self.manifest.clone();
         let imported = import(
             &self.data_dir,
             &mut updated,
-            &req,
+            req,
             &Limits::default(),
             &NoHooks,
         )
         .map_err(SessionError::Import)?;
+        if let Some(author) = author
+            && let Some(m) = updated.mods.iter_mut().find(|m| m.id == mod_id)
+            && m.author.is_none()
+        {
+            m.author = Some(author.to_owned());
+        }
         save_manifest(&self.manifest_path(), &updated)?;
         self.manifest = updated;
         for id in &imported.new_files {
@@ -1058,6 +1116,91 @@ mod tests {
             .iter()
             .map(|m| (m.name.as_str(), m.enabled))
             .collect()
+    }
+
+    fn haze_download(file_id: u64, file_name: &str) -> Download {
+        Download {
+            section: crate::library::Section::Mod,
+            mod_id: 655_209,
+            file_id,
+            file_name: file_name.to_owned(),
+            mod_name: "Haze V2".to_owned(),
+            author: Some("Nyx".to_owned()),
+            version: Some("2.0".to_owned()),
+        }
+    }
+
+    #[test]
+    fn a_download_becomes_a_gamebanana_mod_enabled_on_top() {
+        let f = Fixture::new("download");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("old.vpk", &[("models/old/body.vmdl_c", 1)]),
+            "Old",
+        )
+        .expect("local mod");
+        // The queue keeps the archive under its task number.
+        let queued = f.source("17.bin", &[("models/haze/body.vmdl_c", 1)]);
+        let outcome = s
+            .import_download(&queued, &haze_download(1_480_331, "haze_v2.vpk"))
+            .expect("imported");
+        assert_eq!(outcome.mod_id, "gb-655209");
+        assert!(outcome.choices.is_empty());
+        let view = s.library();
+        assert_eq!(
+            names(&view),
+            [("Haze V2", true), ("Old", true)],
+            "136: on top"
+        );
+        let haze = &view.mods[0];
+        assert_eq!(haze.author.as_deref(), Some("Nyx"));
+        assert_eq!(
+            haze.source,
+            Source::GameBanana {
+                section: crate::library::Section::Mod,
+                mod_id: 655_209
+            }
+        );
+        assert_eq!(haze.files[0].archive_name, "haze_v2.vpk");
+        assert_eq!(haze.files[0].version.as_deref(), Some("2.0"));
+        let (_, file) = s.manifest.file(&haze.files[0].id).expect("file");
+        assert_eq!(file.remote_file_id, Some(1_480_331));
+    }
+
+    #[test]
+    fn another_file_of_the_same_mod_joins_it() {
+        let f = Fixture::new("download2");
+        let mut s = open(&f);
+        s.import_download(
+            &f.source("17.bin", &[("models/haze/body.vmdl_c", 1)]),
+            &haze_download(1, "haze_pink.vpk"),
+        )
+        .expect("first");
+        s.import_download(
+            &f.source("18.bin", &[("models/haze/body.vmdl_c", 2)]),
+            &haze_download(2, "haze_blue.vpk"),
+        )
+        .expect("second");
+        let view = s.library();
+        assert_eq!(view.mods.len(), 1, "one GameBanana mod (144)");
+        assert_eq!(view.mods[0].files.len(), 2);
+    }
+
+    #[test]
+    fn sound_mods_have_their_own_ids() {
+        let f = Fixture::new("downloadsound");
+        let mut s = open(&f);
+        let download = Download {
+            section: crate::library::Section::Sound,
+            ..haze_download(1, "haze.vpk")
+        };
+        let outcome = s
+            .import_download(
+                &f.source("1.bin", &[("sounds/haze/a.vsnd_c", 1)]),
+                &download,
+            )
+            .expect("imported");
+        assert_eq!(outcome.mod_id, "gb-sound-655209");
     }
 
     #[test]

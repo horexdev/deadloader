@@ -138,7 +138,9 @@ export type UiEvent =
   | { event: 'dropped'; data: { outcomes: ImportResult[] } }
   | { event: 'drop_failed'; data: { message: UserMessage } }
   | { event: 'notice'; data: Notice }
-  | { event: 'catalog'; data: CatalogEvent };
+  | { event: 'catalog'; data: CatalogEvent }
+  | { event: 'download'; data: DownloadEvent }
+  | { event: 'installed'; data: { task: TaskId; installed: Installed } };
 
 /**
  * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.
@@ -364,6 +366,59 @@ export const catalog = {
   activate: (id: ImageId) => callCatalog<null>('catalog_activate', { id }),
   consentPrompt: (id: ImageId) => callCatalog<ConsentPrompt>('catalog_consent_prompt', { id }),
   grant: (id: ImageId, scope: Scope) => callCatalog<Granted>('catalog_grant', { id, scope }),
+};
+
+// ---- downloads (crates/downloads/src/task.rs; crates/app/src/downloads.rs)
+
+export type TaskId = number;
+
+export type TaskState =
+  | { state: 'queued' }
+  | { state: 'downloading' }
+  | { state: 'verifying' }
+  | { state: 'installing' }
+  | { state: 'paused' }
+  | { state: 'waiting'; message: UserMessage; retry_in_s: number | null }
+  | { state: 'failed'; message: UserMessage }
+  | { state: 'done' };
+
+/** A task's fixed data and where it stands (Rust flattens `TaskInfo` into it). */
+export interface TaskSnapshot {
+  id: TaskId;
+  url: string;
+  file_name: string;
+  md5: string | null;
+  size: number | null;
+  initiator: 'user' | 'auto';
+  /** mod_id, file_id, mod_name, author, version, section. */
+  meta: Record<string, string>;
+  state: TaskState;
+  bytes: number;
+  total: number | null;
+  /** Bytes per second, smoothed. */
+  speed: number;
+}
+
+export type DownloadEvent =
+  | { event: 'added'; task: TaskSnapshot }
+  | { event: 'state'; id: TaskId; state: TaskState }
+  | { event: 'progress'; id: TaskId; bytes: number; total: number | null; speed: number }
+  | { event: 'removed'; id: TaskId };
+
+/** A finished download in the library; without `changed` the user picks variants first (D4, then `api.choose`). */
+export interface Installed {
+  outcome: ImportOutcome;
+  changed: Changed | null;
+}
+
+export type DownloadAction = 'pause' | 'resume' | 'retry' | 'cancel';
+
+export const downloads = {
+  /** Install (F2) one file of the mod page on screen; `name` and `author` are what the page shows. */
+  install: (section: Section, modId: number, fileId: number, name: string, author: string | null) =>
+    call<TaskId>('download_install', { section, modId, fileId, name, author }),
+  list: () => call<TaskSnapshot[]>('downloads'),
+  control: (id: TaskId, action: DownloadAction) => call<null>('download_control', { id, action }),
 };
 
 export function isUserMessage(value: unknown): value is UserMessage {

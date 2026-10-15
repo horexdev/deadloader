@@ -692,6 +692,8 @@ version = "0.1.0"
 dependencies = [
  "deadloader-catalog",
  "deadloader-core",
+ "deadloader-downloads",
+ "deadloader-gamebanana",
  "deadloader-net",
  "deadloader-platform-windows",
  "rfd",

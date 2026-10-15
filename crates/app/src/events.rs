@@ -40,6 +40,13 @@ pub enum UiEvent {
     Notice(Notice),
     /// The catalog's network status changed, or a background refresh saved a newer copy of something on screen.
     Catalog(deadloader_catalog::Event),
+    /// A download was added, moved on, made progress or left the queue.
+    Download(deadloader_downloads::Event),
+    /// A finished download is in the library (F2); with `changed` it is enabled, otherwise D4 asks for variants.
+    Installed {
+        task: deadloader_downloads::TaskId,
+        installed: crate::backend::Installed,
+    },
 }
 
 /// What the start found, for a toast or a banner.
@@ -238,6 +245,18 @@ pub(crate) mod tests {
         assert_eq!(
             json(&UiEvent::DragHover { over: false }),
             serde_json::json!({"event": "drag_hover", "data": {"over": false}})
+        );
+        assert_eq!(
+            json(&UiEvent::Download(deadloader_downloads::Event::State {
+                id: deadloader_downloads::TaskId(17),
+                state: deadloader_downloads::TaskState::Waiting {
+                    message: UserMessage::new(deadloader_core::message::MessageId::E6),
+                    retry_in_s: Some(5),
+                },
+            })),
+            serde_json::json!({"event": "download", "data": {"event": "state", "id": 17, "state": {
+                "state": "waiting", "message": {"id": "E6", "args": {}}, "retry_in_s": 5
+            }}})
         );
         assert_eq!(
             json(&UiEvent::Notice(Notice::Recovered { undone: true })),

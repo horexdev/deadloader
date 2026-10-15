@@ -23,6 +23,10 @@ pub struct ImportRequest {
     pub name: String,
     pub mod_source: Source,
     pub version: Option<String>,
+    /// The GameBanana file this archive is (a download), for update detection (164).
+    pub remote_file_id: Option<u64>,
+    /// The name to record instead of the source's own: a download's name on GameBanana, not the queue's `17.zip`.
+    pub archive_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -107,13 +111,18 @@ fn fill(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let (vpks, skipped) = if deadloader_archive::is_vpk_name(&source_name) {
+    let archive_name = req
+        .archive_name
+        .clone()
+        .unwrap_or_else(|| source_name.clone());
+    // A download's own name decides: the queue stores a bare `.vpk` as `<n>.bin`.
+    let (vpks, skipped) = if deadloader_archive::is_vpk_name(&archive_name) {
         let output = out_dir.join("0.vpk");
         let (size, sha256) = Disk
             .copy_verified(&req.source, &output)
             .map_err(ImportError::Io)?;
         (
-            vec![(source_name.clone(), output, size, sha256)],
+            vec![(archive_name.clone(), output, size, sha256)],
             Vec::new(),
         )
     } else {
@@ -139,8 +148,8 @@ fn fill(
         })?;
         files.push(ModFile {
             id: format!("{}-{batch}-{n}", req.mod_id),
-            remote_file_id: None,
-            archive_name: source_name.clone(),
+            remote_file_id: req.remote_file_id,
+            archive_name: archive_name.clone(),
             inner_path: inner.clone(),
             library_path: format!("library/{}/{batch}/{n}.vpk", req.mod_id),
             len: *len,
@@ -279,6 +288,8 @@ mod tests {
                 imported_from: Some("x".into()),
             },
             version: None,
+            remote_file_id: None,
+            archive_name: None,
         }
     }
 
@@ -320,6 +331,53 @@ mod tests {
             "library files are read-only"
         );
         assert!(src.exists(), "the original is left where it was");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn a_download_keeps_its_gamebanana_file_id_and_name() {
+        let dir = temp_dir("download");
+        let data = dir.join("data");
+        // The download queue names kept archives by task number; GameBanana's own name is what updates match.
+        let archive = dir.join("17.zip");
+        zip(&archive, &[("pak01_dir.vpk", &colour(1))]);
+        let mut m = Manifest::default();
+        let req = ImportRequest {
+            mod_id: "gb-655209".into(),
+            mod_source: Source::GameBanana {
+                section: crate::library::Section::Mod,
+                mod_id: 655_209,
+            },
+            remote_file_id: Some(1_480_331),
+            archive_name: Some("haze_v2_ea17d.zip".into()),
+            ..request(archive)
+        };
+        let imported = import(&data, &mut m, &req, &Limits::default(), &NoHooks).expect("import");
+        let (_, f) = m.file(&imported.new_files[0]).expect("recorded");
+        assert_eq!(f.remote_file_id, Some(1_480_331));
+        assert_eq!(f.archive_name, "haze_v2_ea17d.zip");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn a_downloaded_bare_vpk_is_recognised_by_its_gamebanana_name() {
+        let dir = temp_dir("downloadvpk");
+        let data = dir.join("data");
+        let queued = dir.join("18.bin");
+        std::fs::write(&queued, colour(1)).expect("vpk");
+        let mut m = Manifest::default();
+        let req = ImportRequest {
+            archive_name: Some("haze.vpk".into()),
+            ..request(queued)
+        };
+        let imported = import(&data, &mut m, &req, &Limits::default(), &NoHooks).expect("import");
+        assert_eq!(
+            m.file(&imported.new_files[0])
+                .expect("recorded")
+                .1
+                .archive_name,
+            "haze.vpk"
+        );
         cleanup(&dir);
     }
 

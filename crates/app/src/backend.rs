@@ -57,6 +57,14 @@ pub struct Changed {
     pub waiting_for_game: bool,
 }
 
+/// A download put into the library (F2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Installed {
+    pub outcome: ImportOutcome,
+    /// `None` while the user has to pick variants first (D4, then `choose`).
+    pub changed: Option<Changed>,
+}
+
 /// The game was closed and what changed while it ran went into its folder (N12).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AfterGame {
@@ -184,6 +192,22 @@ impl Backend {
             self.follow_up_edit()?;
         }
         Ok(outcomes)
+    }
+
+    /// A verified download from the catalog joins the library and, like any edit, the game at once when it can (F2,
+    /// 136, 138).
+    pub fn install_download(
+        &self,
+        archive: &Path,
+        download: &deadloader_core::session::Download,
+    ) -> Result<Installed, UserMessage> {
+        let outcome = self.with(|s| Ok(s.import_download(archive, download)?))?;
+        let changed = if outcome.choices.is_empty() {
+            Some(self.follow_up_edit()?)
+        } else {
+            None
+        };
+        Ok(Installed { outcome, changed })
     }
 
     /// What deleting a mod (no `files`) or some of its files means, for D6.
@@ -775,6 +799,34 @@ pub(crate) mod tests {
         backend.set_enabled(&ids[1], false).expect("off");
         game.running.store(false, Ordering::Relaxed);
         assert_eq!(backend.game_closed().expect("ok").expect("one").changes, 1);
+    }
+
+    #[test]
+    fn an_installed_download_goes_into_the_game_at_once() {
+        let f = Fixture::new("install");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        // A profile that was applied once, so edits follow at once (138).
+        backend.apply().expect("applied");
+        let download = deadloader_core::session::Download {
+            section: deadloader_core::library::Section::Mod,
+            mod_id: 655_209,
+            file_id: 1_480_331,
+            file_name: "haze.vpk".to_owned(),
+            mod_name: "Haze V2".to_owned(),
+            author: None,
+            version: None,
+        };
+        let installed = backend
+            .install_download(&f.mod_file("17.bin", "models/haze/body.vmdl_c"), &download)
+            .expect("installed");
+        assert_eq!(installed.outcome.mod_id, "gb-655209");
+        let changed = installed.changed.expect("enabled");
+        assert!(changed.applied);
+        assert!(f.addons().join("pak01_dir.vpk").exists());
     }
 
     #[test]

@@ -6,6 +6,7 @@
 mod backend;
 mod catalog;
 mod commands;
+mod downloads;
 mod events;
 mod network;
 mod paths;
