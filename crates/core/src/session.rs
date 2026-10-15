@@ -10,7 +10,7 @@ use crate::apply::{Direction, Wanted, layout, slot_of};
 use crate::engine::{Engine, EngineError, same_root};
 use crate::fs::{Counted, Disk, Logged};
 use crate::gamedir::{GuardOutcome, addons_path, ensure_mods_load};
-use crate::import::{ImportError, ImportRequest, NoHooks, import, limits_from};
+use crate::import::{Hooks, ImportError, ImportRequest, NoHooks, import, limits_from};
 use crate::journal::{self, FileJournal, Recovery, Step};
 use crate::library::{
     InstallationState, Manifest, ModelError, Profile, ProfileEntry, Section, Source, load_manifest,
@@ -758,7 +758,7 @@ impl Session {
             remote_file_id: None,
             archive_name: None,
         };
-        self.import_request(&req, None, true)
+        self.import_request(&req, None, true, &NoHooks)
     }
 
     /// A verified download from the catalog (F2): its files join the library mod of that GameBanana mod, a new one
@@ -769,8 +769,19 @@ impl Session {
         path: &Path,
         download: &Download,
     ) -> Result<ImportOutcome, SessionError> {
+        self.import_download_with(path, download, &NoHooks)
+    }
+
+    /// [`Session::import_download`] that stops when `hooks` says it was cancelled, until the files go into the
+    /// library; nothing of it is in the library then (`ArchiveError::Cancelled`).
+    pub fn import_download_with(
+        &mut self,
+        path: &Path,
+        download: &Download,
+        hooks: &dyn Hooks,
+    ) -> Result<ImportOutcome, SessionError> {
         let req = self.download_request(path, download);
-        self.import_request(&req, download.author.as_deref(), true)
+        self.import_request(&req, download.author.as_deref(), true, hooks)
     }
 
     /// A downloaded update (D5): its files join the mod but nothing is enabled; [`Session::propose_update`] and
@@ -780,8 +791,18 @@ impl Session {
         path: &Path,
         download: &Download,
     ) -> Result<ImportOutcome, SessionError> {
+        self.import_update_file_with(path, download, &NoHooks)
+    }
+
+    /// [`Session::import_update_file`] that can be cancelled like [`Session::import_download_with`].
+    pub fn import_update_file_with(
+        &mut self,
+        path: &Path,
+        download: &Download,
+        hooks: &dyn Hooks,
+    ) -> Result<ImportOutcome, SessionError> {
         let req = self.download_request(path, download);
-        self.import_request(&req, download.author.as_deref(), false)
+        self.import_request(&req, download.author.as_deref(), false, hooks)
     }
 
     /// The library mod of a GameBanana mod: one linked to it already (a local mod linked in F10), else `gb-<id>`.
@@ -917,6 +938,7 @@ impl Session {
         req: &ImportRequest,
         author: Option<&str>,
         install: bool,
+        hooks: &dyn Hooks,
     ) -> Result<ImportOutcome, SessionError> {
         let path = &req.source;
         let mod_id = req.mod_id.clone();
@@ -927,7 +949,7 @@ impl Session {
             req,
             // The limits the user set (127), not the defaults.
             &limits_from(&self.settings.downloads),
-            &NoHooks,
+            hooks,
         )
         .map_err(SessionError::Import)?;
         if let Some(author) = author
@@ -1823,7 +1845,7 @@ impl Session {
             remote_file_id: None,
             archive_name: None,
         };
-        let imported = self.import_request(&req, None, false)?;
+        let imported = self.import_request(&req, None, false, &NoHooks)?;
         let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
         let tx = unique_number();
         let change = crate::log::InChange {

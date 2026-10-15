@@ -139,9 +139,10 @@ export function actionsOf(stage: Stage): RowActions {
       return { ...none, remove: true };
     case 'choice':
       return { ...none, cancel: true, choose: true };
-    // The queue can't stop a task while its file is checked or unpacked.
+    // A check or an install stops where it is safe, and its files go; it can't be paused there.
     case 'verifying':
     case 'extracting':
+      return { ...none, cancel: true };
     case 'done':
       return none;
   }

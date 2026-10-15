@@ -280,6 +280,7 @@ fn pass_over<R: Read + Seek>(
     let mut data = EntryData::new(reader, h.size);
     drain(&mut data, meter, unit, &h.name, buf).map_err(|e| match (e, data.failure.take()) {
         (PumpError::Limit(l), _) => ArchiveError::Limit(l),
+        (PumpError::Cancelled, _) => ArchiveError::Cancelled,
         (_, Some(f)) => failure(f, Some(&h.name)),
         (PumpError::Read(e) | PumpError::Write(e), None) => damaged(Some(&h.name), &e.to_string()),
     })

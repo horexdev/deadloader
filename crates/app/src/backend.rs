@@ -668,12 +668,15 @@ impl Backend {
 
     /// A verified download from the catalog joins the library and, like any edit, the game at once when it can (F2,
     /// 136, 138).
+    /// It stops when `hooks` says the user cancelled, as long as nothing of it is in the library yet; past that point
+    /// it finishes.
     pub fn install_download(
         &self,
         archive: &Path,
         download: &deadloader_core::session::Download,
+        hooks: &dyn deadloader_core::import::Hooks,
     ) -> Result<Installed, UserMessage> {
-        let outcome = self.with(|s| Ok(s.import_download(archive, download)?))?;
+        let outcome = self.with(|s| Ok(s.import_download_with(archive, download, hooks)?))?;
         let changed = if outcome.choices.is_empty() {
             Some(self.follow_up_edit()?)
         } else {
@@ -684,14 +687,16 @@ impl Backend {
 
     /// A downloaded update of the GameBanana file `replaced` (D5, 169): imported without enabling it, then applied
     /// at once when every old file has a clear partner, otherwise handed to the user.
+    /// Cancelled like [`Backend::install_download`].
     pub fn install_update_file(
         &self,
         archive: &Path,
         download: &deadloader_core::session::Download,
         replaced: u64,
+        hooks: &dyn deadloader_core::import::Hooks,
     ) -> Result<UpdateStep, UserMessage> {
         // The library mod may be a local one linked to this GameBanana mod (F10), not `gb-<id>`.
-        let imported = self.with(|s| Ok(s.import_update_file(archive, download)?))?;
+        let imported = self.with(|s| Ok(s.import_update_file_with(archive, download, hooks)?))?;
         self.update_with(
             &imported.mod_id,
             replaced,
@@ -1725,7 +1730,11 @@ pub(crate) mod tests {
             version: None,
         };
         let installed = backend
-            .install_download(&f.mod_file("17.bin", "models/haze/body.vmdl_c"), &download)
+            .install_download(
+                &f.mod_file("17.bin", "models/haze/body.vmdl_c"),
+                &download,
+                &deadloader_core::import::NoHooks,
+            )
             .expect("installed");
         assert_eq!(installed.outcome.mod_id, "gb-655209");
         let changed = installed.changed.expect("enabled");
@@ -1755,10 +1764,19 @@ pub(crate) mod tests {
         let backend = f.backend(&game);
         backend.apply().expect("applied");
         backend
-            .install_download(&f.mod_file("1.bin", "models/haze/body.vmdl_c"), &haze(1))
+            .install_download(
+                &f.mod_file("1.bin", "models/haze/body.vmdl_c"),
+                &haze(1),
+                &deadloader_core::import::NoHooks,
+            )
             .expect("v1");
         let step = backend
-            .install_update_file(&f.mod_file("2.bin", "models/haze/body.vmdl_c"), &haze(2), 1)
+            .install_update_file(
+                &f.mod_file("2.bin", "models/haze/body.vmdl_c"),
+                &haze(2),
+                1,
+                &deadloader_core::import::NoHooks,
+            )
             .expect("v2");
         let UpdateStep::Applied { mod_id, changed } = step else {
             panic!("{step:?}");
@@ -1779,13 +1797,26 @@ pub(crate) mod tests {
         let f = Fixture::new("updatemap");
         let backend = f.backend(&FakeGame::default());
         backend
-            .install_download(&f.mod_file("1.bin", "models/haze/body.vmdl_c"), &haze(1))
+            .install_download(
+                &f.mod_file("1.bin", "models/haze/body.vmdl_c"),
+                &haze(1),
+                &deadloader_core::import::NoHooks,
+            )
             .expect("v1");
         backend
-            .install_download(&f.mod_file("1b.bin", "models/haze/hands.vmdl_c"), &haze(1))
+            .install_download(
+                &f.mod_file("1b.bin", "models/haze/hands.vmdl_c"),
+                &haze(1),
+                &deadloader_core::import::NoHooks,
+            )
             .expect("v1, second file");
         let step = backend
-            .install_update_file(&f.mod_file("2.bin", "models/haze/legs.vmdl_c"), &haze(2), 1)
+            .install_update_file(
+                &f.mod_file("2.bin", "models/haze/legs.vmdl_c"),
+                &haze(2),
+                1,
+                &deadloader_core::import::NoHooks,
+            )
             .expect("v2");
         let UpdateStep::NeedsMapping {
             mod_id,

@@ -52,13 +52,61 @@ impl<F: Fn(&Path) -> Option<u64> + Send + Sync> FreeSpace for F {
 /// runs). The app unpacks and imports the archive here. `Ok` means the archive is no longer needed: it is deleted
 /// unless `keep_archives` is on. `Err` fails the task with that message; the archive stays and Retry calls the hook
 /// again without downloading.
+///
+/// The user may cancel while it runs: `cancel` says so. A hook stops where that is safe (before anything is in the
+/// library) and returns any `Err`; the task is then removed with its archive. A hook past that point finishes and
+/// returns `Ok`: the task is done, the cancel came too late.
 pub trait CompletionHook: Send + Sync {
-    fn downloaded(&self, archive: &Path, task: &TaskInfo) -> Result<(), UserMessage>;
+    fn downloaded(
+        &self,
+        archive: &Path,
+        task: &TaskInfo,
+        cancel: &Cancel<'_>,
+    ) -> Result<(), UserMessage>;
 }
 
-impl<F: Fn(&Path, &TaskInfo) -> Result<(), UserMessage> + Send + Sync> CompletionHook for F {
-    fn downloaded(&self, archive: &Path, task: &TaskInfo) -> Result<(), UserMessage> {
-        self(archive, task)
+impl<F: Fn(&Path, &TaskInfo, &Cancel<'_>) -> Result<(), UserMessage> + Send + Sync> CompletionHook
+    for F
+{
+    fn downloaded(
+        &self,
+        archive: &Path,
+        task: &TaskInfo,
+        cancel: &Cancel<'_>,
+    ) -> Result<(), UserMessage> {
+        self(archive, task, cancel)
+    }
+}
+
+/// Whether the user cancelled the task whose archive a [`CompletionHook`] is installing. Cheap to ask often.
+#[derive(Clone, Copy)]
+pub struct Cancel<'a> {
+    asked: &'a (dyn Fn() -> bool + Sync),
+}
+
+impl<'a> Cancel<'a> {
+    pub fn new(asked: &'a (dyn Fn() -> bool + Sync)) -> Self {
+        Self { asked }
+    }
+
+    /// For a hook called outside the queue (tests, imports): never cancelled.
+    pub fn never() -> Cancel<'static> {
+        fn no() -> bool {
+            false
+        }
+        Cancel { asked: &no }
+    }
+
+    pub fn requested(&self) -> bool {
+        (self.asked)()
+    }
+}
+
+impl std::fmt::Debug for Cancel<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Cancel")
+            .field("requested", &self.requested())
+            .finish()
     }
 }
 

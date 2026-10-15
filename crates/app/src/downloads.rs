@@ -8,8 +8,8 @@ use deadloader_core::message::{MessageId, UserMessage};
 use deadloader_core::session::Download;
 use deadloader_core::settings::Settings;
 use deadloader_downloads::{
-    CompletionHook, Config, Deps, DownloadLog, Downloads, Event, Initiator, NewTask, TaskId,
-    TaskInfo,
+    Cancel, CompletionHook, Config, Deps, DownloadLog, Downloads, Event, Initiator, NewTask,
+    TaskId, TaskInfo,
 };
 use deadloader_gamebanana::RemoteFile;
 use deadloader_net::Client;
@@ -193,8 +193,23 @@ struct Install {
     outbox: Arc<Outbox>,
 }
 
+/// The user's Cancel reaches the unpacking (between chunks) and the import (until the files go into the library).
+struct Cancellable<'a, 'b>(&'a Cancel<'b>);
+
+impl deadloader_core::import::Hooks for Cancellable<'_, '_> {
+    fn cancelled(&self) -> bool {
+        self.0.requested()
+    }
+}
+
 impl CompletionHook for Install {
-    fn downloaded(&self, archive: &Path, task: &TaskInfo) -> Result<(), UserMessage> {
+    fn downloaded(
+        &self,
+        archive: &Path,
+        task: &TaskInfo,
+        cancel: &Cancel<'_>,
+    ) -> Result<(), UserMessage> {
+        let hooks = Cancellable(cancel);
         let download = download_of(task)?;
         let backend = self.backend.upgrade().ok_or_else(|| {
             UserMessage::new(MessageId::Internal).arg("detail", "the app is closing")
@@ -204,14 +219,14 @@ impl CompletionHook for Install {
                 UserMessage::new(MessageId::Internal)
                     .arg("detail", format!("download {} replaces no file", task.id))
             })?;
-            let step = backend.install_update_file(archive, &download, replaced)?;
+            let step = backend.install_update_file(archive, &download, replaced, &hooks)?;
             self.outbox.send(UiEvent::UpdateStep {
                 task: Some(task.id),
                 step,
             });
             return Ok(());
         }
-        let installed = backend.install_download(archive, &download)?;
+        let installed = backend.install_download(archive, &download, &hooks)?;
         self.outbox.send(UiEvent::Installed {
             task: task.id,
             installed,
@@ -466,7 +481,8 @@ mod tests {
         };
         let task = info(&task_for(&haze_file(), &haze()));
         let archive = f.mod_file("17.bin", "models/haze/body.vmdl_c");
-        hook.downloaded(&archive, &task).expect("installed");
+        hook.downloaded(&archive, &task, &Cancel::never())
+            .expect("installed");
         let events = ui.take();
         let UiEvent::Installed {
             task: id,
@@ -494,15 +510,23 @@ mod tests {
             outbox,
         };
         let v1 = info(&task_for(&haze_file(), &haze()));
-        hook.downloaded(&f.mod_file("1.bin", "models/haze/body.vmdl_c"), &v1)
-            .expect("v1");
+        hook.downloaded(
+            &f.mod_file("1.bin", "models/haze/body.vmdl_c"),
+            &v1,
+            &Cancel::never(),
+        )
+        .expect("v1");
         ui.take();
 
         let mut v2_file = haze_file();
         v2_file.id = 1_480_400;
         let v2 = info(&update_task_for(&v2_file, &haze(), 1_480_331));
-        hook.downloaded(&f.mod_file("2.bin", "models/haze/body.vmdl_c"), &v2)
-            .expect("v2");
+        hook.downloaded(
+            &f.mod_file("2.bin", "models/haze/body.vmdl_c"),
+            &v2,
+            &Cancel::never(),
+        )
+        .expect("v2");
         let events = ui.take();
         let UiEvent::UpdateStep { step, .. } = &events[0] else {
             panic!("{events:?}");
@@ -527,7 +551,43 @@ mod tests {
         let archive = f.dir.join("17.bin");
         std::fs::write(&archive, b"not a vpk").expect("write");
         let task = info(&task_for(&haze_file(), &haze()));
-        let err = hook.downloaded(&archive, &task).expect_err("refused");
+        let err = hook
+            .downloaded(&archive, &task, &Cancel::never())
+            .expect_err("refused");
         assert_ne!(err.id, MessageId::Internal, "{err:?}");
+    }
+
+    #[test]
+    fn a_cancelled_install_leaves_the_library_and_the_game_as_they_were() {
+        let f = Fixture::new("hookcancel");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = Arc::new(f.backend(&game));
+        let outbox = Arc::new(Outbox::new());
+        let ui = Recorder::default();
+        outbox.connect(Box::new(ui.clone()));
+        let hook = Install {
+            backend: Arc::downgrade(&backend),
+            outbox,
+        };
+        let task = info(&task_for(&haze_file(), &haze()));
+        let archive = f.mod_file("17.bin", "models/haze/body.vmdl_c");
+        let asked = || true;
+        assert!(
+            hook.downloaded(&archive, &task, &Cancel::new(&asked))
+                .is_err()
+        );
+        assert!(ui.take().is_empty(), "nothing installed to report");
+        assert!(backend.library().expect("library").mods.is_empty());
+        assert!(!f.addons().join("pak01_dir.vpk").exists());
+        assert!(
+            !f.dir
+                .join("deadloader-data")
+                .join("library")
+                .join("gb-655209")
+                .exists()
+        );
     }
 }

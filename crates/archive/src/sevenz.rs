@@ -110,6 +110,7 @@ pub(crate) fn extract(
             } else {
                 drain(data, &mut meter, &mut unit, &entry.name, &mut buf).map_err(|e| match e {
                     PumpError::Limit(l) => ArchiveError::Limit(l),
+                    PumpError::Cancelled => ArchiveError::Cancelled,
                     PumpError::Read(e) | PumpError::Write(e) => {
                         damaged(Some(&entry.name), &e.to_string())
                     }

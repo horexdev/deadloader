@@ -181,6 +181,8 @@ impl ToUserMessage for ArchiveError {
                 .arg("available", available),
             Self::DiskFull => UserMessage::new(MessageId::E12),
             Self::Io(e) => from_io(e, Area::Data),
+            // The download queue turns a cancelled install into a cancel; the user never sees this.
+            Self::Cancelled => internal(self),
         }
     }
 }

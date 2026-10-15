@@ -80,6 +80,11 @@ impl Control {
         }
     }
 
+    /// The user asked to cancel; read without taking the request over (a hook polls it while it installs).
+    pub(crate) fn cancel_requested(&self) -> bool {
+        self.request.load(Ordering::SeqCst) == Ask::Cancel as u8
+    }
+
     /// Withdraws a request that the worker has not acted on yet (resume right after pause).
     fn withdraw(&self, what: Ask) -> bool {
         self.request
@@ -604,21 +609,15 @@ impl Downloads {
         }
     }
 
-    /// Removes the task and deletes its files (a running one stops first). Not possible while it is being verified
-    /// or installed.
+    /// Removes the task and deletes its files. A running one stops first: a download at the next chunk, a check of
+    /// its file between chunks, an install where the completion hook can stop safely (an install past that point
+    /// finishes, and the task is done).
     pub fn cancel(&self, id: TaskId) -> Result<(), DownloadError> {
         let mut state = self.shared.lock();
         let task = state.task_mut(id).ok_or(DownloadError::UnknownTask(id))?;
         if let Some(control) = &task.control {
-            return match task.state {
-                TaskState::Verifying | TaskState::Installing => {
-                    Err(invalid(id, &task.state, "cancelled"))
-                }
-                _ => {
-                    control.ask(Ask::Cancel);
-                    Ok(())
-                }
-            };
+            control.ask(Ask::Cancel);
+            return Ok(());
         }
         let record = task.record.clone();
         state.tasks.retain(|t| t.record.id != id);

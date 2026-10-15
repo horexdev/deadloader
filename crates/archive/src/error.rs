@@ -35,6 +35,8 @@ pub enum ArchiveError {
     DiskFull,
     /// Creating, writing or renaming an output file failed.
     Io(io::Error),
+    /// The caller cancelled (a download cancelled while it was installed); everything written has been removed.
+    Cancelled,
 }
 
 /// Which safety limit stopped the extraction (decision 127). Nothing extracted is kept.
@@ -102,6 +104,7 @@ impl fmt::Display for ArchiveError {
                  try again",
             ),
             Self::Io(e) => write!(f, "could not write the unpacked files: {e}"),
+            Self::Cancelled => f.write_str("unpacking was cancelled; the partial files were removed"),
         }
     }
 }

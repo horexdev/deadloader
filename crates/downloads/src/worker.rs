@@ -4,6 +4,7 @@
 //! pressure reaches the socket). The worker only waits on that channel, so a pause, a cancel or the stall timeout is
 //! handled at once even when the connection hangs; the fetch thread is then abandoned and ends at its next read.
 
+use crate::Cancel;
 use crate::error::DownloadError;
 use crate::http::{Validator, parse_content_range};
 use crate::limiter::CHUNK;
@@ -158,8 +159,13 @@ impl<'a> Worker<'a> {
     fn go(&mut self) -> Outcome {
         // A verified archive from an earlier run: its hook failed, or deadloader closed right after the rename.
         if self.archive_path.exists() {
-            match verify_file(&self.archive_path, &self.record) {
-                Ok(()) => return self.hand_off(),
+            self.set_state(TaskState::Verifying);
+            let control = self.control;
+            match verify_file(&self.archive_path, &self.record, &|| {
+                control.cancel_requested()
+            }) {
+                Ok(true) => return self.hand_off(),
+                Ok(false) => return self.cancelled_install(),
                 Err(DownloadError::Disk(e)) => return Outcome::Failed(DownloadError::Disk(e)),
                 Err(mismatch) => {
                     self.app_log(
@@ -171,6 +177,7 @@ impl<'a> Worker<'a> {
                     if let Err(e) = self.delete(&path, "deleted a damaged download") {
                         return Outcome::Failed(DownloadError::Disk(e));
                     }
+                    self.set_state(TaskState::Downloading);
                 }
             }
         }
@@ -179,10 +186,16 @@ impl<'a> Worker<'a> {
             Err(e) => return Outcome::Failed(DownloadError::Disk(e)),
         };
         let mut hasher = Md5Hasher::new();
-        if part.len > 0
-            && let Err(e) = hash_prefix(&self.part_path, part.len, &mut hasher)
-        {
-            return Outcome::Failed(DownloadError::Disk(e));
+        if part.len > 0 {
+            let control = self.control;
+            match hash_prefix(&self.part_path, part.len, &mut hasher, &|| {
+                control.cancel_requested()
+            }) {
+                Ok(true) => {}
+                // Cancelled while reading what was already downloaded (the hash is incomplete: never go on).
+                Ok(false) => return self.requested(&mut part).unwrap_or(Outcome::Stopped),
+                Err(e) => return Outcome::Failed(DownloadError::Disk(e)),
+            }
         }
         self.report(part.len, true);
         if part.len > 0 && self.record.size == Some(part.len) {
@@ -294,6 +307,11 @@ impl<'a> Worker<'a> {
             self.discard(part);
             return Outcome::Failed(DownloadError::Checksum { expected, actual });
         }
+        if self.control.cancel_requested() {
+            self.control.take();
+            self.discard(part);
+            return Outcome::Cancelled;
+        }
         let renamed = file_op(
             self.shared.deps.log.as_ref(),
             FileOp::Rename,
@@ -311,9 +329,34 @@ impl<'a> Worker<'a> {
 
     fn hand_off(&mut self) -> Outcome {
         self.set_state(TaskState::Installing);
+        if self.control.cancel_requested() {
+            return self.cancelled_install();
+        }
         let info = self.record.info();
-        match self.shared.deps.hook.downloaded(&self.archive_path, &info) {
+        let control = self.control;
+        let asked = || control.cancel_requested();
+        let result =
+            self.shared
+                .deps
+                .hook
+                .downloaded(&self.archive_path, &info, &Cancel::new(&asked));
+        match result {
+            Err(message) if self.control.cancel_requested() => {
+                self.app_log(
+                    Level::Info,
+                    "install cancelled",
+                    &format!("{:?}", message.id),
+                );
+                self.cancelled_install()
+            }
             Ok(()) => {
+                if self.control.cancel_requested() {
+                    self.app_log(
+                        Level::Info,
+                        "a cancel came after the mod was in the library; it stays installed",
+                        "",
+                    );
+                }
                 if !self.shared.lock().keep_archives {
                     let path = self.archive_path.clone();
                     // The install worked; a leftover archive is swept by nothing but harms nothing either.
@@ -339,6 +382,15 @@ impl<'a> Worker<'a> {
             }
             Err(message) => Outcome::Failed(DownloadError::Hook(message)),
         }
+    }
+
+    /// The user cancelled while the archive was checked or installed: it goes, kept archives or not (nothing of it
+    /// is in the library).
+    fn cancelled_install(&mut self) -> Outcome {
+        self.control.take();
+        let path = self.archive_path.clone();
+        let _ = self.delete(&path, "deleted the archive of a cancelled install");
+        Outcome::Cancelled
     }
 
     /// Opens `<id>.part` (creating it if needed) and cuts it to the saved checkpoint: bytes after it were never
@@ -811,20 +863,33 @@ fn fetch(
     }
 }
 
-fn hash_prefix(path: &Path, len: u64, hasher: &mut Md5Hasher) -> io::Result<()> {
+/// Hashes the first `len` bytes of `path`; `false` when `stop` said so between chunks (a cancel).
+fn hash_prefix(
+    path: &Path,
+    len: u64,
+    hasher: &mut Md5Hasher,
+    stop: &dyn Fn() -> bool,
+) -> io::Result<bool> {
     let mut file = File::open(path)?.take(len);
     let mut buf = vec![0u8; 1 << 20];
     loop {
+        if stop() {
+            return Ok(false);
+        }
         let n = file.read(&mut buf)?;
         if n == 0 {
-            return Ok(());
+            return Ok(true);
         }
         hasher.update(&buf[..n]);
     }
 }
 
-/// Size and md5 of a finished file against the listing.
-fn verify_file(path: &Path, record: &TaskRecord) -> Result<(), DownloadError> {
+/// Size and md5 of a finished file against the listing; `false` when `stop` cut the check short.
+fn verify_file(
+    path: &Path,
+    record: &TaskRecord,
+    stop: &dyn Fn() -> bool,
+) -> Result<bool, DownloadError> {
     let len = std::fs::metadata(path).map_err(DownloadError::Disk)?.len();
     if let Some(expected) = record.size
         && expected != len
@@ -836,13 +901,15 @@ fn verify_file(path: &Path, record: &TaskRecord) -> Result<(), DownloadError> {
     }
     if let Some(expected) = record.md5 {
         let mut hasher = Md5Hasher::new();
-        hash_prefix(path, len, &mut hasher).map_err(DownloadError::Disk)?;
+        if !hash_prefix(path, len, &mut hasher, stop).map_err(DownloadError::Disk)? {
+            return Ok(false);
+        }
         let actual = Md5(hasher.finalize().into());
         if actual != expected {
             return Err(DownloadError::Checksum { expected, actual });
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 /// `D:` for a folder on drive D, for the "not enough space on drive D:" message.
@@ -861,6 +928,28 @@ fn drive_of(dir: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn hashing_a_file_stops_between_chunks_when_asked() {
+        let dir = std::env::temp_dir().join(format!("deadloader-hash-stop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let file = dir.join("a.bin");
+        let len = 3u64 << 20;
+        std::fs::write(&file, vec![7u8; 3 << 20]).expect("file");
+        let asked = Cell::new(0);
+        let stop = || {
+            asked.set(asked.get() + 1);
+            asked.get() > 1
+        };
+        let mut hasher = Md5Hasher::new();
+        let done = hash_prefix(&file, len, &mut hasher, &stop).expect("read");
+        assert!(!done, "stopped");
+        assert_eq!(asked.get(), 2, "after the first chunk");
+        let mut full = Md5Hasher::new();
+        assert!(hash_prefix(&file, len, &mut full, &|| false).expect("read"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn drives_are_named_like_explorer_does() {
