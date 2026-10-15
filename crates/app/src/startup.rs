@@ -67,6 +67,8 @@ pub fn run() -> Result<(), StartError> {
     let started = Instant::now();
     let exe = std::env::current_exe().map_err(StartError::Exe)?;
     let layout = DataLayout::beside(&exe).map_err(StartError::DataDir)?;
+    // D8: a deletion of all data that couldn't finish at the last exit is finished before anything opens a file there.
+    let finished_wipe = deadloader_core::wipe::finish_pending(layout.root());
     layout.ensure_writable().map_err(StartError::DataDir)?;
 
     // Decision 92: a second launch hands over to the running instance and exits inside `build`, before it logs or
@@ -128,6 +130,23 @@ pub fn run() -> Result<(), StartError> {
             commands::library::mod_link,
             commands::library::mod_link_files,
             commands::library::mod_rename,
+            commands::settings::settings_reset,
+            commands::settings::settings_file_text,
+            commands::settings::settings_file_save,
+            commands::settings::cache_usage,
+            commands::settings::cache_clear,
+            commands::settings::installations,
+            commands::settings::game_folder_dialog,
+            commands::settings::installation_remove,
+            commands::settings::open_folder,
+            commands::settings::about,
+            commands::settings::rollback_preview,
+            commands::settings::rollback,
+            commands::settings::wipe_summary,
+            commands::settings::delete_all_data,
+            commands::settings::setup_check,
+            commands::settings::acknowledge_notice,
+            commands::settings::choose_catalog,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
@@ -135,6 +154,31 @@ pub fn run() -> Result<(), StartError> {
     let log: Log = Arc::new(Logger::open(layout.logs()));
     app.manage(Arc::clone(&log));
     log_start(&log, &layout);
+    match &finished_wipe {
+        Ok(Some(deleted)) => write(
+            &log,
+            Level::Info,
+            "a deletion of all data left from the last exit was finished",
+            [
+                ("files", deleted.files.into()),
+                ("bytes", deleted.bytes.into()),
+            ],
+        ),
+        Ok(None) => {}
+        Err(e) => write(
+            &log,
+            Level::Warn,
+            "a deletion of all data left from the last exit could not finish",
+            [("error", e.to_string().into())],
+        ),
+    }
+    let places = crate::setup::Places {
+        exe: exe.clone(),
+        data: layout.root().to_path_buf(),
+    };
+    app.manage(places.clone());
+    let wipe = Arc::new(crate::setup::WipeOnExit::default());
+    app.manage(Arc::clone(&wipe));
     // Only after `build`: a second instance has exited by now, so it never touches the journal or the library.
     let backend = Arc::new(Backend::start(
         layout.root(),
@@ -209,6 +253,13 @@ pub fn run() -> Result<(), StartError> {
             && let Some(downloads) = &downloads
         {
             downloads.shutdown();
+        }
+        // D8: the data folder goes last, once the window engine has let go of its files (up to 10 s); what stays
+        // locked is finished at the next start.
+        if let tauri::RunEvent::Exit = event
+            && wipe.armed()
+        {
+            crate::setup::wipe_at_exit(&places.data, 40, std::time::Duration::from_millis(250));
         }
     });
     Ok(())

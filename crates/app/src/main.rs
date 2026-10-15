@@ -15,6 +15,7 @@ mod paths;
 mod policy;
 mod protocol;
 mod push;
+mod setup;
 mod startup;
 mod updates;
 mod webview;
