@@ -708,6 +708,21 @@ export interface FolderSummary {
   removed: number;
   renumbered: number;
   addons: string | null;
+  /** Each of those files (S9 "Show the file list"): added in slot order, then removed, then renumbered. */
+  files: FolderFile[];
+}
+
+/** One of our files in the game's `addons` folder that applying adds, removes or moves to another pak slot. */
+export interface FolderFile {
+  kind: 'added' | 'removed' | 'renumbered';
+  /** The library file. */
+  file: string;
+  /** Its library mod; null when the library no longer has it. */
+  mod_id: string | null;
+  name: string | null;
+  /** Its slot now (null: added) and after applying (null: removed). */
+  from_slot: number | null;
+  to_slot: number | null;
 }
 
 export interface Pending {

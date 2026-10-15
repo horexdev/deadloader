@@ -2,14 +2,16 @@
 // changes while the game runs, foreign files, gameinfo.gi and mod updates. Invented data only: no GameBanana names,
 // authors or pictures. Scenarios (`?scenario=library-…`) set up each state of the Library boards: `empty`, `local`,
 // `game-missing`, `running` (four pending changes), `applied` (the game closes once the UI listens: N12 and S9's
-// result), `applying` and `checking` (slow answers), `foreign`, `gameinfo-foreign` (D10), `updates` (D5 with a file
-// mapping). The shared `switched` scenario shows the profile switch.
+// result), `applying` (an apply reports its progress once the UI listens; Apply is slow and reports too) and `checking`
+// (slow answers), `foreign`, `gameinfo-foreign` (D10), `updates` (D5 with a file mapping), `switch` (Evening applied,
+// Weekend selected: S9's switch with its file list). The shared `switched` scenario shows the profile switch.
 
 import type {
   Applying,
   Changed,
   ConflictView,
   FileView,
+  FolderFile,
   ForeignReport,
   GameinfoStatus,
   LibraryView,
@@ -255,6 +257,33 @@ function snapshotOf(mods: ModView[]): Snapshot {
   return { order: on.map((m) => m.id), files: Object.fromEntries(on.map((m) => [m.id, activeFiles(m)])) };
 }
 
+/** The core's file list of an apply (S9): each file added, removed or moved to another slot, slots numbered in order. */
+function folderFiles(game: Snapshot, mods: ModView[]): FolderFile[] {
+  const slots = (snap: Snapshot) =>
+    new Map(
+      snap.order
+        .flatMap((id) => (snap.files[id] ?? []).map((file) => ({ id, file })))
+        .map((f, i) => [f.file, { ...f, slot: i + 1 }] as const),
+    );
+  const now = slots(game);
+  const then = slots(snapshotOf(mods));
+  const entry = (kind: FolderFile['kind'], file: string, id: string, from: number | null, to: number | null): FolderFile => ({
+    kind,
+    file,
+    mod_id: id,
+    name: mods.find((m) => m.id === id)?.name ?? null,
+    from_slot: from,
+    to_slot: to,
+  });
+  const added = [...then.values()].filter((f) => !now.has(f.file)).map((f) => entry('added', f.file, f.id, null, f.slot));
+  const removed = [...now.values()].filter((f) => !then.has(f.file)).map((f) => entry('removed', f.file, f.id, f.slot, null));
+  const renumbered = [...then.values()].flatMap((f) => {
+    const before = now.get(f.file);
+    return before && before.slot !== f.slot ? [entry('renumbered', f.file, f.id, before.slot, f.slot)] : [];
+  });
+  return [...added, ...removed, ...renumbered];
+}
+
 /** Indexes of one longest increasing run of `values` (the mods whose relative order is unchanged). */
 function longestIncreasing(values: number[]): Set<number> {
   const len = values.map(() => 1);
@@ -418,6 +447,19 @@ export class LibraryMock {
         lib.mods = [mods[0] as ModView, porcelain, ...mods.slice(1).filter((m) => m !== porcelain)];
         break;
       }
+      case 'library-switch': {
+        // The board PendingProfileSwitch: Evening is in the game; Weekend turns one mod on and three off.
+        lib.applied_profile = 'Evening';
+        lib.selected_profile = 'Weekend';
+        for (const m of lib.mods) {
+          if (m.id === 'gb-710008') {
+            m.enabled = true;
+          } else if (['gb-710006', 'gb-710007', 'gb-710010'].includes(m.id)) {
+            m.enabled = false;
+          }
+        }
+        break;
+      }
       case 'library-applying':
         this.slow = true;
         this.applyOnSubscribe = true;
@@ -566,14 +608,17 @@ export class LibraryMock {
         const changes = switched ? [] : this.changes();
         const on = this.changes().filter((c) => c.kind === 'enable').length;
         const off = this.changes().filter((c) => c.kind === 'disable').length;
+        const files = folderFiles(this.game, l.mods);
+        const count = (kind: FolderFile['kind']) => files.filter((f) => f.kind === kind).length;
         return {
           switch: switched ? { from: l.applied_profile, to: l.selected_profile, turned_on: on, turned_off: off } : null,
           changes,
           folder: {
-            added: on,
-            removed: off,
-            renumbered: changes.filter((c) => c.kind === 'order').length + (switched ? 4 : 0),
+            added: count('added'),
+            removed: count('removed'),
+            renumbered: count('renumbered'),
             addons: this.host.gameRoot ? `${this.host.gameRoot}\\game\\citadel\\addons` : null,
+            files,
           },
           applied_after_game: this.auto ? { changes: this.auto.changes, at_unix_ms: this.auto.at } : null,
           undoing: this.undoing,

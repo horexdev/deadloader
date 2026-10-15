@@ -119,3 +119,11 @@ library-n12-above = { $name }：{ $other }の上に移動
 library-n12-below = { $name }：{ $other }の下に移動
 library-n12-switched = { $name }：{ $to }に切り替え
 library-n12-files = { $name }：ファイルを変更
+
+## S9: the file list of a pending apply
+library-show-file-list = ファイル一覧を表示
+library-hide-file-list = ファイル一覧を隠す
+library-file-list = ゲームフォルダー内のファイル
+library-files-added = 追加 · { $count }
+library-files-removed = 削除 · { $count }
+library-files-renumbered = 番号変更 · { $count }

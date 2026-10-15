@@ -154,3 +154,11 @@ library-n12-above = { $name } movido encima de { $other }
 library-n12-below = { $name } movido debajo de { $other }
 library-n12-switched = { $name } cambiado a { $to }
 library-n12-files = { $name }: archivos cambiados
+
+## S9: the file list of a pending apply
+library-show-file-list = Mostrar la lista de archivos
+library-hide-file-list = Ocultar la lista de archivos
+library-file-list = Archivos en la carpeta del juego
+library-files-added = Añadidos · { $count }
+library-files-removed = Quitados · { $count }
+library-files-renumbered = Renumerados · { $count }

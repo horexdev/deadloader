@@ -119,3 +119,11 @@ library-n12-above = { $name } dipindah ke atas { $other }
 library-n12-below = { $name } dipindah ke bawah { $other }
 library-n12-switched = { $name } beralih ke { $to }
 library-n12-files = { $name }: file berubah
+
+## S9: the file list of a pending apply
+library-show-file-list = Tampilkan daftar file
+library-hide-file-list = Sembunyikan daftar file
+library-file-list = File di folder game
+library-files-added = Ditambahkan · { $count }
+library-files-removed = Dihapus · { $count }
+library-files-renumbered = Dinomori ulang · { $count }

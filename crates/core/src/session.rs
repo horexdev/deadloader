@@ -373,6 +373,30 @@ pub struct FolderSummary {
     /// Files that stay but move to another `pakNN` slot.
     pub renumbered: usize,
     pub addons: Option<String>,
+    /// Each of those files ("Show the file list"): added in slot order, then removed, then renumbered.
+    pub files: Vec<FolderFile>,
+}
+
+/// One of our files in the game's `addons` folder that applying adds, removes or moves to another `pakNN` slot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FolderFile {
+    pub kind: FolderChange,
+    /// The library file.
+    pub file: String,
+    /// The library mod it belongs to; `None` if the library no longer has it.
+    pub mod_id: Option<String>,
+    pub name: Option<String>,
+    /// Its slot now (`None`: added) and after applying (`None`: removed).
+    pub from_slot: Option<u8>,
+    pub to_slot: Option<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FolderChange {
+    Added,
+    Removed,
+    Renumbered,
 }
 
 /// An item of the game's `addons` folder deadloader didn't put there (decision 16, F9).
@@ -1934,20 +1958,43 @@ impl Session {
             .collect();
         let target = layout(&foreign_slots, &wanted, self.direction).unwrap_or_default();
         let slot_now = |id: &str| applied.iter().find(|r| r.file == id).map(|r| r.slot);
+        let entry = |kind: FolderChange, file: &str, from_slot: Option<u8>, to_slot: Option<u8>| {
+            let owner = self.manifest.file(file).map(|(m, _)| m);
+            FolderFile {
+                kind,
+                file: file.to_owned(),
+                mod_id: owner.map(|m| m.id.clone()),
+                name: owner.map(|m| m.name.clone()),
+                from_slot,
+                to_slot,
+            }
+        };
+        let mut added: Vec<FolderFile> = target
+            .iter()
+            .filter(|(_, id)| slot_now(id).is_none())
+            .map(|(slot, id)| entry(FolderChange::Added, id, None, Some(*slot)))
+            .collect();
+        let mut removed: Vec<FolderFile> = applied
+            .iter()
+            .filter(|r| !target.iter().any(|(_, id)| *id == r.file))
+            .map(|r| entry(FolderChange::Removed, &r.file, Some(r.slot), None))
+            .collect();
+        let mut renumbered: Vec<FolderFile> = target
+            .iter()
+            .filter_map(|(slot, id)| {
+                let now = slot_now(id).filter(|s| s != slot)?;
+                Some(entry(FolderChange::Renumbered, id, Some(now), Some(*slot)))
+            })
+            .collect();
+        added.sort_by_key(|f| f.to_slot);
+        removed.sort_by_key(|f| f.from_slot);
+        renumbered.sort_by_key(|f| f.to_slot);
         FolderSummary {
-            added: target
-                .iter()
-                .filter(|(_, id)| slot_now(id).is_none())
-                .count(),
-            removed: applied
-                .iter()
-                .filter(|r| !target.iter().any(|(_, id)| *id == r.file))
-                .count(),
-            renumbered: target
-                .iter()
-                .filter(|(slot, id)| slot_now(id).is_some_and(|s| s != *slot))
-                .count(),
+            added: added.len(),
+            removed: removed.len(),
+            renumbered: renumbered.len(),
             addons: root.map(|r| addons_path(r).display().to_string()),
+            files: added.into_iter().chain(removed).chain(renumbered).collect(),
         }
     }
 
@@ -3400,6 +3447,92 @@ mod tests {
                 .pending
         };
         assert!(badge(&haze) && !badge(&wraith));
+    }
+
+    #[test]
+    fn a_profile_switch_lists_each_file_it_adds_removes_or_renumbers() {
+        let f = Fixture::new("folderfiles");
+        let (mut s, game, haze, wraith) = applied_two(&f);
+        let file_of = |s: &Session, id: &str| {
+            s.manifest()
+                .mods
+                .iter()
+                .find(|m| m.id == id)
+                .expect("mod")
+                .files[0]
+                .id
+                .clone()
+        };
+        let (haze_file, wraith_file) = (file_of(&s, &haze), file_of(&s, &wraith));
+        // Wraith is pak01, Haze pak02. Weekend has only Haze: Wraith goes, Haze moves up.
+        s.create_profile("Weekend").expect("created");
+        s.select_profile("Weekend").expect("selected");
+        s.set_enabled(&haze, true).expect("haze on");
+        let view = s.pending_view(Some(&game));
+        assert!(view.switch.is_some());
+        assert_eq!(
+            view.folder.files,
+            [
+                FolderFile {
+                    kind: FolderChange::Removed,
+                    file: wraith_file,
+                    mod_id: Some(wraith.clone()),
+                    name: Some("Wraith".to_owned()),
+                    from_slot: Some(1),
+                    to_slot: None,
+                },
+                FolderFile {
+                    kind: FolderChange::Renumbered,
+                    file: haze_file,
+                    mod_id: Some(haze.clone()),
+                    name: Some("Haze".to_owned()),
+                    from_slot: Some(2),
+                    to_slot: Some(1),
+                },
+            ]
+        );
+        assert_eq!(
+            (
+                view.folder.added,
+                view.folder.removed,
+                view.folder.renumbered
+            ),
+            (0, 1, 1)
+        );
+        assert_eq!(
+            serde_json::to_value(&view.folder.files[0]).expect("json")["kind"],
+            "removed"
+        );
+    }
+
+    #[test]
+    fn the_file_list_names_added_files_with_their_new_slot() {
+        let f = Fixture::new("folderadded");
+        let (mut s, game, _, _) = applied_two(&f);
+        let yamato = s
+            .import_file(
+                &f.source("yamato.vpk", &[("models/yamato/body.vmdl_c", 1)]),
+                "Yamato",
+            )
+            .expect("yamato")
+            .mod_id;
+        let files = s.pending_view(Some(&game)).folder.files;
+        let added: Vec<&FolderFile> = files
+            .iter()
+            .filter(|f| f.kind == FolderChange::Added)
+            .collect();
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0].mod_id.as_deref(), Some(yamato.as_str()));
+        assert_eq!((added[0].from_slot, added[0].to_slot), (None, Some(1)));
+        // The two below it move down one slot each.
+        assert_eq!(
+            files
+                .iter()
+                .filter(|f| f.kind == FolderChange::Renumbered)
+                .map(|f| (f.from_slot, f.to_slot))
+                .collect::<Vec<_>>(),
+            [(Some(1), Some(2)), (Some(2), Some(3))]
+        );
     }
 
     #[test]
