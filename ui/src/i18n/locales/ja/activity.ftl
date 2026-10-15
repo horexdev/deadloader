@@ -133,6 +133,7 @@ activity-empty-text = deadloaderは、すべてのネットワーク要求、ゲ
 activity-local-title = ローカルモード — 要求は行われません
 activity-local-why = カタログがオフのため、deadloaderはどこにも接続しません。GameBananaにも、ほかのどこにもです。ファイルの変更とアプリのイベントはほかのタブに引き続き記録されます。
 activity-local-do = GameBananaを閲覧するには、設定でカタログをオンにしてください。以後のすべての要求がここに表示されます。
+activity-local-history = 以下の要求は、ローカルモードをオンにする前に行われたものです。
 activity-enable-catalog = カタログを有効にする
 activity-details = ログエントリの詳細
 activity-close-details = 詳細を閉じる

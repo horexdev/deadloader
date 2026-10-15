@@ -133,6 +133,7 @@ activity-empty-text = deadloader mencatat di sini setiap permintaan jaringan, se
 activity-local-title = Mode lokal — tidak ada permintaan yang dibuat
 activity-local-why = Katalog nonaktif, jadi deadloader tidak terhubung ke mana pun — tidak ke GameBanana, tidak ke tempat lain. Perubahan file dan peristiwa aplikasi tetap dicatat di tab lain.
 activity-local-do = Aktifkan katalog di Pengaturan untuk menjelajahi GameBanana. Setiap permintaan lalu akan muncul di sini.
+activity-local-history = Permintaan di bawah ini dibuat sebelum mode lokal diaktifkan.
 activity-enable-catalog = Aktifkan katalog
 activity-details = Detail entri log
 activity-close-details = Tutup detail

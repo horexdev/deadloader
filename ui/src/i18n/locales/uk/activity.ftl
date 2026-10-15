@@ -220,6 +220,7 @@ activity-empty-text = Тут deadloader записує кожен мережев
 activity-local-title = Локальний режим — запити не виконуються
 activity-local-why = Каталог вимкнено, тому deadloader ні до чого не підключається — ні до GameBanana, ні куди-небудь ще. Зміни файлів і події застосунку й далі записуються на інших вкладках.
 activity-local-do = Увімкніть каталог у налаштуваннях, щоб переглядати GameBanana. Тоді кожен запит з’явиться тут.
+activity-local-history = Запити нижче було зроблено до ввімкнення локального режиму.
 activity-enable-catalog = Увімкнути каталог
 activity-details = Подробиці запису журналу
 activity-close-details = Закрити подробиці

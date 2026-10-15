@@ -133,6 +133,7 @@ activity-empty-text = deadloader 会在这里实时记录每个网络请求、�
 activity-local-title = 本地模式——不会发出任何请求
 activity-local-why = 目录已关闭，因此 deadloader 不连接任何地方——既不连 GameBanana，也不连别处。文件更改和应用事件仍记录在其他标签页中。
 activity-local-do = 在设置中开启目录即可浏览 GameBanana。之后每个请求都会显示在这里。
+activity-local-history = 以下请求是在开启本地模式之前发出的。
 activity-enable-catalog = 开启目录
 activity-details = 日志条目详情
 activity-close-details = 关闭详情

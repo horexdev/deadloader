@@ -14,7 +14,7 @@
 
   interface Props {
     summary: LogSummary;
-    /** The catalog is off: no network at all. */
+    /** The catalog is off: no requests now (today's earlier ones are still counted, 185). */
     local: boolean;
     compact: boolean;
     /** Two columns side by side (else stacked). */
@@ -29,14 +29,14 @@
   const { summary, local, compact, two, host, onhost, onentry, onfiles }: Props = $props();
 
   const fresh = $derived(summary.empty);
-  const hasHosts = $derived(!local && summary.contacted.length > 0);
+  const hasHosts = $derived(summary.contacted.length > 0);
   const blockedTotal = $derived(summary.blocked.reduce((n, b) => n + b.requests, 0));
   const netLine = $derived(
-    local
-      ? t('activity-net-none-local')
-      : summary.contacted.length === 0
-        ? t('activity-net-none-yet')
-        : t('activity-hosts-contacted', { count: summary.contacted.length }),
+    hasHosts
+      ? t('activity-hosts-contacted', { count: summary.contacted.length })
+      : local
+        ? t('activity-net-none-local')
+        : t('activity-net-none-yet'),
   );
   const noHostsWhat = $derived(local ? t('activity-no-requests-today') : t('activity-no-requests-yet'));
   const noHostsWhy = $derived(local ? t('activity-local-short') : fresh ? t('activity-never-contacted') : '');
