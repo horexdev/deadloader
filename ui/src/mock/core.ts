@@ -16,6 +16,7 @@ import type {
 } from '../lib/api';
 import { card, libraryMod, modPage, settings as defaultSettings } from './fixtures';
 import * as downloadsPreview from './downloads';
+import * as profilesPreview from './profiles';
 
 /** Tauri's `Channel`: the UI sets `onmessage`; the mock calls it. */
 export class Channel<T> {
@@ -34,6 +35,8 @@ interface State {
   onSubscribe: UiEvent[];
   /** Overrides the catalog status the settings imply (e.g. offline). */
   catalogStatus: CatalogStatus | null;
+  /** The Profiles screen's data: game folders, last applied, mods of the other profiles. */
+  profileData: profilesPreview.ProfilesMock;
 }
 
 let state: State;
@@ -63,6 +66,7 @@ function fresh(): State {
     gameRunning: false,
     onSubscribe: [],
     catalogStatus: null,
+    profileData: { info: {}, applied: {} },
   };
 }
 
@@ -117,6 +121,9 @@ function applyScenario(s: State): State {
 /** Back to the first-start state (tests). */
 export function resetMock(): void {
   state = applyScenario(fresh());
+  // Profiles (S5): a fourth profile on a second installation (153).
+  state.profiles = [...state.profiles, 'Sasha'];
+  state.profileData = profilesPreview.fresh(state.profiles, state.library);
 }
 resetMock();
 
@@ -245,6 +252,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
   apply: () => {
     state.library.pending = false;
     state.library.applied_profile = state.library.selected_profile;
+    profilesPreview.markApplied(state.profileData, state.library.selected_profile);
     return { library: structuredClone(state.library), changed: true, gameinfo_foreign: false };
   },
   profile_names: () => [...state.profiles],
@@ -311,6 +319,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
     }
     state.library.pending = false;
     state.library.applied_profile = state.library.selected_profile;
+    profilesPreview.markApplied(state.profileData, state.library.selected_profile);
     state.gameRunning = true;
     push({ event: 'game', data: { running: true } });
     return { library: structuredClone(state.library), changed: true, gameinfo_foreign: false };
@@ -333,6 +342,16 @@ const handlers: Record<string, (args: Args) => unknown> = {
     state.library.mods.unshift(imported);
     return [{ Ok: { mod_id: imported.id, new_files: imported.files.map((f) => f.id), choices: [], skipped: [] } }];
   },
+  ...profilesPreview.handlers({
+    names: () => state.profiles,
+    setNames: (names) => {
+      state.profiles = names;
+    },
+    library: () => state.library,
+    data: () => state.profileData,
+    scenario: () => (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('scenario')),
+    startDownload,
+  }),
   window_minimize: () => null,
   window_toggle_maximize: () => null,
   window_close: () => null,

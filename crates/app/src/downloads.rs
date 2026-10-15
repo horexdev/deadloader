@@ -65,6 +65,63 @@ pub fn task_for(file: &RemoteFile, of: &ModRef) -> NewTask {
     task
 }
 
+/// A mod an imported profile names but the library lacks (D9), with the GameBanana files it used.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct MissingMod {
+    pub section: Section,
+    pub mod_id: u64,
+    pub name: String,
+    pub file_ids: Vec<u64>,
+}
+
+/// A missing mod that couldn't be queued, and why.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct NotStarted {
+    pub name: String,
+    pub message: UserMessage,
+}
+
+/// "Download missing" in D9: a task per listed file. `find` gives a file with its download URL (fetching the mod
+/// page when it isn't saved); a file GameBanana no longer lists is E24 for its mod.
+pub fn tasks_for_missing(
+    mods: &[MissingMod],
+    mut find: impl FnMut(Section, u64, u64) -> Result<Option<RemoteFile>, UserMessage>,
+) -> (Vec<NewTask>, Vec<NotStarted>) {
+    let mut tasks = Vec::new();
+    let mut failed = Vec::new();
+    for m in mods {
+        let of = ModRef {
+            section: m.section,
+            mod_id: m.mod_id,
+            name: m.name.clone(),
+            author: None,
+        };
+        let mut problem = None;
+        for &file_id in &m.file_ids {
+            match find(m.section, m.mod_id, file_id) {
+                Ok(Some(file)) => tasks.push(task_for(&file, &of)),
+                Ok(None) => {
+                    problem = Some(
+                        UserMessage::new(MessageId::E24)
+                            .arg("detail", format!("file {file_id} of mod {}", m.mod_id)),
+                    );
+                }
+                Err(message) => {
+                    problem = Some(message);
+                    break;
+                }
+            }
+        }
+        if let Some(message) = problem {
+            failed.push(NotStarted {
+                name: m.name.clone(),
+                message,
+            });
+        }
+    }
+    (tasks, failed)
+}
+
 /// A task for the file that replaces our GameBanana file `replaced` (an update the user picked in D5).
 pub fn update_task_for(file: &RemoteFile, of: &ModRef, replaced: u64) -> NewTask {
     task_for(file, of).meta(meta::REPLACES, replaced.to_string())
@@ -227,6 +284,51 @@ mod tests {
             initiator: new.initiator,
             meta: new.meta.clone(),
         }
+    }
+
+    #[test]
+    fn missing_mods_of_an_imported_profile_become_tasks_and_problems_are_named() {
+        let missing = [
+            MissingMod {
+                section: Section::Mod,
+                mod_id: 655_209,
+                name: "Haze V2".to_owned(),
+                file_ids: vec![1_480_331],
+            },
+            MissingMod {
+                section: Section::Mod,
+                mod_id: 1,
+                name: "Gone".to_owned(),
+                file_ids: vec![9],
+            },
+            MissingMod {
+                section: Section::Mod,
+                mod_id: 2,
+                name: "Removed file".to_owned(),
+                file_ids: vec![8],
+            },
+        ];
+        let mut asked = Vec::new();
+        let (tasks, failed) = tasks_for_missing(&missing, |section, mod_id, file_id| {
+            asked.push((section, mod_id, file_id));
+            match mod_id {
+                655_209 => Ok(Some(haze_file())),
+                1 => Err(UserMessage::new(MessageId::E24)),
+                _ => Ok(None),
+            }
+        });
+        assert_eq!(asked.len(), 3);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].meta["mod_name"], "Haze V2");
+        assert_eq!(tasks[0].meta["file_id"], "1480331");
+        let named: Vec<(&str, MessageId)> = failed
+            .iter()
+            .map(|f| (f.name.as_str(), f.message.id))
+            .collect();
+        assert_eq!(
+            named,
+            [("Gone", MessageId::E24), ("Removed file", MessageId::E24)]
+        );
     }
 
     #[test]

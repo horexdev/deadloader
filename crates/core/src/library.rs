@@ -19,6 +19,9 @@ pub struct Manifest {
     /// "New files available" the user hid, per library mod: GameBanana file ids not to report again (168).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dismissed_new_files: BTreeMap<String, Vec<u64>>,
+    /// When each profile was last applied to its game folder (unix ms), for the Profiles screen (S5).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub last_applied: BTreeMap<String, u64>,
 }
 
 impl Default for Manifest {
@@ -28,6 +31,7 @@ impl Default for Manifest {
             mods: Vec::new(),
             installations: Vec::new(),
             dismissed_new_files: BTreeMap::new(),
+            last_applied: BTreeMap::new(),
         }
     }
 }

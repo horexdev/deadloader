@@ -108,6 +108,43 @@ export interface Missing {
 export interface ProfileImported {
   name: string;
   missing: Missing[];
+  /** How many mods the file lists. */
+  listed: number;
+  /** The file's name, when it came from a file. */
+  file: string | null;
+}
+
+/** A profile as the Profiles screen lists it (S5). */
+export interface ProfileOverview {
+  name: string;
+  /** Its game folder; `null` until one is chosen or applied (then the first installation is used). */
+  game_root: string | null;
+  /** Enabled mods. */
+  mods: number;
+  mod_names: string[];
+  /** Its files are in its game folder now (153). */
+  applied: boolean;
+  last_applied_unix_ms: number | null;
+}
+
+export interface ProfilesView {
+  selected: string;
+  /** Steam's installations, then the ones added by hand. */
+  installations: string[];
+  profiles: ProfileOverview[];
+}
+
+/** A missing mod of an imported profile to download (D9). */
+export interface MissingDownload {
+  section: Section;
+  mod_id: number;
+  name: string;
+  file_ids: number[];
+}
+
+export interface MissingStarted {
+  tasks: TaskId[];
+  failed: { name: string; message: UserMessage }[];
 }
 
 /** settings.json as the core writes it; sections are typed where screens use them. */
@@ -634,4 +671,9 @@ export const api = {
   addFromDisk: (text: DialogText) => call<ImportResult[]>('add_from_disk', { text }),
   exportProfileDialog: (name: string, text: DialogText) => call<boolean>('export_profile_dialog', { name, text }),
   importProfileDialog: (text: DialogText) => call<ProfileImported | null>('import_profile_dialog', { text }),
+  profilesOverview: () => call<ProfilesView>('profiles_overview'),
+  setProfileInstallation: (name: string, root: string) =>
+    call<ProfilesView>('set_profile_installation', { name, root }),
+  /** "Download missing" in D9. */
+  downloadMissing: (mods: MissingDownload[]) => call<MissingStarted>('profile_download_missing', { mods }),
 };

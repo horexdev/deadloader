@@ -100,6 +100,15 @@ pub struct AfterGame {
     pub library: LibraryView,
 }
 
+/// The Profiles screen (S5): every profile, which one is selected, and the game folders a profile can go into.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfilesView {
+    pub selected: String,
+    /// Steam's installations, then the ones added by hand in Settings.
+    pub installations: Vec<String>,
+    pub profiles: Vec<deadloader_core::session::ProfileOverview>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ApplyResult {
     pub library: LibraryView,
@@ -413,11 +422,61 @@ impl Backend {
         })
     }
 
+    /// Deletes a profile. An applied one takes its mods out of the game first, as its confirmation says (S5); that
+    /// waits while the game runs (E13).
     pub fn delete_profile(&self, name: &str) -> Result<Vec<String>, UserMessage> {
+        let running = self.game.running();
         self.with(|s| {
+            s.take_out_of_game(name, running)?;
             s.delete_profile(name)?;
             Ok(s.profile_names())
         })
+    }
+
+    /// The game folders a profile can use: Steam's, then the ones added by hand (decision 153).
+    fn known_installations(&self) -> Result<Vec<String>, UserMessage> {
+        let manual = self.with(|s| Ok(s.settings().game.manual_installations.clone()))?;
+        let mut known: Vec<String> = Vec::new();
+        for root in self
+            .game
+            .installations()
+            .iter()
+            .map(|r| r.display().to_string())
+            .chain(manual)
+        {
+            if !known.iter().any(|k| k.eq_ignore_ascii_case(&root)) {
+                known.push(root);
+            }
+        }
+        Ok(known)
+    }
+
+    /// The Profiles screen (S5).
+    pub fn profiles_view(&self) -> Result<ProfilesView, UserMessage> {
+        let installations = self.known_installations()?;
+        self.with(|s| {
+            Ok(ProfilesView {
+                selected: s.selected_profile().to_owned(),
+                installations: installations.clone(),
+                profiles: s.profiles_overview(),
+            })
+        })
+    }
+
+    /// "Change game installation" (153): one of the known game folders; nothing is applied.
+    pub fn set_profile_installation(
+        &self,
+        name: &str,
+        root: &str,
+    ) -> Result<ProfilesView, UserMessage> {
+        let known = self.known_installations()?;
+        let root = known
+            .iter()
+            .find(|k| k.eq_ignore_ascii_case(root))
+            .ok_or_else(|| UserMessage::new(MessageId::E2).arg("path", root))?
+            .clone();
+        self.with(|s| Ok(s.set_profile_game_root(name, Path::new(&root))?))?;
+        self.profiles_view()
     }
 
     pub fn export_profile(&self, name: &str) -> Result<String, UserMessage> {
@@ -446,14 +505,26 @@ impl Backend {
     }
 
     /// Profiles → Import from a file the user chose.
+    /// The result and its errors name the file (its name only), as D9 and the import error show it.
     pub fn import_profile_from(&self, path: &Path) -> Result<ProfileImported, UserMessage> {
+        let file = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let text = std::fs::read_to_string(path).map_err(|e| {
             UserMessage::new(MessageId::E17)
                 .arg("reason", "unreadable")
-                .arg("file", path.display())
+                .arg("file", &file)
                 .arg("detail", e)
         })?;
-        self.import_profile(&text)
+        match self.import_profile(&text) {
+            Ok(imported) => Ok(ProfileImported {
+                file: Some(file),
+                ..imported
+            }),
+            Err(e) if e.id == MessageId::E17 => Err(e.arg("file", &file)),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn settings(&self) -> Result<Settings, UserMessage> {
@@ -1321,5 +1392,121 @@ pub(crate) mod tests {
         assert_eq!(outcomes[0].as_ref().expect_err("refused").id, MessageId::E8);
         assert!(outcomes[1].is_ok());
         assert_eq!(backend.library().expect("library").mods.len(), 1);
+    }
+
+    #[test]
+    fn the_profiles_screen_sees_every_installation_and_profile() {
+        let f = Fixture::new("profilesview");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        let manual = f.dir.join("E-Deadlock");
+        let mut settings = backend.settings().expect("settings");
+        settings.game.manual_installations = vec![manual.display().to_string()];
+        backend.update_settings(settings).expect("saved");
+        backend.create_profile("Sasha").expect("created");
+        backend.apply().expect("applied");
+
+        let view = backend.profiles_view().expect("view");
+        // The field names `ui/src/lib/api.ts` relies on.
+        let json = serde_json::to_value(&view).expect("json");
+        let mut keys: Vec<&String> = json["profiles"][0]
+            .as_object()
+            .expect("profile")
+            .keys()
+            .collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "applied",
+                "game_root",
+                "last_applied_unix_ms",
+                "mod_names",
+                "mods",
+                "name"
+            ]
+        );
+        assert_eq!(view.selected, "Default");
+        assert_eq!(
+            view.installations,
+            [f.game().display().to_string(), manual.display().to_string()]
+        );
+        let names: Vec<(&str, bool)> = view
+            .profiles
+            .iter()
+            .map(|p| (p.name.as_str(), p.applied))
+            .collect();
+        assert_eq!(names, [("Default", true), ("Sasha", false)]);
+
+        let view = backend
+            .set_profile_installation("Sasha", &manual.display().to_string())
+            .expect("moved");
+        let sasha = view
+            .profiles
+            .iter()
+            .find(|p| p.name == "Sasha")
+            .expect("sasha");
+        assert_eq!(sasha.game_root, Some(manual.display().to_string()));
+        assert_eq!(
+            backend
+                .set_profile_installation("Sasha", r"Z:\Nowhere")
+                .expect_err("not a known installation")
+                .id,
+            MessageId::E2
+        );
+    }
+
+    #[test]
+    fn deleting_the_applied_profile_takes_its_mods_out_of_the_game() {
+        let f = Fixture::new("deleteapplied");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        backend.apply().expect("applied");
+        backend.create_profile("Other").expect("created");
+        assert!(f.addons().join("pak01_dir.vpk").exists());
+
+        game.running.store(true, Ordering::Relaxed);
+        assert_eq!(
+            backend.delete_profile("Default").expect_err("running").id,
+            MessageId::E13
+        );
+        assert_eq!(backend.profile_names().expect("names").len(), 2);
+
+        game.running.store(false, Ordering::Relaxed);
+        backend.delete_profile("Default").expect("deleted");
+        assert!(!f.addons().join("pak01_dir.vpk").exists());
+        assert_eq!(backend.profile_names().expect("names"), ["Other"]);
+        // The mod stays in the library.
+        assert_eq!(backend.library().expect("library").mods.len(), 1);
+    }
+
+    #[test]
+    fn a_profile_file_names_itself_in_the_import_result_and_its_errors() {
+        let f = Fixture::new("profilefilename");
+        let backend = f.backend(&FakeGame::default());
+        let file = f.dir.join("night.json");
+        backend
+            .export_profile_to("Default", &file)
+            .expect("exported");
+        let imported = backend.import_profile_from(&file).expect("imported");
+        assert_eq!(imported.file.as_deref(), Some("night.json"));
+        assert_eq!(imported.listed, 0);
+        let bad = f.dir.join("skins-backup.zip");
+        std::fs::write(&bad, "PK").expect("write");
+        let err = backend.import_profile_from(&bad).expect_err("refused");
+        assert_eq!(err.id, MessageId::E17);
+        assert_eq!(
+            err.args.get("file").map(String::as_str),
+            Some("skins-backup.zip")
+        );
     }
 }
