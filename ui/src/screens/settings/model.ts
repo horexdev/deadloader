@@ -1,6 +1,7 @@
 // The settings as the Settings screen edits them: the typed shape of `settings.json` (crates/core/src/settings.rs),
 // the defaults shown next to changed rows ("Default: … · Restore default"), the core's ranges, and pure helpers.
 
+import { ZOOM_STEPS } from '../../lib/zoom';
 import type { Settings } from '../../lib/api';
 
 export type NsfwMode = 'hidden' | 'blurred' | 'shown';
@@ -98,7 +99,7 @@ export const RANGES = {
 
 /** The design's choices; a value set by hand outside them is added so the select still shows it. */
 export const CHOICES = {
-  zoom: [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200],
+  zoom: ZOOM_STEPS,
   ttl: [2, 5, 10, 30, 60],
   parallel: [1, 2, 3, 4, 5, 6, 8],
   /** MB/s; `null` = no limit. */
