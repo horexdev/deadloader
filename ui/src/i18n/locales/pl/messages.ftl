@@ -136,7 +136,11 @@ e8 = Nie można rozpakować archiwum.
 e9 = Archiwum jest zbyt duże, by bezpiecznie je rozpakować.
     .why =
         { $reason ->
-            [too_large] Po rozpakowaniu przekracza { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] Po rozpakowaniu zajmowałoby { $unpacked }, a limit to { $limit }.
+                   *[no] Po rozpakowaniu przekracza { $limit }.
+                }
             [too_many_files]
                 { $found ->
                     [one] Zawiera { $found } plik moda, a limit to { $limit }.

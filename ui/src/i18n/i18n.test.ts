@@ -186,6 +186,18 @@ describe('a message from the core', () => {
     expect(many.why).toContain('256');
   });
 
+  it('says what an archive over the size limit would unpack to, when its list tells', () => {
+    const limit = String(2048 * MiB);
+    const measured = describeMessage({
+      id: 'E9',
+      args: { reason: 'too_large', limit, unpacked: String(3892 * MiB), entry: 'mina.vpk' },
+    });
+    expect(measured.why).toBe(`It would unpack to 3.80${NBSP}GB; the limit is 2.00${NBSP}GB.`);
+    // Headers that claim less than the limit are not believed: the limit was reached on real bytes.
+    const lying = describeMessage({ id: 'E9', args: { reason: 'too_large', limit, unpacked: String(10 * MiB) } });
+    expect(lying.why).toBe(`It unpacks to more than 2.00${NBSP}GB.`);
+  });
+
   it('gives the place a damaged file broke at, when it is known', () => {
     const at = describeMessage({
       id: 'E23',

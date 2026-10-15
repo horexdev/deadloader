@@ -124,7 +124,11 @@ e8 = No se puede descomprimir el archivo comprimido.
 e9 = El archivo comprimido es demasiado grande para descomprimirlo de forma segura.
     .why =
         { $reason ->
-            [too_large] Descomprimido ocupa más de { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] Descomprimido ocuparía { $unpacked } y el límite es { $limit }.
+                   *[no] Descomprimido ocupa más de { $limit }.
+                }
             [too_many_files]
                 { $found ->
                     [one] Contiene { $found } archivo de mod y el límite es { $limit }.

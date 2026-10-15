@@ -124,7 +124,11 @@ e8 = Arşiv ayıklanamıyor.
 e9 = Arşiv güvenle ayıklanamayacak kadar büyük.
     .why =
         { $reason ->
-            [too_large] Ayıklandığında { $limit } sınırını aşıyor.
+            [too_large]
+                { $measured ->
+                    [yes] Ayıklandığında { $unpacked } olacak, sınır ise { $limit }.
+                   *[no] Ayıklandığında { $limit } sınırını aşıyor.
+                }
             [too_many_files]
                 { $found ->
                     [one] { $found } mod dosyası içeriyor, sınır ise { $limit }.

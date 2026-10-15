@@ -124,7 +124,11 @@ e8 = Impossibile estrarre l’archivio.
 e9 = L’archivio è troppo grande per essere estratto in sicurezza.
     .why =
         { $reason ->
-            [too_large] Una volta estratto supera { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] Una volta estratto occuperebbe { $unpacked } e il limite è { $limit }.
+                   *[no] Una volta estratto supera { $limit }.
+                }
             [too_many_files]
                 { $found ->
                     [one] Contiene { $found } file di mod e il limite è { $limit }.

@@ -105,6 +105,7 @@ describe('the Downloads screen (S6)', () => {
     click(one(row, '.error button'));
     await vi.waitFor(() => expect(calls.at(-1)?.args).toMatchObject({ action: 'retry' }));
     const big = rowNamed(target, 'Lady Geist — Ember Coat');
+    expect(plain(one(big, '.error').textContent)).toContain('It would unpack to 3.80 GB; the limit is 2.00 GB.');
     const details = all(big, '.error button').find((b) => b.textContent?.includes('Show details'));
     click(details as HTMLElement);
     expect(app.error?.message.id).toBe('E9');

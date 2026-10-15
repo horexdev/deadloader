@@ -124,7 +124,11 @@ e8 = Não é possível extrair o arquivo compactado.
 e9 = O arquivo compactado é grande demais para ser extraído com segurança.
     .why =
         { $reason ->
-            [too_large] Extraído, ele ultrapassa { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] Extraído, ele ocuparia { $unpacked }, e o limite é { $limit }.
+                   *[no] Extraído, ele ultrapassa { $limit }.
+                }
             [too_many_files]
                 { $found ->
                     [one] Ele contém { $found } arquivo de mod, e o limite é { $limit }.
