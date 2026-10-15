@@ -51,3 +51,14 @@ pub async fn open_logs_folder(backend: Shared<'_>, activity: Act<'_>) -> Reply<S
     })
     .await
 }
+
+/// A mistake of the UI itself (an exception handed to the error toast or D12): written to the app log with its stack;
+/// returns the entry's id for D12's Details, `None` when it couldn't be written.
+#[tauri::command]
+pub async fn log_ui_error(
+    backend: Shared<'_>,
+    error: String,
+    stack: Option<String>,
+) -> Reply<Option<String>> {
+    blocking(backend, move |b| Ok(b.ui_error(&error, stack.as_deref()))).await
+}

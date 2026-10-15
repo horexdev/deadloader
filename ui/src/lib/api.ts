@@ -1021,6 +1021,8 @@ export const activity = {
   summary: () => call<LogSummary>('log_summary'),
   /** Opens deadloader's logs folder in File Explorer; resolves to the folder as it may be shown. */
   openFolder: () => call<string>('open_logs_folder'),
+  /** A mistake of the UI itself into the app log, with its stack; resolves to the entry's id, null when not written. */
+  logUiError: (error: string, stack: string | null) => call<string | null>('log_ui_error', { error, stack }),
 };
 
 // ---- Settings, the first-run wizard and maintenance (S8, S1, D7, D8; crates/app/src/commands/settings.rs)

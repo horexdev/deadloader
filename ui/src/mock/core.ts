@@ -249,7 +249,7 @@ export function resetMock(): void {
   maintenanceHandlers = settingsHandlers({
     settings: () => state.settings,
     setSettings: (settings) => {
-      state.settings = structuredClone(settings);
+      saveSettings(settings);
     },
     profiles: () => [...state.profiles],
     selectedProfile: () => state.library.selected_profile,
@@ -265,6 +265,16 @@ export function resetMock(): void {
 
 function push(event: UiEvent): void {
   state.listener?.onmessage(event);
+}
+
+/** Saves the settings; the catalog's status is pushed when they change it, as the core's `apply_settings` does. */
+function saveSettings(settings: Settings): void {
+  const before = catalogStatus();
+  state.settings = structuredClone(settings);
+  const after = catalogStatus();
+  if (JSON.stringify(after) !== JSON.stringify(before)) {
+    push({ event: 'catalog', data: { event: 'status', data: after } });
+  }
 }
 
 function changed(): Changed {
@@ -631,7 +641,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
   },
   settings: () => structuredClone(state.settings),
   update_settings: (args) => {
-    state.settings = structuredClone(args.settings as Settings);
+    saveSettings(args.settings as Settings);
     return structuredClone(state.settings);
   },
   ...catalogHandlers,
@@ -750,6 +760,15 @@ const handlers: Record<string, (args: Args) => unknown> = {
   log_counts: (args) => activity.counts(state.logs, args.range as LogQuery['range'], new Date()),
   log_summary: () => activity.summary(state.logs, new Date()),
   open_logs_folder: () => String.raw`D:\Games\deadloader\deadloader-data\logs`,
+  log_ui_error: (args) => {
+    const fields: Record<string, unknown> = { error: String(args.error) };
+    if (typeof args.stack === 'string') {
+      fields.stack = args.stack;
+    }
+    const id = activity.addAppLine(state.logs, new Date(), 'error', 'ui error', fields);
+    push({ event: 'log', data: { kinds: ['app'] } });
+    return id;
+  },
 };
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */

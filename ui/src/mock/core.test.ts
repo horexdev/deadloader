@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type {
   Card,
   Categories,
@@ -64,6 +64,27 @@ describe('the mock core (pnpm dev:mock)', () => {
     expect(kinds).toContain('download:progress');
     expect(kinds).toContain('installed');
     expect(await invoke<TaskSnapshot[]>('downloads')).toEqual([]);
+  });
+
+  it('pushes the catalog status when the settings turn the catalog on or off, as the core does', async () => {
+    history.replaceState(null, '', '/?scenario=wizard');
+    onTestFinished(() => history.replaceState(null, '', '/'));
+    resetMock();
+    const seen: UiEvent[] = [];
+    const channel = new Channel<UiEvent>();
+    channel.onmessage = (e) => seen.push(e);
+    await invoke('subscribe', { events: channel });
+    const statuses = () => seen.filter((e) => e.event === 'catalog').map((e) => e.data);
+
+    await invoke('acknowledge_notice', { version: 1, language: 'en', catalog: 'catalog', checkAppUpdates: true });
+    expect(statuses()).toEqual([{ event: 'status', data: { kind: 'online' } }]);
+    expect(await invoke<CatalogStatus>('catalog_status')).toEqual({ kind: 'online' });
+
+    await invoke('choose_catalog', { enabled: false });
+    expect(statuses().at(-1)).toEqual({ event: 'status', data: { kind: 'local_mode' } });
+    // Nothing changed, nothing pushed.
+    await invoke('choose_catalog', { enabled: false });
+    expect(statuses()).toHaveLength(2);
   });
 
   it('keeps favourites newest first and opens only https links', async () => {
