@@ -88,6 +88,41 @@ impl Zoom {
     }
 }
 
+/// The design's smallest layout, in CSS px: the window's minimum at 100 % zoom.
+pub const MIN_LAYOUT: (f64, f64) = (960.0, 600.0);
+
+/// The window's minimum inner size in logical px at zoom `factor` (decision 192): the design's smallest layout at that
+/// zoom, capped at `room` (the work area of the window's monitor, logical px), never below the plain minimum.
+pub fn min_window(factor: f64, room: Option<(f64, f64)>) -> (f64, f64) {
+    let axis = |base: f64, room: Option<f64>| {
+        let zoomed = (base * factor).round();
+        room.map_or(zoomed, |room| zoomed.min(room.floor()))
+            .max(base)
+    };
+    (
+        axis(MIN_LAYOUT.0, room.map(|r| r.0)),
+        axis(MIN_LAYOUT.1, room.map(|r| r.1)),
+    )
+}
+
+/// Where a window of `size` at `position` goes so it lies on `area` (a monitor's work area, position and size; all
+/// physical px): moved left/up just enough, never past the area's left/top edge.
+pub fn keep_inside(
+    position: (i32, i32),
+    size: (u32, u32),
+    area: ((i32, i32), (u32, u32)),
+) -> (i32, i32) {
+    let axis = |at: i32, length: u32, start: i32, room: u32| {
+        let end = i64::from(start) + i64::from(room) - i64::from(length);
+        let placed = i64::from(at).min(end).max(i64::from(start));
+        i32::try_from(placed).unwrap_or(at)
+    };
+    (
+        axis(position.0, size.0, area.0.0, area.1.0),
+        axis(position.1, size.1, area.0.1, area.1.1),
+    )
+}
+
 /// Whether two Windows paths name the same folder, ignoring case, separators and a trailing separator.
 pub fn same_folder(a: &Path, b: &Path) -> bool {
     normalise(a) == normalise(b)
@@ -115,6 +150,48 @@ mod tests {
         assert_eq!(zoom.changed(100), None, "another setting was saved");
         assert_eq!(zoom.changed(125), Some(1.25));
         assert_eq!(zoom.changed(50), Some(0.5));
+    }
+
+    #[test]
+    fn the_window_minimum_holds_the_designs_smallest_layout_at_any_zoom() {
+        let big = Some((2560.0, 1400.0));
+        assert_eq!(min_window(1.0, big), (960.0, 600.0));
+        assert_eq!(min_window(1.5, big), (1440.0, 900.0));
+        assert_eq!(min_window(1.1, big), (1056.0, 660.0));
+        assert_eq!(
+            min_window(0.5, big),
+            (960.0, 600.0),
+            "never below the design's window minimum"
+        );
+    }
+
+    #[test]
+    fn a_grown_window_moves_back_onto_its_monitor() {
+        let area = ((0, 0), (1920, 1040));
+        assert_eq!(keep_inside((100, 50), (1440, 900), area), (100, 50), "fits");
+        assert_eq!(keep_inside((900, 400), (1440, 900), area), (480, 140));
+        // A second monitor left of the main one, negative coordinates.
+        let left = ((-1366, 0), (1366, 728));
+        assert_eq!(keep_inside((-400, 10), (1200, 728), left), (-1200, 0));
+        assert_eq!(
+            keep_inside((-2000, -50), (1200, 728), left),
+            (-1366, 0),
+            "never above or left of it"
+        );
+    }
+
+    #[test]
+    fn the_window_minimum_never_outgrows_the_monitor() {
+        // 1366 × 768 laptop, work area without the taskbar.
+        let laptop = Some((1366.0, 728.0));
+        assert_eq!(min_window(1.25, laptop), (1200.0, 728.0));
+        assert_eq!(min_window(2.0, laptop), (1366.0, 728.0));
+        assert_eq!(
+            min_window(1.5, Some((800.0, 500.0))),
+            (960.0, 600.0),
+            "a screen smaller than the minimum keeps the plain minimum"
+        );
+        assert_eq!(min_window(1.5, None), (1440.0, 900.0), "unknown monitor");
     }
 
     /// The set from ADR 0001, written out independently of the constants above.

@@ -527,9 +527,9 @@ fn run_blocked(app: App, state: crate::setup::Startup) -> Result<(), StartError>
 fn main_window(app: &App, profile: PathBuf) -> WebviewWindowBuilder<'_, tauri::Wry, App> {
     WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
         .title("deadloader")
-        // Designed at 1280 × 800; the minimum is the design's 960 × 600.
+        // Designed at 1280 × 800; the minimum is the design's 960 × 600 (it grows with the zoom: `fit_minimum`).
         .inner_size(1280.0, 800.0)
-        .min_inner_size(960.0, 600.0)
+        .min_inner_size(webview::MIN_LAYOUT.0, webview::MIN_LAYOUT.1)
         // The design's own title bar (ui/src/shell/TitleBar.svelte) replaces the system frame; the window keeps its
         // shadow and resize borders.
         .decorations(false)
@@ -551,9 +551,10 @@ fn follow_zoom(window: &tauri::WebviewWindow, backend: &Arc<Backend>, log: &Log)
     let apply = {
         let (window, log) = (window.clone(), Arc::clone(log));
         move |percent: u32| {
-            if let Some(factor) = zoom.changed(percent)
-                && let Err(e) = window.set_zoom(factor)
-            {
+            let Some(factor) = zoom.changed(percent) else {
+                return;
+            };
+            if let Err(e) = window.set_zoom(factor) {
                 write(
                     &log,
                     Level::Warn,
@@ -561,6 +562,7 @@ fn follow_zoom(window: &tauri::WebviewWindow, backend: &Arc<Backend>, log: &Log)
                     [("percent", percent.into()), ("error", e.to_string().into())],
                 );
             }
+            fit_minimum(&window, factor, &log);
         }
     };
     apply(
@@ -571,6 +573,65 @@ fn follow_zoom(window: &tauri::WebviewWindow, backend: &Arc<Backend>, log: &Log)
     backend.on_settings(Box::new(move |settings| {
         apply(settings.general.zoom_percent);
     }));
+}
+
+/// Decision 192: the window's minimum holds the design's smallest layout at the zoom `factor` (capped at the
+/// monitor's work area); a smaller window grows to it and stays on its monitor.
+fn fit_minimum(window: &tauri::WebviewWindow, factor: f64, log: &Log) {
+    let monitor = window.current_monitor().ok().flatten();
+    let room = monitor.as_ref().map(|m| {
+        let area = m.work_area().size.to_logical::<f64>(m.scale_factor());
+        (area.width, area.height)
+    });
+    let (width, height) = webview::min_window(factor, room);
+    let fit = || -> tauri::Result<bool> {
+        window.set_min_size(Some(tauri::LogicalSize::new(width, height)))?;
+        let now = window
+            .inner_size()?
+            .to_logical::<f64>(window.scale_factor()?);
+        if window.is_maximized()? || (now.width >= width && now.height >= height) {
+            return Ok(false);
+        }
+        window.set_size(tauri::LogicalSize::new(
+            now.width.max(width),
+            now.height.max(height),
+        ))?;
+        if let Some(m) = &monitor {
+            let (at, size) = (window.outer_position()?, window.outer_size()?);
+            let area = m.work_area();
+            let (x, y) = webview::keep_inside(
+                (at.x, at.y),
+                (size.width, size.height),
+                (
+                    (area.position.x, area.position.y),
+                    (area.size.width, area.size.height),
+                ),
+            );
+            if (x, y) != (at.x, at.y) {
+                window.set_position(tauri::PhysicalPosition::new(x, y))?;
+            }
+        }
+        Ok(true)
+    };
+    match fit() {
+        Ok(grown) => write(
+            log,
+            Level::Info,
+            "window minimum",
+            [
+                ("zoom", factor.into()),
+                ("width", width.into()),
+                ("height", height.into()),
+                ("window_grown", grown.into()),
+            ],
+        ),
+        Err(e) => write(
+            log,
+            Level::Warn,
+            "window minimum could not be applied",
+            [("zoom", factor.into()), ("error", e.to_string().into())],
+        ),
+    }
 }
 
 fn open_main_window(
