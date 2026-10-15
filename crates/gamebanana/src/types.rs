@@ -158,6 +158,67 @@ pub struct ModDetails {
     pub files: Vec<RemoteFile>,
     /// Superseded files, kept by GameBanana for older versions.
     pub archived_files: Vec<RemoteFile>,
+    pub availability: Availability,
+}
+
+/// Whether GameBanana still shows a submission to everyone. A submission that is gone entirely is
+/// [`crate::Error::NotFound`] instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Availability {
+    Public,
+    /// Hidden by GameBanana's moderators, usually until the author fixes something.
+    Withheld,
+    /// Deleted into GameBanana's trash by the author or a moderator.
+    Trashed,
+    /// Hidden by the author.
+    Private,
+}
+
+/// The cheap answer an update check needs: a submission's current files and state, without the description,
+/// gallery and credits of [`ModDetails`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModFileList {
+    pub id: u64,
+    pub section: Section,
+    pub name: String,
+    pub version: Option<String>,
+    /// Moves with every update post, but also for other edits, so it is not an update signal by itself.
+    pub date_updated: Option<i64>,
+    pub availability: Availability,
+    pub files: Vec<RemoteFile>,
+}
+
+/// One page of a submission's update posts, newest first.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpdatePage {
+    /// Trashed and private posts are left out.
+    pub posts: Vec<UpdatePost>,
+    /// Posts across all pages, as GameBanana counts them.
+    pub total: u64,
+    pub is_complete: bool,
+}
+
+/// An author's update post: what changed and which files came with it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdatePost {
+    pub id: u64,
+    pub title: String,
+    /// Free text chosen by the author (`v5.3`, `2.0`, …); not comparable in general.
+    pub version: Option<String>,
+    pub date_added: Option<i64>,
+    pub changelog: Vec<ChangeEntry>,
+    /// Ids of the files uploaded with this post. Files are re-uploaded under new ids, so older posts usually list
+    /// ids that no longer exist.
+    pub file_ids: Vec<u64>,
+    /// Untrusted HTML exactly as received; empty when the post has no text.
+    pub text_html: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangeEntry {
+    /// The author's label, e.g. `Bugfix` or `Addition`; free text.
+    pub category: Option<String>,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
