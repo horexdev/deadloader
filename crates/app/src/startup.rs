@@ -63,7 +63,7 @@ pub fn run() -> Result<(), StartError> {
 
     // Decision 92: a second launch hands over to the running instance and exits inside `build`, before it logs or
     // opens anything.
-    let app = tauri::Builder::default()
+    let app = crate::protocol::register(tauri::Builder::default())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             focus_main_window(app);
         }))

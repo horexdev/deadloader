@@ -690,6 +690,7 @@ dependencies = [
 name = "deadloader"
 version = "0.1.0"
 dependencies = [
+ "deadloader-catalog",
  "deadloader-core",
  "deadloader-platform-windows",
  "serde_json",

@@ -6,6 +6,7 @@
 mod paths;
 #[cfg(test)]
 mod policy;
+mod protocol;
 mod startup;
 mod webview;
 
