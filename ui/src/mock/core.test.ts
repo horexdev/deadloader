@@ -1,6 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Card, Changed, Favourite, LibraryView, Listing, TaskSnapshot, UiEvent } from '../lib/api';
-import { Channel, favouriteOf, invoke, resetMock } from './core';
+import type {
+  Card,
+  Categories,
+  CatalogStatus,
+  Changed,
+  ConsentPrompt,
+  Favourite,
+  Granted,
+  LibraryView,
+  Listing,
+  ModPage,
+  TaskSnapshot,
+  UiEvent,
+} from '../lib/api';
+import { Channel, favouriteOf, invoke, resetMock, setCatalogScenario } from './core';
 
 beforeEach(() => {
   resetMock();
@@ -63,6 +76,57 @@ describe('the mock core (pnpm dev:mock)', () => {
     expect(await invoke<Favourite[]>('set_favourite', { favourite: fresh, on: false })).toEqual(before);
     await expect(invoke('open_link', { url: 'https://gamebanana.com/' })).resolves.toBeNull();
     await expect(invoke('open_link', { url: 'http://example.org/' })).rejects.toMatchObject({ id: 'Internal' });
+  });
+
+  it('lists categories, heroes under Skins, and pages filtered by them', async () => {
+    const roots = await invoke<Categories>('catalog_categories', { section: 'mod', parent: null });
+    expect(roots.items.map((c) => c.name)).toContain('Skins');
+    const heroes = await invoke<Categories>('catalog_categories', { section: 'mod', parent: 1 });
+    const haze = heroes.items.find((c) => c.name === 'Haze');
+    const page = await invoke<Listing>('catalog_list', {
+      query: { section: 'mod', filter: { kind: 'browse', sort: 'most_liked', category: haze?.id ?? 0 }, page: 1 },
+      byUser: true,
+    });
+    expect(page.items.length).toBeGreaterThan(0);
+    expect(page.items.every((c) => c.subcategory?.name === 'Haze')).toBe(true);
+    const sounds = await invoke<Listing>('catalog_list', {
+      query: { section: 'sound', filter: { kind: 'browse', sort: 'newest', category: null }, page: 1 },
+      byUser: true,
+    });
+    expect(sounds.items.every((c) => c.section === 'sound')).toBe(true);
+  });
+
+  it('plays the catalog scenarios', async () => {
+    const query = { section: 'mod', filter: { kind: 'browse', sort: 'newest', category: null }, page: 1 };
+    setCatalogScenario('catalog-api-changed');
+    await expect(invoke('catalog_list', { query, byUser: true })).rejects.toMatchObject({ kind: 'api_changed' });
+    expect(await invoke<CatalogStatus>('catalog_status')).toMatchObject({ kind: 'api_changed' });
+    setCatalogScenario('catalog-offline');
+    const saved = await invoke<Listing>('catalog_list', { query, byUser: true });
+    expect(saved.origin.kind).toBe('cache');
+    await expect(invoke('catalog_list', { query: { ...query, page: 3 }, byUser: true })).rejects.toMatchObject({
+      kind: 'offline',
+    });
+    setCatalogScenario('modpage-removed');
+    await expect(invoke('catalog_details', { section: 'mod', id: 700_001, listedUpdated: null })).rejects.toEqual({
+      kind: 'not_found',
+      other_game: null,
+    });
+    setCatalogScenario(null);
+    await expect(
+      invoke('catalog_list', { query: { section: 'mod', filter: { kind: 'search', text: 'a' }, page: 1 }, byUser: true }),
+    ).rejects.toEqual({ kind: 'invalid_search', problem: 'too_short' });
+  });
+
+  it('loads a description picture after consent, and remembers an allowed host', async () => {
+    const page = await invoke<ModPage>('catalog_details', { section: 'mod', id: 700_000, listedUpdated: null });
+    const image = page.description.images.find((i) => i.access === 'consent');
+    expect(image).toBeDefined();
+    const prompt = await invoke<ConsentPrompt>('catalog_consent_prompt', { id: image?.id });
+    expect(prompt).toEqual({ host: 'i.imgur.com', always_allow_prechecked: true });
+    expect(await invoke<Granted>('catalog_grant', { id: image?.id, scope: 'always' })).toEqual({ activated: [image?.id] });
+    const again = await invoke<ModPage>('catalog_details', { section: 'mod', id: 700_000, listedUpdated: null });
+    expect(again.description.images.find((i) => i.id === image?.id)?.access).toBe('load');
   });
 
   it('says which command it does not know yet', async () => {

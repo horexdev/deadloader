@@ -27,6 +27,17 @@ describe('the app state', () => {
     expect(app.network).toEqual({ kind: 'online' });
   });
 
+  it('keeps the latest catalog change and update report for the screens', () => {
+    const query = { section: 'mod' as const, filter: { kind: 'browse' as const, sort: 'newest' as const, category: null }, page: 2 };
+    app.handle({ event: 'catalog', data: { event: 'page_updated', data: query } });
+    expect(app.catalogEvent).toEqual({ event: 'page_updated', data: query });
+    app.handle({ event: 'catalog', data: { event: 'status', data: { kind: 'offline', since_unix_ms: 5 } } });
+    expect(app.catalogEvent?.event).toBe('page_updated');
+    const report = { checks: [{ mod_id: 'gb-700003', status: { kind: 'up_to_date' as const } }], available: 0, stopped: null };
+    app.handle({ event: 'updates', data: report });
+    expect(app.updates).toEqual(report);
+  });
+
   it('follows the game starting and stopping', () => {
     devtools.setGameRunning(true);
     flushSync();

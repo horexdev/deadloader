@@ -11,12 +11,14 @@ import {
   shell,
   subscribe,
   type ApplyPreview,
+  type CatalogEvent,
   type CatalogStatus,
   type GameStatus,
   type LibraryView,
   type Settings,
   type TaskSnapshot,
   type UiEvent,
+  type UpdateReport,
   type UserMessage,
 } from './api';
 
@@ -36,6 +38,10 @@ export class AppState {
   playing = $state(false);
   confirm: PlayConfirmation | null = $state(null);
   toasts: ToastData[] = $state([]);
+  /** The catalog's latest change other than its status (a page or mod page refreshed in the background). */
+  catalogEvent: Exclude<CatalogEvent, { event: 'status' }> | null = $state(null);
+  /** The latest mod update check (N3): the catalog's badges and the mod page's Update buttons read it. */
+  updates: UpdateReport | null = $state(null);
   #toastId = 0;
 
   /** Running downloads, for the sidebar. */
@@ -81,7 +87,12 @@ export class AppState {
       case 'catalog':
         if (event.data.event === 'status') {
           this.network = event.data.data;
+        } else {
+          this.catalogEvent = event.data;
         }
+        break;
+      case 'updates':
+        this.updates = event.data;
         break;
       case 'download':
         this.followDownload(event.data);
