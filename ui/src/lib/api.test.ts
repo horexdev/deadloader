@@ -153,9 +153,22 @@ describe('api', () => {
     invoke.mockResolvedValue({ checks: [], available: 0, stopped: null });
     await updates.check();
     await updates.dismiss('gb-655209', [7, 8]);
+    await updates.install('gb-655209', [{ replaced: 1, file: 2 }, { replaced: 3, file: null }]);
+    await updates.map('gb-655209', [{ old: 'gb-655209-1-0', new: null }], '2.0');
     expect(invoke.mock.calls).toEqual([
       ['updates_check', {}],
       ['updates_dismiss', { modId: 'gb-655209', fileIds: [7, 8] }],
+      [
+        'update_install',
+        {
+          modId: 'gb-655209',
+          picks: [
+            { replaced: 1, file: 2 },
+            { replaced: 3, file: null },
+          ],
+        },
+      ],
+      ['update_map', { modId: 'gb-655209', mappings: [{ old: 'gb-655209-1-0', new: null }], version: '2.0' }],
     ]);
     invoke.mockRejectedValue({ id: 'E1', args: {} });
     await expect(updates.check()).rejects.toEqual({ id: 'E1', args: {} });

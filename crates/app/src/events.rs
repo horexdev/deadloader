@@ -42,6 +42,12 @@ pub enum UiEvent {
     Catalog(deadloader_catalog::Event),
     /// A download was added, moved on, made progress or left the queue.
     Download(deadloader_downloads::Event),
+    /// An update the user picked in D5 arrived: applied, or waiting for the user to map files. `task` is the
+    /// download it came with; `None` when its files were in the library already.
+    UpdateStep {
+        task: Option<deadloader_downloads::TaskId>,
+        step: crate::backend::UpdateStep,
+    },
     /// The result of a mod update check (N3 and the badges); after the automatic check at start too.
     Updates(crate::updates::UpdateReport),
     /// A finished download is in the library (F2); with `changed` it is enabled, otherwise D4 asks for variants.

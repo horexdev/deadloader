@@ -65,6 +65,22 @@ pub struct Installed {
     pub changed: Option<Changed>,
 }
 
+/// One replaced GameBanana file after its update arrived (D5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UpdateStep {
+    /// Every old file had one clear partner: the update is in the library and, when it can be, in the game.
+    Applied { mod_id: String, changed: Changed },
+    /// Some old file has no clear partner: the user maps them (`confirm_update`); the new files wait, not enabled.
+    NeedsMapping {
+        mod_id: String,
+        replaced: u64,
+        new_files: Vec<String>,
+        proposals: Vec<deadloader_core::session::UpdateProposal>,
+        version: Option<String>,
+    },
+}
+
 /// The game was closed and what changed while it ran went into its folder (N12).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AfterGame {
@@ -218,6 +234,73 @@ impl Backend {
             None
         };
         Ok(Installed { outcome, changed })
+    }
+
+    /// A downloaded update of the GameBanana file `replaced` (D5, 169): imported without enabling it, then applied
+    /// at once when every old file has a clear partner, otherwise handed to the user.
+    pub fn install_update_file(
+        &self,
+        archive: &Path,
+        download: &deadloader_core::session::Download,
+        replaced: u64,
+    ) -> Result<UpdateStep, UserMessage> {
+        let new_files = self.with(|s| Ok(s.import_update_file(archive, download)?))?;
+        let mod_id = match download.section {
+            deadloader_core::library::Section::Mod => format!("gb-{}", download.mod_id),
+            deadloader_core::library::Section::Sound => format!("gb-sound-{}", download.mod_id),
+        };
+        self.update_with(&mod_id, replaced, new_files, download.version.clone())
+    }
+
+    /// The update's files are in the library already (downloaded before): the same as after a download.
+    pub fn update_with(
+        &self,
+        mod_id: &str,
+        replaced: u64,
+        new_files: Vec<String>,
+        version: Option<String>,
+    ) -> Result<UpdateStep, UserMessage> {
+        let proposals = self.with(|s| Ok(s.propose_update(mod_id, replaced, &new_files)?))?;
+        if !proposals
+            .iter()
+            .all(deadloader_core::session::UpdateProposal::is_settled)
+        {
+            return Ok(UpdateStep::NeedsMapping {
+                mod_id: mod_id.to_owned(),
+                replaced,
+                new_files,
+                proposals,
+                version,
+            });
+        }
+        let mappings = proposals
+            .iter()
+            .map(|p| deadloader_core::updates::Mapping {
+                old: p.old.clone(),
+                new: p.new_file().map(str::to_owned),
+            })
+            .collect();
+        let changed = self.confirm_update(mod_id, mappings, version)?;
+        Ok(UpdateStep::Applied {
+            mod_id: mod_id.to_owned(),
+            changed,
+        })
+    }
+
+    /// The user's mapping in D5, or "keep the old file" (`new: None`): applied like any edit (138).
+    pub fn confirm_update(
+        &self,
+        mod_id: &str,
+        mappings: Vec<deadloader_core::updates::Mapping>,
+        version: Option<String>,
+    ) -> Result<Changed, UserMessage> {
+        let update = deadloader_core::updates::ConfirmedUpdate {
+            mod_id: mod_id.to_owned(),
+            added: Vec::new(),
+            mappings,
+            version,
+        };
+        self.change(|s| s.apply_update(&update))
     }
 
     /// What deleting a mod (no `files`) or some of its files means, for D6.
@@ -838,6 +921,91 @@ pub(crate) mod tests {
         let changed = installed.changed.expect("enabled");
         assert!(changed.applied);
         assert!(f.addons().join("pak01_dir.vpk").exists());
+    }
+
+    fn haze(file_id: u64) -> deadloader_core::session::Download {
+        deadloader_core::session::Download {
+            section: deadloader_core::library::Section::Mod,
+            mod_id: 655_209,
+            file_id,
+            file_name: "haze.vpk".to_owned(),
+            mod_name: "Haze V2".to_owned(),
+            author: None,
+            version: Some(format!("{file_id}.0")),
+        }
+    }
+
+    #[test]
+    fn a_clear_update_is_applied_and_goes_into_the_game() {
+        let f = Fixture::new("update");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend.apply().expect("applied");
+        backend
+            .install_download(&f.mod_file("1.bin", "models/haze/body.vmdl_c"), &haze(1))
+            .expect("v1");
+        let step = backend
+            .install_update_file(&f.mod_file("2.bin", "models/haze/body.vmdl_c"), &haze(2), 1)
+            .expect("v2");
+        let UpdateStep::Applied { mod_id, changed } = step else {
+            panic!("{step:?}");
+        };
+        assert_eq!(mod_id, "gb-655209");
+        assert!(changed.applied, "138: straight into the game");
+        let library = backend.library().expect("library");
+        let active = library.mods[0].variant_groups[0].active.clone();
+        let v2 = library.mods[0]
+            .files
+            .iter()
+            .find(|x| x.version.as_deref() == Some("2.0"));
+        assert_eq!(active, v2.map(|x| x.id.clone()));
+    }
+
+    #[test]
+    fn an_unclear_update_waits_for_the_user_and_then_applies_their_mapping() {
+        let f = Fixture::new("updatemap");
+        let backend = f.backend(&FakeGame::default());
+        backend
+            .install_download(&f.mod_file("1.bin", "models/haze/body.vmdl_c"), &haze(1))
+            .expect("v1");
+        backend
+            .install_download(&f.mod_file("1b.bin", "models/haze/hands.vmdl_c"), &haze(1))
+            .expect("v1, second file");
+        let step = backend
+            .install_update_file(&f.mod_file("2.bin", "models/haze/legs.vmdl_c"), &haze(2), 1)
+            .expect("v2");
+        let UpdateStep::NeedsMapping {
+            mod_id,
+            new_files,
+            proposals,
+            ..
+        } = step
+        else {
+            panic!("{step:?}");
+        };
+        assert_eq!(proposals.len(), 2);
+        // The user maps the body to the new file and keeps the hands as they are.
+        let mappings: Vec<deadloader_core::updates::Mapping> = proposals
+            .iter()
+            .enumerate()
+            .map(|(i, p)| deadloader_core::updates::Mapping {
+                old: p.old.clone(),
+                new: (i == 0).then(|| new_files[0].clone()),
+            })
+            .collect();
+        backend
+            .confirm_update(&mod_id, mappings, Some("2.0".to_owned()))
+            .expect("confirmed");
+        let library = backend.library().expect("library");
+        let old = library.mods[0]
+            .files
+            .iter()
+            .find(|x| x.id == proposals[0].old)
+            .expect("kept");
+        assert_eq!(old.newer_in_library.as_ref(), Some(&new_files[0]));
     }
 
     #[test]

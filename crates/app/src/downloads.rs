@@ -25,6 +25,8 @@ mod meta {
     pub const MOD_NAME: &str = "mod_name";
     pub const AUTHOR: &str = "author";
     pub const VERSION: &str = "version";
+    /// The GameBanana file this download replaces (an update, D5).
+    pub const REPLACES: &str = "replaces";
 }
 
 /// The mod a file belongs to, as the UI shows it.
@@ -59,6 +61,11 @@ pub fn task_for(file: &RemoteFile, of: &ModRef) -> NewTask {
         task = task.meta(meta::VERSION, version);
     }
     task
+}
+
+/// A task for the file that replaces our GameBanana file `replaced` (an update the user picked in D5).
+pub fn update_task_for(file: &RemoteFile, of: &ModRef, replaced: u64) -> NewTask {
+    task_for(file, of).meta(meta::REPLACES, replaced.to_string())
 }
 
 /// The hook's view of a finished task; a task without our values is a mistake of deadloader.
@@ -99,6 +106,18 @@ impl CompletionHook for Install {
         let backend = self.backend.upgrade().ok_or_else(|| {
             UserMessage::new(MessageId::Internal).arg("detail", "the app is closing")
         })?;
+        if let Some(replaced) = task.meta.get(meta::REPLACES) {
+            let replaced = replaced.parse::<u64>().map_err(|_| {
+                UserMessage::new(MessageId::Internal)
+                    .arg("detail", format!("download {} replaces no file", task.id))
+            })?;
+            let step = backend.install_update_file(archive, &download, replaced)?;
+            self.outbox.send(UiEvent::UpdateStep {
+                task: Some(task.id),
+                step,
+            });
+            return Ok(());
+        }
         let installed = backend.install_download(archive, &download)?;
         self.outbox.send(UiEvent::Installed {
             task: task.id,
@@ -270,6 +289,40 @@ mod tests {
         let library = backend.library().expect("library");
         assert_eq!(library.mods[0].name, "Haze V2");
         assert!(library.mods[0].enabled);
+    }
+
+    #[test]
+    fn a_downloaded_update_replaces_the_old_file_instead_of_being_installed_beside_it() {
+        let f = Fixture::new("hookupdate");
+        let backend = Arc::new(f.backend(&FakeGame::default()));
+        let outbox = Arc::new(Outbox::new());
+        let ui = Recorder::default();
+        outbox.connect(Box::new(ui.clone()));
+        let hook = Install {
+            backend: Arc::downgrade(&backend),
+            outbox,
+        };
+        let v1 = info(&task_for(&haze_file(), &haze()));
+        hook.downloaded(&f.mod_file("1.bin", "models/haze/body.vmdl_c"), &v1)
+            .expect("v1");
+        ui.take();
+
+        let mut v2_file = haze_file();
+        v2_file.id = 1_480_400;
+        let v2 = info(&update_task_for(&v2_file, &haze(), 1_480_331));
+        hook.downloaded(&f.mod_file("2.bin", "models/haze/body.vmdl_c"), &v2)
+            .expect("v2");
+        let events = ui.take();
+        let UiEvent::UpdateStep { step, .. } = &events[0] else {
+            panic!("{events:?}");
+        };
+        assert!(
+            matches!(step, crate::backend::UpdateStep::Applied { .. }),
+            "{step:?}"
+        );
+        let library = backend.library().expect("library");
+        assert_eq!(library.mods.len(), 1);
+        assert_eq!(library.mods[0].files.len(), 2, "the old version stays (22)");
     }
 
     #[test]
