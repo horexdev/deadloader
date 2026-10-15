@@ -58,9 +58,31 @@ function fresh(): State {
   };
 }
 
+/**
+ * Preview scenarios from the address, e.g. `http://localhost:5199/?scenario=switched#/library`:
+ * `switched` (another profile selected than applied), `running` (the game runs), `local` (local mode).
+ * Screens add their own when they need a state.
+ */
+function applyScenario(s: State): State {
+  const scenario = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('scenario');
+  switch (scenario) {
+    case 'switched':
+      s.library.selected_profile = 'Evening';
+      s.library.pending = true;
+      break;
+    case 'running':
+      s.gameRunning = true;
+      break;
+    case 'local':
+      s.settings.catalog = { ...s.settings.catalog, enabled: false };
+      break;
+  }
+  return s;
+}
+
 /** Back to the first-start state (tests). */
 export function resetMock(): void {
-  state = fresh();
+  state = applyScenario(fresh());
 }
 resetMock();
 
@@ -228,6 +250,31 @@ const handlers: Record<string, (args: Args) => unknown> = {
     return null;
   },
   updates_check: () => ({ checks: [], available: 0, stopped: null }),
+  game_status: () => ({
+    running: state.gameRunning,
+    root: String.raw`D:\SteamLibrary\steamapps\common\Deadlock`,
+    installations: 2,
+  }),
+  apply_preview: () => {
+    const switched = state.library.selected_profile !== state.library.applied_profile;
+    return switched
+      ? { turned_off: state.library.mods.filter((m) => m.enabled).map((m) => m.name).slice(0, 3), turned_on: [] }
+      : { turned_off: [], turned_on: [] };
+  },
+  play: () => {
+    if (state.gameRunning) {
+      throw { id: 'E13', args: {} };
+    }
+    state.library.pending = false;
+    state.library.applied_profile = state.library.selected_profile;
+    state.gameRunning = true;
+    push({ event: 'game', data: { running: true } });
+    return { library: structuredClone(state.library), changed: true, gameinfo_foreign: false };
+  },
+  window_minimize: () => null,
+  window_toggle_maximize: () => null,
+  window_close: () => null,
+  window_start_drag: () => null,
 };
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */
@@ -240,8 +287,12 @@ export async function invoke<T>(command: string, args: Args = {}): Promise<T> {
   return handler(args) as T;
 }
 
-/** For the console while previewing: `__mock.setGameRunning(true)` shows the N4 banner path. */
+/**
+ * For the console while previewing: `__mock.setGameRunning(true)`, or any command on the instance the app uses,
+ * e.g. `await __mock.invoke('select_profile', { name: 'Evening' })` (importing the module by hand may load a copy).
+ */
 export const devtools = {
+  invoke,
   setGameRunning(running: boolean): void {
     state.gameRunning = running;
     push({ event: 'game', data: { running } });

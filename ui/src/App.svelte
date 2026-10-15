@@ -1,39 +1,25 @@
 <script lang="ts">
-  import { sidebarMode } from './lib/layout';
+  import { onMount, type Component } from 'svelte';
+  import { app } from './lib/app.svelte';
+  import { router, type Route } from './lib/router.svelte';
+  import Shell from './shell/Shell.svelte';
 
-  let width = $state(window.innerWidth);
-  const mode = $derived(sidebarMode(width));
+  // Each screen is src/screens/<route>/Screen.svelte; a route without one shows an empty area.
+  const screens = import.meta.glob<{ default: Component }>('./screens/*/Screen.svelte', { eager: true });
+
+  function screenOf(route: Route): Component | undefined {
+    return screens[`./screens/${route}/Screen.svelte`]?.default;
+  }
+
+  const Screen = $derived(screenOf(router.current));
+
+  onMount(() => {
+    void app.start();
+  });
 </script>
 
-<svelte:window bind:innerWidth={width} />
-
-<div class="shell dl-root">
-  <aside class="sidebar" data-mode={mode}></aside>
-  <main class="content"></main>
-</div>
-
-<style>
-  .shell {
-    display: flex;
-    height: 100%;
-    min-width: var(--window-min-w);
-    min-height: var(--window-min-h);
-  }
-
-  .sidebar {
-    flex: none;
-    width: var(--sidebar-w);
-    background: var(--bg-chrome);
-    border-right: 1px solid var(--line);
-  }
-
-  .sidebar[data-mode='rail'] {
-    width: var(--sidebar-rail-w);
-  }
-
-  .content {
-    flex: 1;
-    min-width: 0;
-    background: var(--bg-app);
-  }
-</style>
+<Shell {app} {router}>
+  {#if Screen}
+    <Screen />
+  {/if}
+</Shell>

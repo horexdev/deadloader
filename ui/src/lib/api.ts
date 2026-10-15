@@ -567,11 +567,19 @@ export interface ApplyPreview {
   turned_on: string[];
 }
 
+/** The sidebar's game status: the folder the selected profile uses, else the first one Steam knows. */
+export interface GameStatus {
+  running: boolean;
+  root: string | null;
+  installations: number;
+}
+
 export const shell = {
   /** Play (F4): applies the selected profile, then Steam starts Deadlock. Ask with D13 first (`applyPreview`). */
   play: () => call<ApplyResult>('play'),
   /** D13: the mods Apply or Play would take out of the game and bring into it, by name. */
   applyPreview: () => call<ApplyPreview>('apply_preview'),
+  gameStatus: () => call<GameStatus>('game_status'),
   minimize: () => call<null>('window_minimize'),
   toggleMaximize: () => call<null>('window_toggle_maximize'),
   close: () => call<null>('window_close'),

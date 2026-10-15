@@ -80,6 +80,7 @@ pub fn run() -> Result<(), StartError> {
             commands::system::subscribe,
             commands::shell::play,
             commands::shell::apply_preview,
+            commands::shell::game_status,
             commands::shell::window_minimize,
             commands::shell::window_toggle_maximize,
             commands::shell::window_close,
@@ -373,6 +374,10 @@ fn open_main_window(
         // Designed at 1280 × 800; the minimum is the design's 960 × 600.
         .inner_size(1280.0, 800.0)
         .min_inner_size(960.0, 600.0)
+        // The design's own title bar (ui/src/shell/TitleBar.svelte) replaces the system frame; the window keeps its
+        // shadow and resize borders.
+        .decorations(false)
+        .shadow(true)
         // `--bg-app`, so the window is not white before the page paints.
         .background_color(tauri::window::Color(0x14, 0x12, 0x18, 0xff))
         .additional_browser_args(&webview::browser_args())

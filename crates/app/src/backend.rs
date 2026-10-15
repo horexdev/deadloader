@@ -59,6 +59,16 @@ pub struct Changed {
     pub waiting_for_game: bool,
 }
 
+/// The game as the sidebar shows it: running or not, and the folder the selected profile goes into (153).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GameStatus {
+    pub running: bool,
+    /// The profile's game folder, else the first one Steam knows; `None`: Deadlock wasn't found.
+    pub root: Option<String>,
+    /// How many installations Steam knows: the sidebar names the drive only when there is more than one.
+    pub installations: usize,
+}
+
 /// A download put into the library (F2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Installed {
@@ -484,6 +494,20 @@ impl Backend {
                 .arg("detail", format!("Steam could not start Deadlock: {e}"))
         })?;
         Ok(applied)
+    }
+
+    /// The game status for the sidebar (`game` pushes keep `running` current).
+    pub fn game_status(&self) -> Result<GameStatus, UserMessage> {
+        let installations = self.game.installations();
+        let root = self
+            .with(|s| Ok(s.game_root()))?
+            .or_else(|| installations.first().cloned())
+            .map(|r| r.display().to_string());
+        Ok(GameStatus {
+            running: self.game.running(),
+            root,
+            installations: installations.len(),
+        })
     }
 
     /// D13: the mods Apply or Play would take out of the game and bring into it.
@@ -1064,6 +1088,33 @@ pub(crate) mod tests {
             .find(|x| x.id == proposals[0].old)
             .expect("kept");
         assert_eq!(old.newer_in_library.as_ref(), Some(&new_files[0]));
+    }
+
+    #[test]
+    fn the_game_status_names_the_folder_the_profile_uses() {
+        let f = Fixture::new("gamestatus");
+        let none = f.backend(&FakeGame::default());
+        assert_eq!(
+            none.game_status().expect("status"),
+            GameStatus {
+                running: false,
+                root: None,
+                installations: 0
+            }
+        );
+        let game = FakeGame {
+            installs: vec![f.game(), f.dir.join("Other")],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        game.running.store(true, Ordering::Relaxed);
+        let status = backend.game_status().expect("status");
+        assert!(status.running);
+        assert_eq!(status.installations, 2);
+        assert_eq!(
+            status.root.as_deref(),
+            Some(f.game().display().to_string().as_str())
+        );
     }
 
     #[test]

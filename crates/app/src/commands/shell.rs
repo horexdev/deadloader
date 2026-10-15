@@ -33,6 +33,12 @@ pub async fn apply_preview(backend: Shared<'_>) -> Reply<deadloader_core::sessio
     blocking(backend, move |b| b.apply_preview()).await
 }
 
+/// The sidebar's game status.
+#[tauri::command]
+pub async fn game_status(backend: Shared<'_>) -> Reply<crate::backend::GameStatus> {
+    blocking(backend, move |b| b.game_status()).await
+}
+
 /// The title bar's buttons: our window has no system frame (the design's title bar).
 #[tauri::command]
 pub fn window_minimize(window: tauri::WebviewWindow) {
