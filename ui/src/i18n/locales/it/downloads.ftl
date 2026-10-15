@@ -1,0 +1,106 @@
+# Downloads (S6): the queue, its totals, the session’s history, the banners and D4 (choose a variant).
+downloads-title = Download
+downloads-active = Attivi
+downloads-queued = In coda
+downloads-speed = Velocità
+downloads-per-second = { $size }/s
+downloads-limit-parallel =
+    { $count ->
+        [one] Un download alla volta
+       *[other] Fino a { $count } download alla volta
+    }
+downloads-limit-none = nessun limite di velocità
+downloads-limit-speed = al massimo { $speed }/s
+downloads-change-settings = Cambia nelle Impostazioni
+downloads-pause-all = Metti tutto in pausa
+downloads-resume-all = Riprendi tutto
+downloads-add-disk = Aggiungi dal disco
+downloads-add-title = Aggiungi mod dal disco
+downloads-add-filter = File di mod e archivi
+downloads-queue = Coda
+downloads-queue-empty = La coda è vuota. Installa una mod dal catalogo o aggiungi file dal disco.
+downloads-history = Completati in questa sessione
+downloads-history-note = Si svuota quando chiudi deadloader. Ogni download resta in Attività.
+downloads-history-empty = Ancora niente di completato in questa sessione.
+downloads-clear = Svuota
+downloads-show-in-library = Mostra nella libreria
+downloads-show-in-library-of = Mostra nella libreria: { $name }
+downloads-again = Scarica di nuovo
+downloads-again-of = Scarica di nuovo: { $file }
+downloads-pause = Pausa
+downloads-pause-of = Pausa: { $file }
+downloads-resume = Riprendi
+downloads-resume-of = Riprendi: { $file }
+downloads-cancel-of = Annulla il download di { $file }
+downloads-remove-of = Rimuovi attività: { $file }
+downloads-aside-of = Scegli più tardi: { $file }
+downloads-open-mod = Apri la pagina della mod — { $name }
+downloads-update = Aggiornamento { $version }
+downloads-update-plain = Aggiornamento
+downloads-choose = Scegli variante
+downloads-retry = Riprova
+downloads-show-details = Mostra dettagli
+downloads-remove-task = Rimuovi attività
+downloads-open-settings = Apri Impostazioni → Download
+downloads-open-mod-page = Apri la pagina della mod
+downloads-open-library = Apri libreria
+downloads-stage-downloading = Download in corso
+downloads-stage-verifying = Verifica
+downloads-stage-extracting = Estrazione
+downloads-stage-choice = In attesa della tua scelta
+downloads-stage-paused = In pausa
+downloads-stage-offline = In pausa — offline
+downloads-stage-disk = In pausa — disco pieno
+downloads-stage-retrying = In attesa di riprovare
+downloads-stage-queued = In coda
+downloads-stage-failed = Non riuscito
+downloads-progress = { $done } di { $total } · { $percent } %
+downloads-left-seconds = mancano { $seconds } s
+downloads-left-minutes = mancano { $minutes } min { $seconds } s
+downloads-left-hours = mancano { $hours } h { $minutes } min
+downloads-rate = { $speed }/s · { $left }
+downloads-verifying-note = Confronto del checksum (md5) con GameBanana
+downloads-extracting-note = Vengono tenuti solo i file .vpk
+downloads-choice-note =
+    { $count ->
+        [one] { $count } variante all’interno
+       *[other] { $count } varianti all’interno
+    }
+downloads-offline-note = Riprende da solo quando torni online
+downloads-disk-note = Attende spazio libero su { $drive }
+downloads-disk-note-plain = Attende spazio libero
+downloads-paused-note = Riprende da dove si era fermato
+downloads-held-note = Trattenuto — non parte finché non lo riprendi
+downloads-queued-next = Prossimo — parte quando si libera uno dei { $count } posti di download
+downloads-queued-ahead = { $count } prima
+downloads-queued-offline = Parte quando torni online
+downloads-retrying-note = Nuovo tentativo tra { $seconds } s
+downloads-downloaded = scaricato
+downloads-offline-title = Offline — i download sono in pausa.
+downloads-offline-why = Riprendono da soli da dove si erano fermati quando torni online. Le importazioni dal disco continuano.
+downloads-try-again = Riprova
+downloads-back-title = Di nuovo online.
+downloads-back-why = I download in pausa sono ripresi da dove si erano fermati.
+downloads-empty-title = Nessun download
+downloads-empty-text = Installa una mod dal catalogo o aggiungi file .vpk, .zip, .7z o .rar dal tuo computer. Ognuno compare qui mentre viene scaricato ed estratto. Puoi anche trascinare i file in qualsiasi punto di questa finestra.
+downloads-browse = Sfoglia il catalogo
+downloads-done-installed = Installata e attivata
+downloads-done-variant = Installata · { $variant }
+downloads-done-updated = Aggiornata a { $version }
+downloads-done-updated-plain = Aggiornata
+downloads-done-cancelled = Annullato
+downloads-done-removed = Rimosso — archivio eliminato
+downloads-done-kept = Nella libreria, non attivata
+downloads-ago-now = proprio ora
+downloads-ago-minutes = { $count } min fa
+downloads-ago-hours = { $count } h fa
+downloads-d4-title = Scegli una variante
+downloads-d4-lead = Questo archivio contiene { $count } varianti che cambiano gli stessi file del gioco, quindi solo una può essere attiva alla volta.
+downloads-d4-description = Descrizione del file su GameBanana
+downloads-d4-list = Varianti in questo archivio
+downloads-d4-list-meta = { $count } · scegline una
+downloads-d4-hint = deadloader tiene tutte e { $count } nella tua libreria e attiva quella che scegli nel profilo «{ $profile }», in cima all’ordine. Puoi cambiarla più tardi nella libreria.
+downloads-d4-install = Installa
+downloads-d4-installed = Variante «{ $variant }» · in cima al profilo «{ $profile }».
+downloads-cancel = Annulla
+downloads-close-esc = Chiudi (Esc)

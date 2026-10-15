@@ -1335,7 +1335,7 @@ where
             .links
             .into_iter()
             .map(|l| LinkView {
-                url: l.url,
+                url: to_https(l.url),
                 host: l.host,
                 internal_mod_id: l.internal_mod_id,
             })
@@ -1358,11 +1358,7 @@ where
         {
             let mut registry = lock(&self.inner.registry);
             for image in sanitized.images {
-                // The network layer speaks https only; the image hosts seen in descriptions all serve it.
-                let url = match image.url.strip_prefix("http://") {
-                    Some(rest) => format!("https://{rest}"),
-                    None => image.url,
-                };
+                let url = to_https(image.url);
                 let id = registry.register(Kind::Description, &url, &image.host, Initiator::User);
                 let host_allowed = is_allowed(&image.host);
                 let access = match registry.get_mut(&id) {
@@ -1572,5 +1568,14 @@ fn file_view(f: &RemoteFile) -> FileView {
         version: f.version.clone(),
         md5: f.md5.clone(),
         antivirus: f.antivirus.clone(),
+    }
+}
+
+/// A description's `http://` link or picture as `https://` (175, 183): the network layer and the link opener speak
+/// https only, and the hosts seen in descriptions serve it. The sanitiser has already lower-cased the scheme.
+fn to_https(url: String) -> String {
+    match url.strip_prefix("http://") {
+        Some(rest) => format!("https://{rest}"),
+        None => url,
     }
 }

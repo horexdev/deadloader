@@ -3,6 +3,7 @@
 // Release builds are GUI programs without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod activity;
 mod backend;
 mod catalog;
 mod commands;

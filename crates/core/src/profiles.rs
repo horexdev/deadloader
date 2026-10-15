@@ -167,6 +167,16 @@ pub fn rename(
             changed = true;
         }
     }
+    if let Some(key) = updated
+        .last_applied
+        .keys()
+        .find(|k| same_name(k, old))
+        .cloned()
+        && let Some(when) = updated.last_applied.remove(&key)
+    {
+        updated.last_applied.insert(new.to_owned(), when);
+        changed = true;
+    }
     if changed {
         save_manifest(&updated)?;
     }
@@ -215,6 +225,9 @@ pub fn delete(
             changed = true;
         }
     }
+    let before = updated.last_applied.len();
+    updated.last_applied.retain(|k, _| !same_name(k, &stem));
+    changed |= updated.last_applied.len() != before;
     if changed {
         save_manifest(&updated)?;
         *manifest = updated;
@@ -327,6 +340,8 @@ pub struct ImportedProfile {
     /// With what this library has; not saved yet (the caller picks a free name).
     pub profile: Profile,
     pub missing: Vec<Missing>,
+    /// How many mods the file lists (D9: "lists 8 mods; 5 are already in your library").
+    pub listed: usize,
 }
 
 /// The shareable JSON of `profile` (F14).
@@ -437,7 +452,11 @@ pub fn import(text: &str, manifest: &Manifest) -> Result<ImportedProfile, Profil
         }
         profile.entries.push(entry);
     }
-    Ok(ImportedProfile { profile, missing })
+    Ok(ImportedProfile {
+        profile,
+        missing,
+        listed: exported.mods.len(),
+    })
 }
 
 /// By GameBanana source, else by holding one of its files, else a local mod of the same name.
@@ -535,6 +554,7 @@ mod tests {
             game_root: root.into(),
             applied_profile: Some(profile.into()),
             applied: vec![],
+            ..InstallationState::default()
         });
     }
 

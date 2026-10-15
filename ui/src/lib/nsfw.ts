@@ -1,25 +1,30 @@
-// Stand-in until the Catalog screen brings D3 (the age confirmation, decision 109). It saves the NSFW mode through
-// `app` when no confirmation is needed (hidden, or the age was confirmed before) and otherwise answers "cancelled",
-// because only D3 may record the confirmation. The Catalog owner's version replaces this file.
+// Mods with content ratings (decisions 27, 78, 109): hidden by default; blurred or shown only after the user confirmed
+// legal age once (D3). The catalog's NSFW filter and Settings → Catalog both choose through `chooseNsfw`.
 
 import { api } from './api';
 import { app } from './app.svelte';
+import { prompts, saveCatalogSetting, type NsfwMode } from './prompts.svelte';
 
-export async function chooseNsfw(mode: 'hidden' | 'blurred' | 'shown'): Promise<boolean> {
-  const settings = app.settings;
-  if (!settings) {
+export type { NsfwMode };
+
+/**
+ * Applies the user's NSFW choice. The first time it goes beyond "hidden", D3 asks for the age; the confirmation is
+ * saved and logged by the core. False when the user cancels or saving failed (the current choice stays).
+ */
+export async function chooseNsfw(mode: NsfwMode): Promise<boolean> {
+  if (!app.settings) {
     return false;
   }
-  const confirmed = typeof settings.acknowledgements?.age_confirmed_at === 'string';
-  if (mode !== 'hidden' && !confirmed) {
-    return false;
+  if (mode !== 'hidden' && !app.settings.acknowledgements?.age_confirmed_at) {
+    if (!(await prompts.askAge(mode))) {
+      return false;
+    }
+    try {
+      app.settings = await api.confirmAge();
+    } catch (error) {
+      app.fail(error);
+      return false;
+    }
   }
-  const next = { ...settings, catalog: { ...settings.catalog, nsfw: mode } };
-  try {
-    app.settings = await api.updateSettings(next);
-    return true;
-  } catch (error) {
-    app.fail(error);
-    return false;
-  }
+  return saveCatalogSetting({ nsfw: mode });
 }

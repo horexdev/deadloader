@@ -9,7 +9,10 @@
   import { SIDEBAR_AUTO_COLLAPSE_PX } from '../lib/layout';
   import type { Router } from '../lib/router.svelte';
   import { formatNumber, formatTime, t } from '../i18n';
+  import ErrorHost from './ErrorHost.svelte';
   import PlayConfirm from './PlayConfirm.svelte';
+  import Prompts from '../lib/dialogs/Prompts.svelte';
+  import ProfileSwitcher from './ProfileSwitcher.svelte';
   import TitleBar from './TitleBar.svelte';
 
   interface Props {
@@ -26,6 +29,8 @@
   let width = $state(window.innerWidth);
   let height = $state(window.innerHeight);
   let overlayOpen = $state(false);
+  /** The profile button the switcher is open from. */
+  let switcher: HTMLElement | null = $state(null);
 
   const narrow = $derived(width < SIDEBAR_AUTO_COLLAPSE_PX);
   const collapsed = $derived(app.settings?.ui?.sidebar_collapsed === true);
@@ -143,15 +148,27 @@
     labels,
     libraryMeta: library ? formatNumber(library.mods.length) : undefined,
     downloads,
-    pending: { label: t('nav-pending') },
+    pending: {
+      label: library?.pending_count ? t('nav-pending-count', { count: library.pending_count }) : t('nav-pending'),
+      count: library?.pending_count ? formatNumber(library.pending_count) : undefined,
+      open: app.pendingOpen,
+    },
     profile,
     game,
     network,
     play,
     compact: height - 36 < COMPACT_RAIL_PX,
     onnavigate: navigate,
-    onpending: () => router.go('library'),
-    onprofile: () => router.go('profiles'),
+    onpending: () => {
+      app.pendingOpen = !app.pendingOpen;
+      if (app.pendingOpen && router.current !== 'library') {
+        router.go('library');
+      }
+    },
+    onprofile: (event?: MouseEvent) => {
+      const anchor = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+      switcher = switcher ? null : anchor;
+    },
     onplay: () => void app.requestPlay(),
   });
 </script>
@@ -174,6 +191,19 @@
       confirmation={app.confirm}
       onconfirm={() => void app.confirmPlay()}
       oncancel={() => (app.confirm = null)}
+    />
+  {/if}
+  <ErrorHost {app} />
+  <Prompts />
+  {#if switcher}
+    <ProfileSwitcher
+      {app}
+      anchor={switcher}
+      onclose={() => (switcher = null)}
+      onmanage={() => {
+        switcher = null;
+        router.go('profiles');
+      }}
     />
   {/if}
   <ToastStack toasts={app.toasts} dismissLabel={t('toast-dismiss')} ondismiss={(id) => app.dismiss(id)} />

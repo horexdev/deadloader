@@ -223,9 +223,13 @@ impl ToUserMessage for ProfileError {
     fn user_message(&self) -> UserMessage {
         match self {
             Self::NotAProfile => UserMessage::new(MessageId::E17).arg("reason", "not_a_profile"),
-            Self::Model(ModelError::NewerSchema { .. }) => UserMessage::new(MessageId::E17)
-                .arg("reason", "newer")
-                .detail(self),
+            Self::Model(ModelError::NewerSchema { found, supported }) => {
+                UserMessage::new(MessageId::E17)
+                    .arg("reason", "newer")
+                    .arg("found", found)
+                    .arg("supported", supported)
+                    .detail(self)
+            }
             Self::Model(ModelError::Json { .. }) => UserMessage::new(MessageId::E17)
                 .arg("reason", "not_a_profile")
                 .detail(self),
@@ -505,6 +509,11 @@ mod tests {
         assert_eq!(
             (newer.id, arg(&newer, "reason")),
             (MessageId::E17, Some("newer"))
+        );
+        // The import error names the formats: "profile format 2 — this version reads up to format 1".
+        assert_eq!(
+            (arg(&newer, "found"), arg(&newer, "supported")),
+            (Some("2"), Some("1"))
         );
         let taken = ProfileError::NameTaken("Main".into()).user_message();
         assert_eq!(
