@@ -143,14 +143,23 @@
     labels,
     libraryMeta: library ? formatNumber(library.mods.length) : undefined,
     downloads,
-    pending: { label: t('nav-pending') },
+    pending: {
+      label: library?.pending_count ? t('nav-pending-count', { count: library.pending_count }) : t('nav-pending'),
+      count: library?.pending_count ? formatNumber(library.pending_count) : undefined,
+      open: app.pendingOpen,
+    },
     profile,
     game,
     network,
     play,
     compact: height - 36 < COMPACT_RAIL_PX,
     onnavigate: navigate,
-    onpending: () => router.go('library'),
+    onpending: () => {
+      app.pendingOpen = !app.pendingOpen;
+      if (app.pendingOpen && router.current !== 'library') {
+        router.go('library');
+      }
+    },
     onprofile: () => router.go('profiles'),
     onplay: () => void app.requestPlay(),
   });
