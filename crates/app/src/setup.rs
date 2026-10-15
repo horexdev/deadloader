@@ -187,6 +187,48 @@ pub fn open(folder: &Path) -> Result<(), UserMessage> {
         .map_err(|e| from_io(&e, Area::Data).arg("path", folder.display()))
 }
 
+/// How the app started: normally, or blocked because the data folder can't be written (E1, decision 57).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Startup {
+    Ready,
+    /// deadloader can't write next to its exe: the window shows E1 and nothing else runs.
+    NoWrite {
+        /// deadloader's folder (where the exe is).
+        folder: String,
+        /// The error and the data folder, for Details.
+        detail: String,
+    },
+}
+
+impl Startup {
+    pub fn no_write(exe_dir: &Path, data_dir: &Path, error: &std::io::Error) -> Self {
+        Self::NoWrite {
+            folder: exe_dir.display().to_string(),
+            detail: format!("{error} · {}", data_dir.display()),
+        }
+    }
+}
+
+/// Where the window engine keeps its profile while E1 is shown: the data folder can't be written, so a folder of its
+/// own under the system's temporary folder, deleted again at exit. Nothing of deadloader's is ever stored there.
+pub fn blocked_webview_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("deadloader-webview-{}", std::process::id()))
+}
+
+/// Deletes a folder at exit, retrying while the window engine still holds its files.
+pub fn remove_at_exit(dir: &Path, attempts: u32, pause: std::time::Duration) -> bool {
+    for attempt in 0..attempts {
+        match std::fs::remove_dir_all(dir) {
+            Ok(()) => return true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return true,
+            Err(_) if attempt + 1 < attempts => std::thread::sleep(pause),
+            Err(_) => {}
+        }
+    }
+    false
+}
+
 /// Set when the user confirmed D8: the data folder goes when the app exits.
 #[derive(Debug, Default)]
 pub struct WipeOnExit(AtomicBool);
@@ -224,6 +266,41 @@ mod tests {
             exe: PathBuf::from(r"D:\Games\deadloader\deadloader.exe"),
             data: PathBuf::from(r"D:\Games\deadloader\deadloader-data"),
         }
+    }
+
+    #[test]
+    fn a_blocked_start_says_where_and_why() {
+        let state = Startup::no_write(
+            Path::new(r"C:\Program Files\deadloader"),
+            Path::new(r"C:\Program Files\deadloader\deadloader-data"),
+            &std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        );
+        let json = serde_json::to_value(&state).expect("json");
+        assert_eq!(json["kind"], "no_write");
+        assert_eq!(json["folder"], r"C:\Program Files\deadloader");
+        assert!(
+            json["detail"]
+                .as_str()
+                .is_some_and(|d| d.ends_with(r"C:\Program Files\deadloader\deadloader-data"))
+        );
+        assert_eq!(
+            serde_json::to_value(Startup::Ready).expect("json"),
+            serde_json::json!({"kind": "ready"})
+        );
+    }
+
+    #[test]
+    fn the_blocked_window_profile_is_a_temporary_folder_of_its_own() {
+        let dir = blocked_webview_dir();
+        assert!(dir.starts_with(std::env::temp_dir()));
+        assert!(dir.ends_with(format!("deadloader-webview-{}", std::process::id())));
+        std::fs::create_dir_all(dir.join("EBWebView")).expect("profile");
+        assert!(remove_at_exit(&dir, 2, std::time::Duration::from_millis(1)));
+        assert!(!dir.exists());
+        assert!(
+            remove_at_exit(&dir, 1, std::time::Duration::from_millis(1)),
+            "already gone"
+        );
     }
 
     #[test]
