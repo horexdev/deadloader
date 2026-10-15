@@ -170,6 +170,8 @@ pub struct Backend {
     settings_listeners: Mutex<Vec<SettingsListener>>,
     /// The last automatic apply after the game closed, until the next change (147).
     auto: Mutex<Option<AutoApplied>>,
+    /// Where a failed command is written (the app log), so its message can name the entry; known after the start.
+    error_log: std::sync::OnceLock<std::sync::Arc<dyn deadloader_catalog::AppLog>>,
     /// The pending changes undo the automatic apply of this time.
     undoing: Mutex<Option<i64>>,
     /// N6 was looked for (once per start).
@@ -258,6 +260,7 @@ impl Backend {
                 edits_waiting: AtomicUsize::new(0),
                 settings_listeners: Mutex::new(Vec::new()),
                 auto: Mutex::new(None),
+                error_log: std::sync::OnceLock::new(),
                 undoing: Mutex::new(None),
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
             },
@@ -270,9 +273,46 @@ impl Backend {
                 edits_waiting: AtomicUsize::new(0),
                 settings_listeners: Mutex::new(Vec::new()),
                 auto: Mutex::new(None),
+                error_log: std::sync::OnceLock::new(),
                 undoing: Mutex::new(None),
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
             },
+        }
+    }
+
+    /// Failed commands are written to `log` from now on.
+    pub fn log_errors_to(&self, log: std::sync::Arc<dyn deadloader_catalog::AppLog>) {
+        let _ = self.error_log.set(log);
+    }
+
+    /// A command failed: the app log gets the message (an internal error as an error, a refusal as a warning) and the
+    /// message gets the entry's id as `log_id`, so D12 can link to it in Activity. A message naming its own entry
+    /// already (E4) is left as it is.
+    pub fn reported(&self, message: UserMessage) -> UserMessage {
+        let Some(log) = self.error_log.get() else {
+            return message;
+        };
+        if message.args.contains_key("log_id") {
+            return message;
+        }
+        let level = if message.id == MessageId::Internal {
+            deadloader_core::log::Level::Error
+        } else {
+            deadloader_core::log::Level::Warn
+        };
+        let fields = serde_json::Map::from_iter([
+            (
+                "message".to_owned(),
+                serde_json::to_value(message.id).unwrap_or_default(),
+            ),
+            (
+                "args".to_owned(),
+                serde_json::to_value(&message.args).unwrap_or_default(),
+            ),
+        ]);
+        match log.write(level, "command failed", fields) {
+            Some(id) => message.arg("log_id", id),
+            None => message,
         }
     }
 
@@ -2437,6 +2477,64 @@ pub(crate) mod tests {
                 .expect_err("not a known installation")
                 .id,
             MessageId::E2
+        );
+    }
+
+    /// The app log of these tests: every line it was given, ids `app-1`, `app-2`…
+    #[derive(Default)]
+    struct Lines(std::sync::Mutex<Vec<(deadloader_core::log::Level, String, serde_json::Value)>>);
+
+    impl deadloader_catalog::AppLog for Lines {
+        fn write(
+            &self,
+            level: deadloader_core::log::Level,
+            msg: &str,
+            fields: serde_json::Map<String, serde_json::Value>,
+        ) -> Option<String> {
+            let mut lines = self.0.lock().expect("lines");
+            lines.push((level, msg.to_owned(), serde_json::Value::Object(fields)));
+            Some(format!("app-{}", lines.len()))
+        }
+    }
+
+    #[test]
+    fn a_failed_command_is_logged_and_its_message_names_the_entry() {
+        use deadloader_core::log::Level;
+        let f = Fixture::new("reported");
+        let backend = f.backend(&FakeGame::default());
+        let lines = Arc::new(Lines::default());
+        // Before the log is known (start): the message goes back as it is.
+        let early = backend.reported(UserMessage::new(MessageId::E13));
+        assert!(!early.args.contains_key("log_id"));
+
+        backend.log_errors_to(Arc::clone(&lines) as Arc<dyn deadloader_catalog::AppLog>);
+        let refused = backend.reported(UserMessage::new(MessageId::E13).arg("profile", "Evening"));
+        assert_eq!(
+            refused.args.get("log_id").map(String::as_str),
+            Some("app-1")
+        );
+        assert_eq!(
+            refused.args.get("profile").map(String::as_str),
+            Some("Evening")
+        );
+        let broken = backend.reported(UserMessage::new(MessageId::Internal).arg("detail", "boom"));
+        assert_eq!(broken.args.get("log_id").map(String::as_str), Some("app-2"));
+        // A message that names its own entry already (E4) isn't logged twice.
+        let named = UserMessage::new(MessageId::E4).arg("log_id", "net-7");
+        assert_eq!(backend.reported(named.clone()), named);
+
+        let got = lines.0.lock().expect("lines").clone();
+        assert_eq!(got.len(), 2);
+        assert_eq!(
+            (got[0].0, got[0].1.as_str()),
+            (Level::Warn, "command failed")
+        );
+        assert_eq!(got[0].2["message"], "E13");
+        assert_eq!(got[0].2["args"]["profile"], "Evening");
+        assert_eq!(
+            got[1].0,
+            Level::Error,
+            "an internal error is an error, a refusal a warning"
         );
     }
 

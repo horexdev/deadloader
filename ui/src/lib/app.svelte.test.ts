@@ -99,6 +99,17 @@ describe('the app state', () => {
     expect(app.toasts.at(-1)?.kind).toBe('error');
   });
 
+  it('opens D12 from the toast of a failure, with its log entry (155)', () => {
+    const message = { id: 'E13', args: { log_id: 'app-20261016-0912-0007' } };
+    app.fail(message);
+    const toast = app.toasts.at(-1);
+    expect(toast?.action?.label).toBe('Details');
+    expect(app.error).toBeNull();
+    toast?.action?.onclick();
+    expect(app.error?.message).toEqual(message);
+    app.closeError();
+  });
+
   it('opens D12 for an error with its actions, and closes it', () => {
     const retry = vi.fn();
     app.showError({ id: 'E9', args: { reason: 'too_large', limit: '2147483648' } }, [
