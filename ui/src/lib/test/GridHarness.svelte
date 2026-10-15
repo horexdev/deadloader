@@ -11,6 +11,8 @@
     padding?: number;
     activeIndex?: number;
     onrangechange?: (start: number, end: number) => void;
+    initialScrollTop?: number;
+    onscroll?: (top: number) => void;
   }
 
   let { count, activeIndex = $bindable(0), ...rest }: Props = $props();
