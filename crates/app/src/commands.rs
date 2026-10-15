@@ -524,6 +524,23 @@ pub enum DownloadAction {
     Cancel,
 }
 
+/// The user's Windows languages, best first (the "system" UI language, 179), and the regional format of times and
+/// numbers (178). Empty or `None` when Windows can't tell; the UI then uses English and its own defaults.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SystemLocale {
+    pub languages: Vec<String>,
+    pub region: Option<String>,
+}
+
+#[tauri::command]
+pub fn system_locale() -> SystemLocale {
+    SystemLocale {
+        languages: deadloader_platform_windows::locale::preferred_ui_languages()
+            .unwrap_or_default(),
+        region: deadloader_platform_windows::locale::regional_format().ok(),
+    }
+}
+
 /// The texts of a system file dialog, translated by the UI (no user-visible English in Rust).
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct DialogText {

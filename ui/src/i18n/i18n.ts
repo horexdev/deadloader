@@ -83,14 +83,39 @@ export function t(id: string, args?: Record<string, FluentVariable>): string {
   return formatIn(bundle, key, attr, args) ?? formatIn(fallback, key, attr, args) ?? id;
 }
 
+/** Windows' regional format (178): the clock (12 or 24 hours) and how numbers are written. Words stay in the UI language. */
+let region: string | undefined;
+let regionHourCycle: Intl.DateTimeFormatOptions['hourCycle'];
+
+/** Sets the regional format the core reported (`system_locale`); `undefined` or a tag that isn't one: the language's own. */
+export function setRegion(tag: string | undefined): void {
+  region = undefined;
+  regionHourCycle = undefined;
+  if (tag === undefined) {
+    return;
+  }
+  try {
+    const canonical = Intl.getCanonicalLocales(tag)[0];
+    if (canonical === undefined) {
+      return;
+    }
+    region = canonical;
+    regionHourCycle = new Intl.DateTimeFormat(canonical, { hour: 'numeric' }).resolvedOptions().hourCycle;
+  } catch {
+    region = undefined;
+    regionHourCycle = undefined;
+  }
+}
+
 const numberFormats = new Map<string, Intl.NumberFormat>();
 
 function numberFormat(digits?: number): Intl.NumberFormat {
-  const key = `${language()}|${digits ?? ''}`;
+  const locale = region ?? language();
+  const key = `${locale}|${digits ?? ''}`;
   let format = numberFormats.get(key);
   if (!format) {
     format = new Intl.NumberFormat(
-      language(),
+      locale,
       digits === undefined ? undefined : { minimumFractionDigits: digits, maximumFractionDigits: digits },
     );
     numberFormats.set(key, format);
@@ -114,7 +139,11 @@ export function formatSize(bytes: number): string {
 }
 
 export function formatTime(moment: Date | number): string {
-  return new Intl.DateTimeFormat(language(), { hour: 'numeric', minute: '2-digit' }).format(moment);
+  return new Intl.DateTimeFormat(language(), {
+    hour: 'numeric',
+    minute: '2-digit',
+    hourCycle: regionHourCycle,
+  }).format(moment);
 }
 
 /**

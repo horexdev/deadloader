@@ -78,6 +78,7 @@ pub fn run() -> Result<(), StartError> {
         .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::subscribe,
+            commands::system_locale,
             commands::library,
             commands::set_enabled,
             commands::move_mod,

@@ -113,6 +113,12 @@ export interface ProfileImported {
 /** settings.json as the core writes it; sections are typed where screens use them. */
 export type Settings = Record<string, Record<string, unknown>>;
 
+/** Windows' preferred UI languages (best first) and regional format, as the core reads them. */
+export interface SystemLocale {
+  languages: string[];
+  region: string | null;
+}
+
 /** The translated texts of a system file dialog. */
 export interface DialogText {
   title: string;
@@ -576,6 +582,7 @@ async function call<T>(command: string, args: Record<string, unknown> = {}): Pro
 }
 
 export const api = {
+  systemLocale: () => call<SystemLocale>('system_locale'),
   library: () => call<LibraryView>('library'),
   setEnabled: (modId: string, enabled: boolean) => call<Changed>('set_enabled', { modId, enabled }),
   moveMod: (modId: string, index: number) => call<Changed>('move_mod', { modId, index }),

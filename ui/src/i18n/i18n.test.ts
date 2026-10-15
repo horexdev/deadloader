@@ -7,6 +7,7 @@ import {
   formatTime,
   language,
   setLanguage,
+  setRegion,
   t,
 } from './i18n';
 import { LANGS } from './languages';
@@ -15,7 +16,35 @@ const NBSP = ' ';
 const MiB = 1024 * 1024;
 
 afterEach(async () => {
+  setRegion(undefined);
   await setLanguage('en', []);
+});
+
+describe('the regional format (178)', () => {
+  const twenty_past_two = new Date(2026, 9, 15, 14, 20);
+
+  it('takes the 12- or 24-hour clock from the region, and the words from the language', async () => {
+    setRegion('en-GB');
+    expect(formatTime(twenty_past_two)).toBe('14:20');
+    setRegion('en-US');
+    expect(formatTime(twenty_past_two)).toMatch(/^2:20\s?PM$/u);
+    // A Russian region with an English UI: 24 hours, but no Russian words in English text.
+    setRegion('ru-RU');
+    expect(formatTime(twenty_past_two)).toBe('14:20');
+    expect(formatDate(twenty_past_two, new Date(2026, 0, 1))).toBe('October 15');
+  });
+
+  it("writes numbers the region's way", () => {
+    setRegion('de-DE');
+    expect(formatNumber(1.5)).toBe('1,5');
+    setRegion(undefined);
+    expect(formatNumber(1.5)).toBe('1.5');
+  });
+
+  it('ignores a region that is not a locale', () => {
+    setRegion('not a locale');
+    expect(formatNumber(1.5)).toBe('1.5');
+  });
 });
 
 describe('choosing the language', () => {
