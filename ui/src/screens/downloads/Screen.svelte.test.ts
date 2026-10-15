@@ -128,6 +128,18 @@ describe('the Downloads screen (S6)', () => {
     expect(all(other, '.error button').some((b) => b.textContent?.includes('Open folder'))).toBe(false);
   });
 
+  it('cancels a download while it is verified or installed, and says so in the history', async () => {
+    const app = await start('downloads');
+    const { target } = render(Screen, { app });
+    for (const name of ['Abrams — Brass Knight', 'Wraith — Ashen Veil']) {
+      click(one(rowNamed(target, name), 'button[aria-label^="Cancel download of"]'));
+    }
+    await vi.waitFor(() => expect(calls.filter((c) => c.args.action === 'cancel')).toHaveLength(2));
+    await vi.waitFor(() => expect(app.tasks.some((t) => ['verifying', 'installing'].includes(t.state.state))).toBe(false));
+    const cancelled = app.history.filter((h) => h.outcome === 'cancelled').map((h) => h.name);
+    expect(cancelled).toEqual(expect.arrayContaining(['Abrams — Brass Knight', 'Wraith — Ashen Veil']));
+  });
+
   it('lets the user pick a variant in D4 and turns it on', async () => {
     const app = await start('downloads-choice');
     const { target } = render(Screen, { app });

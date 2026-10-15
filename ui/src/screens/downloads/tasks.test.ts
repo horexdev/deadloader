@@ -115,9 +115,11 @@ describe('what a row offers', () => {
     expect(actionsOf('choice')).toEqual({ pause: false, resume: false, cancel: true, remove: false, choose: true });
   });
 
-  it('cannot stop a download while it is checked or unpacked', () => {
-    expect(actionsOf('verifying').cancel).toBe(false);
-    expect(actionsOf('extracting').cancel).toBe(false);
+  it('cancels a download while it is checked or unpacked, but doesn’t pause it there', () => {
+    for (const stage of ['verifying', 'extracting'] as const) {
+      expect(actionsOf(stage)).toEqual({ pause: false, resume: false, cancel: true, remove: false, choose: false });
+    }
+    expect(actionsOf('done').cancel).toBe(false);
   });
 
   it('pauses downloads that wait for the network or a retry, and lets them be cancelled', () => {

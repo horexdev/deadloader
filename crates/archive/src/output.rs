@@ -24,6 +24,12 @@ pub trait Hooks {
     fn file_event(&self, event: &FileEvent<'_>) {
         let _ = event;
     }
+
+    /// Asked before every chunk is unpacked: `true` stops the extraction with [`ArchiveError::Cancelled`] and
+    /// removes what it wrote. Must be quick.
+    fn cancelled(&self) -> bool {
+        false
+    }
 }
 
 /// Free space unknown, nothing logged.
@@ -76,6 +82,8 @@ pub(crate) enum PumpError {
     /// Writing failed: the disk's fault.
     Write(io::Error),
     Limit(crate::error::LimitExceeded),
+    /// The caller cancelled ([`Hooks::cancelled`]).
+    Cancelled,
 }
 
 const CHUNK: usize = 64 * 1024;
@@ -91,6 +99,9 @@ pub(crate) fn pump(
 ) -> Result<u64, PumpError> {
     let mut copied = 0u64;
     loop {
+        if meter.cancelled() {
+            return Err(PumpError::Cancelled);
+        }
         let n = match reader.read(buf) {
             Ok(0) => return Ok(copied),
             Ok(n) => n,
@@ -199,6 +210,7 @@ impl<'h> Staging<'h> {
             },
             PumpError::Write(e) => write_error(e),
             PumpError::Limit(l) => ArchiveError::Limit(l),
+            PumpError::Cancelled => ArchiveError::Cancelled,
         })?;
         finish(file).map_err(write_error)?;
 
@@ -294,7 +306,7 @@ mod tests {
         }
     }
 
-    fn meter(total: u64) -> Meter {
+    fn meter(total: u64) -> Meter<'static> {
         let limits = Limits {
             max_total_bytes: total,
             max_total_factor: u64::MAX,

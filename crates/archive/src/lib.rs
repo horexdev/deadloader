@@ -185,7 +185,7 @@ pub(crate) struct Job<'a> {
     pub(crate) hooks: &'a dyn Hooks,
 }
 
-impl Job<'_> {
+impl<'a> Job<'a> {
     /// Checks made from the file list before anything is unpacked: VPK count, free space, output names.
     pub(crate) fn preflight(&self, entries: &[Entry]) -> Result<(), ArchiveError> {
         let vpks: Vec<&Entry> = entries.iter().filter(|e| e.is_vpk()).collect();
@@ -210,8 +210,8 @@ impl Job<'_> {
         output::ensure_free_names(self.out_dir, vpks.len())
     }
 
-    pub(crate) fn meter(&self) -> Meter {
-        Meter::new(self.limits, self.archive_size)
+    pub(crate) fn meter(&self) -> Meter<'a> {
+        Meter::new(self.limits, self.archive_size).watching(self.hooks)
     }
 
     pub(crate) fn staging(&self) -> Staging<'_> {
@@ -320,6 +320,54 @@ mod tests {
         assert!(matches!(&err, ArchiveError::Io(e) if e.kind() == io::ErrorKind::AlreadyExists));
         assert_eq!(files_under(&out), ["1.vpk"]);
         assert_eq!(std::fs::read(out.join("1.vpk")).expect("read"), b"old");
+    }
+
+    /// Asks to stop once `after` chunks were asked about.
+    struct StopAfter {
+        after: usize,
+        asked: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Hooks for StopAfter {
+        fn cancelled(&self) -> bool {
+            self.asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= self.after
+        }
+    }
+
+    #[test]
+    fn a_cancel_stops_unpacking_between_chunks_and_leaves_nothing() {
+        let dir = TempDir::new("cancel");
+        // Noise: it doesn't compress, so no limit stops it first.
+        let mut seed = 0x2545_f491_u32;
+        let big: Vec<u8> = (0..300 * 1024)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed.to_le_bytes()[0]
+            })
+            .collect();
+        let entries: [(&str, &[u8]); 2] = [("a.vpk", &big), ("b.vpk", &big)];
+        let archives = [
+            dir.file("m.zip", &zip_bytes(&entries, false)),
+            dir.file("m.7z", &test_support::seven_z_bytes(&entries, true)),
+        ];
+        for archive in archives {
+            let out = dir.path().join("out");
+            let hooks = StopAfter {
+                after: 3,
+                asked: std::sync::atomic::AtomicUsize::new(0),
+            };
+            let err =
+                extract_vpks(&archive, &out, &Limits::default(), &hooks).expect_err("cancelled");
+            assert!(matches!(err, ArchiveError::Cancelled), "{err:?}");
+            assert!(files_under(&out).is_empty(), "{archive:?}");
+            assert_eq!(
+                hooks.asked.load(std::sync::atomic::Ordering::SeqCst),
+                4,
+                "stopped at once"
+            );
+        }
     }
 
     #[test]

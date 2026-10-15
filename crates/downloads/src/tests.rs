@@ -7,8 +7,8 @@ use crate::test_support::{
     md5_hex,
 };
 use crate::{
-    CompletionHook, Config, Deps, DownloadError, Downloads, Event, NewTask, TaskId, TaskInfo,
-    TaskState, Timing,
+    Cancel, CompletionHook, Config, Deps, DownloadError, Downloads, Event, NewTask, TaskId,
+    TaskInfo, TaskState, Timing,
 };
 use deadloader_core::log::FileOp;
 use deadloader_core::message::{MessageId, UserMessage};
@@ -117,20 +117,35 @@ fn state_is(id: TaskId, name: &'static str) -> impl Fn(&[Event]) -> bool {
     }
 }
 
-/// Records every hand-off and the archive's content at that moment.
+/// Records every hand-off and the archive's content at that moment. Like the app's install, it can be held at a gate
+/// (a long extraction) and stops when a cancel was asked, unless it is past the point of no return (`commits`).
 #[derive(Default)]
 struct Hook {
     calls: Mutex<Vec<(PathBuf, TaskInfo, Vec<u8>)>>,
     fail_next: Mutex<Option<UserMessage>>,
+    hold: Mutex<Option<Arc<Gate>>>,
+    commits: std::sync::atomic::AtomicBool,
 }
 
 impl CompletionHook for Hook {
-    fn downloaded(&self, archive: &Path, task: &TaskInfo) -> Result<(), UserMessage> {
+    fn downloaded(
+        &self,
+        archive: &Path,
+        task: &TaskInfo,
+        cancel: &Cancel<'_>,
+    ) -> Result<(), UserMessage> {
         let bytes = std::fs::read(archive).expect("the archive exists during the hook");
         self.calls
             .lock()
             .expect("lock")
             .push((archive.to_owned(), task.clone(), bytes));
+        let hold = self.hold.lock().expect("lock").clone();
+        if let Some(gate) = hold {
+            gate.pass().expect("gate");
+        }
+        if cancel.requested() && !self.commits.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(UserMessage::new(MessageId::Internal).arg("detail", "cancelled"));
+        }
         match self.fail_next.lock().expect("lock").take() {
             Some(message) => Err(message),
             None => Ok(()),
@@ -820,7 +835,7 @@ fn pause_keeps_the_part_and_resume_continues_from_it() {
 }
 
 #[test]
-fn queued_tasks_can_be_paused_and_installing_ones_cannot_be_cancelled() {
+fn queued_tasks_can_be_paused_and_resumed() {
     let mut h = Harness::new("transitions");
     h.config.parallel = 1;
     h.open();
@@ -840,6 +855,98 @@ fn queued_tasks_can_be_paused_and_installing_ones_cannot_be_cancelled() {
     assert!(h.calls_to(2).is_empty(), "a paused task does not start");
     h.dl().resume(second).expect("resume");
     h.events.wait("done", removed(second));
+}
+
+#[test]
+fn an_install_can_be_cancelled_and_leaves_no_files() {
+    let mut h = Harness::new("cancelinstall");
+    h.config.keep_archives = true;
+    h.open();
+    let gate = Gate::new();
+    *h.hook.hold.lock().expect("lock") = Some(Arc::clone(&gate));
+    let id = h.add(1, &content(5000, 38));
+    h.events.wait("installing", state_is(id, "installing"));
+    h.dl()
+        .cancel(id)
+        .expect("an install that is running can be cancelled");
+    gate.open();
+    h.events.wait("removed", removed(id));
+    assert_eq!(
+        h.events.states(id),
+        ["downloading", "verifying", "installing"],
+        "neither failed nor done"
+    );
+    assert!(h.dl().tasks().is_empty());
+    assert_eq!(h.queue_json()["tasks"], serde_json::json!([]));
+    let left: Vec<_> = std::fs::read_dir(h.data())
+        .expect("dir")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n != QUEUE_FILE && !n.starts_with(QUEUE_FILE))
+        .collect();
+    assert!(
+        left.is_empty(),
+        "no archive, even with keep archives on: {left:?}"
+    );
+    assert!(h.file_ops().contains(&(
+        "deleted the archive of a cancelled install".to_owned(),
+        FileOp::Delete
+    )));
+}
+
+#[test]
+fn a_cancel_that_comes_after_the_install_committed_leaves_it_installed() {
+    let mut h = Harness::new("cancellate");
+    h.open();
+    let gate = Gate::new();
+    *h.hook.hold.lock().expect("lock") = Some(Arc::clone(&gate));
+    h.hook
+        .commits
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let id = h.add(1, &content(5000, 39));
+    h.events.wait("installing", state_is(id, "installing"));
+    h.dl().cancel(id).expect("asked");
+    gate.open();
+    h.events.wait("removed", removed(id));
+    assert_eq!(
+        h.events.states(id),
+        ["downloading", "verifying", "installing", "done"],
+        "the mod is in the library: done, honestly"
+    );
+    assert!(!h.data().join("1.zip").exists());
+}
+
+#[test]
+fn a_kept_archive_being_checked_again_can_be_cancelled() {
+    // Retry of a failed install checks the kept archive before the hook runs again.
+    let mut h = Harness::new("cancelverify");
+    h.config.parallel = 1;
+    h.open();
+    *h.hook.fail_next.lock().expect("lock") = Some(UserMessage::new(MessageId::E11));
+    let id = h.add(1, &content(5000, 40));
+    h.events.wait("failed", state_is(id, "failed"));
+    let gate = Gate::new();
+    *h.hook.hold.lock().expect("lock") = Some(Arc::clone(&gate));
+    h.dl().retry(id).expect("retry");
+    h.events.wait("installing again", |events| {
+        events
+            .iter()
+            .filter(
+                |e| matches!(e, Event::State { id: i, state: TaskState::Installing } if *i == id),
+            )
+            .count()
+            == 2
+    });
+    let states = h.events.states(id);
+    assert_eq!(
+        &states[states.len() - 3..],
+        ["downloading", "verifying", "installing"],
+        "the kept archive is shown as being verified first"
+    );
+    h.dl().cancel(id).expect("cancel");
+    gate.open();
+    h.events.wait("removed", removed(id));
+    assert!(!h.data().join("1.zip").exists());
 }
 
 #[test]

@@ -4,6 +4,7 @@
 //! them: the [`Meter`] is asked before every chunk is written and refuses the chunk that would cross a limit.
 
 use crate::error::LimitExceeded;
+use crate::output::Hooks;
 
 /// Configurable in Settings → Downloads; [`Limits::default`] is decision 127.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,13 +46,22 @@ impl Limits {
     }
 }
 
-/// Counts unpacked bytes for the whole archive.
-#[derive(Debug)]
-pub(crate) struct Meter {
+/// Counts unpacked bytes for the whole archive, and passes on a cancel from the caller's hooks.
+pub(crate) struct Meter<'h> {
     total_limit: u64,
     ratio: u64,
     ratio_floor: u64,
     total: u64,
+    hooks: Option<&'h dyn Hooks>,
+}
+
+impl std::fmt::Debug for Meter<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Meter")
+            .field("total_limit", &self.total_limit)
+            .field("total", &self.total)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What the ratio is measured on: one zip entry, or one 7z block (7z compresses blocks, not files).
@@ -70,14 +80,25 @@ impl Unit {
     }
 }
 
-impl Meter {
+impl<'h> Meter<'h> {
     pub(crate) fn new(limits: &Limits, archive_size: u64) -> Self {
         Self {
             total_limit: limits.total_for(archive_size),
             ratio: limits.max_entry_ratio,
             ratio_floor: limits.ratio_floor_bytes,
             total: 0,
+            hooks: None,
         }
+    }
+
+    /// Asks `hooks` before every chunk whether the caller cancelled.
+    pub(crate) fn watching(mut self, hooks: &'h dyn Hooks) -> Self {
+        self.hooks = Some(hooks);
+        self
+    }
+
+    pub(crate) fn cancelled(&self) -> bool {
+        self.hooks.is_some_and(Hooks::cancelled)
     }
 
     /// Accounts for `n` more unpacked bytes of `entry`, or refuses them; refused bytes must not be written.

@@ -193,7 +193,18 @@ fn fill(
         .archive_name
         .clone()
         .unwrap_or_else(|| source_name.clone());
+    // A cancel (a download the user cancelled while it was installed) is honoured until the files are made
+    // read-only; after that the caller commits them to the library.
+    let go_on = || {
+        if hooks.cancelled() {
+            Err(ImportError::Archive(ArchiveError::Cancelled))
+        } else {
+            Ok(())
+        }
+    };
+    go_on()?;
     let archive_md5 = crate::fs::md5_file(&req.source).map_err(ImportError::Io)?;
+    go_on()?;
     // A download's own name decides: the queue stores a bare `.vpk` as `<n>.bin`.
     let (vpks, skipped) = if deadloader_archive::is_vpk_name(&archive_name) {
         let output = out_dir.join("0.vpk");
@@ -224,6 +235,7 @@ fn fill(
     if vpks.is_empty() {
         return Err(ImportError::NoModFiles { skipped });
     }
+    go_on()?;
 
     let mut files = Vec::new();
     for (n, (inner, output, len, sha256)) in vpks.iter().enumerate() {
@@ -259,6 +271,7 @@ fn fill(
         }),
     }
     updated.validate().map_err(ImportError::Manifest)?;
+    go_on()?;
 
     for (_, output, _, _) in &vpks {
         let mut perm = std::fs::metadata(output)
@@ -731,6 +744,40 @@ mod tests {
         assert_eq!(report.ratio_limit, 60);
         assert!(m.mods.is_empty(), "nothing joins the library");
         assert!(!data.join("library").join("local-1").exists());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn a_cancelled_import_leaves_nothing_behind() {
+        struct Cancelled;
+        impl Hooks for Cancelled {
+            fn cancelled(&self) -> bool {
+                true
+            }
+        }
+        let dir = temp_dir("cancelled");
+        let data = dir.join("data");
+        let archive = dir.join("haze.zip");
+        zip(&archive, &[("pak01_dir.vpk", &colour(1))]);
+        let single = dir.join("haze.vpk");
+        std::fs::write(&single, colour(2)).expect("vpk");
+        for source in [archive, single] {
+            let mut m = Manifest::default();
+            let err = import(
+                &data,
+                &mut m,
+                &request(source.clone()),
+                &Limits::default(),
+                &Cancelled,
+            )
+            .expect_err("cancelled");
+            assert!(
+                matches!(err, ImportError::Archive(ArchiveError::Cancelled)),
+                "{source:?}: {err:?}"
+            );
+            assert!(m.mods.is_empty());
+            assert!(!data.join("library").join("local-1").exists(), "{source:?}");
+        }
         cleanup(&dir);
     }
 

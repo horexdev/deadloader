@@ -119,7 +119,7 @@ impl Gate {
         self.changed.notify_all();
     }
 
-    fn pass(&self) -> io::Result<()> {
+    pub(crate) fn pass(&self) -> io::Result<()> {
         let mut state = self.state.lock().expect("lock");
         loop {
             match *state {
