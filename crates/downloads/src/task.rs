@@ -91,6 +91,9 @@ pub struct NewTask {
     pub initiator: Initiator,
     /// Opaque values for the completion hook (mod id, file id, …), kept across restarts.
     pub meta: BTreeMap<String, String>,
+    /// The name to keep the archive under when `keep_archives` is on (174); made a safe, free file name. Without it
+    /// the archive keeps the queue's own `<id>.<ext>`.
+    pub keep_as: Option<String>,
 }
 
 impl NewTask {
@@ -102,7 +105,13 @@ impl NewTask {
             size: None,
             initiator: Initiator::User,
             meta: BTreeMap::new(),
+            keep_as: None,
         }
+    }
+
+    pub fn keep_as(mut self, name: impl Into<String>) -> Self {
+        self.keep_as = Some(name.into());
+        self
     }
 
     pub fn md5(mut self, hex: impl Into<String>) -> Self {

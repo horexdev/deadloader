@@ -317,6 +317,22 @@ impl<'a> Worker<'a> {
                     let path = self.archive_path.clone();
                     // The install worked; a leftover archive is swept by nothing but harms nothing either.
                     let _ = self.delete(&path, "deleted an installed download");
+                } else if let Some(wanted) = self.record.keep_as.clone() {
+                    let kept = self
+                        .shared
+                        .store()
+                        .kept_path(&wanted, &self.record.file_name);
+                    let bytes = std::fs::metadata(&self.archive_path).ok().map(|m| m.len());
+                    // A failed rename leaves the archive under its queue name: still kept, just less readable.
+                    let _ = file_op(
+                        self.shared.deps.log.as_ref(),
+                        FileOp::Rename,
+                        "kept an installed download",
+                        Some(&self.archive_path),
+                        Some(&kept),
+                        bytes,
+                        std::fs::rename(&self.archive_path, &kept),
+                    );
                 }
                 Outcome::Done
             }
