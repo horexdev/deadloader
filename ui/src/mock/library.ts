@@ -463,7 +463,7 @@ export class LibraryMock {
     this.auto = { changes, at: Date.now(), restore };
     this.undoing = null;
     this.refresh();
-    this.host.push({ event: 'applied_after_game', data: { changes: changes.length, library: structuredClone(this.host.library) } });
+    this.host.push({ event: 'applied_after_game', data: { changes: changes.length, items: changes, library: structuredClone(this.host.library) } });
   }
 
   private mod(id: unknown): ModView {

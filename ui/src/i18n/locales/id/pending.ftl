@@ -111,3 +111,11 @@ library-d5-confirm-map = Gunakan file ini
 library-update-downloading = Pembaruan { $name } sedang diunduh — akan dipasang saat tiba.
 library-updated = { $name } diperbarui.
 library-updated-text = Aktif di setiap profil yang memakai versi lama. Versi lama tetap disimpan — kamu bisa kembali lewat detail mod.
+
+## N12: the changes applied when Deadlock was closed, each in a few words
+library-n12-on = { $name } aktif
+library-n12-off = { $name } nonaktif
+library-n12-above = { $name } dipindah ke atas { $other }
+library-n12-below = { $name } dipindah ke bawah { $other }
+library-n12-switched = { $name } beralih ke { $to }
+library-n12-files = { $name }: file berubah
