@@ -1,0 +1,164 @@
+# The first-run wizard (S1), the re-shown notice, the catalog's network step (F13) and E1 "no write permission".
+wizard-progress = 设置进度
+wizard-caption-setup = 首次设置
+wizard-caption-changed = 更新的说明
+wizard-caption-catalog = 开启目录
+wizard-caption-review = 首次运行说明
+wizard-language = 语言
+wizard-step-welcome = 欢迎
+wizard-step-risks = 风险
+wizard-step-network = 网络
+wizard-step-privacy = 隐私
+wizard-step-updates = 更新
+wizard-step-setup = 设置
+wizard-step-of = 第 { $n } 步，共 6 步
+wizard-changed-of = { $count } 个步骤有变化
+wizard-meta-changed = 有变化
+wizard-meta-kept = 无变化
+wizard-back = 上一步
+wizard-next = 下一步
+wizard-finish = 完成设置
+wizard-continue = 继续
+wizard-close = 关闭
+wizard-cancel = 取消
+wizard-to-catalog = 接下来会打开目录。
+wizard-to-library = 接下来会打开你的库（本地模式）。
+
+# Step 1
+wizard-s1-title = 欢迎使用 deadloader
+wizard-s1-lead = deadloader 从 GameBanana 或你的磁盘安装 Deadlock 模组，并向你展示它做出的每一项更改。
+wizard-f1a = 它会把模组文件放进游戏的模组文件夹，并在
+wizard-f1b = 中添加一行——这是让 Deadlock 加载模组的游戏文件。
+wizard-f2 = 一切都可以撤销：回滚会从游戏中移除 deadloader 放入的所有内容。
+wizard-f3a = 它的所有数据都保存在
+wizard-f3b = 文件夹中，该文件夹位于
+wizard-f3c = {" "}旁边。
+wizard-f4 = deadloader 与 Valve 和 GameBanana 均无关联。
+wizard-f5 = 基于 GPL-3 的自由软件，不提供任何担保。
+wizard-licence = 许可证（GPL-3）
+wizard-source = 源代码
+
+# Step 2
+wizard-s2-title = 使用模组风险自负
+wizard-r1 = Valve 没有针对 Deadlock 模组的官方政策。是否使用模组由你决定，风险也由你承担。
+wizard-r2 = 游戏更新可能会让模组失效。deadloader 会在更新后重新完成设置，但模组可能要等作者更新后才能正常工作。
+wizard-r3 = 模组由其他人按各自的许可证制作。deadloader 无法为其内容担保；它会为每个文件显示 GameBanana 的病毒扫描结果。
+wizard-agree = 我了解 deadloader 会更改游戏文件，并且我使用模组风险自负。
+wizard-agree-note = 这将确认第 1 步和第 2 步。必须勾选才能继续。
+wizard-agree-error = 勾选此框以继续。
+wizard-agree-reason = 请先勾选此框。
+
+# Step 3
+wizard-s3-title = 网络和 GameBanana
+wizard-s3-lead = 目录直接与 GameBanana 的非官方 API 通信，不与其他任何地方通信。它只会连接以下主机：
+wizard-hosts = 主机
+wizard-host-api = 目录和模组页面
+wizard-host-images = 缩略图和图库
+wizard-host-files = 下载
+wizard-host-cache = 下载（files.gamebanana.com 会重定向到这里）
+wizard-host-new = 新增
+wizard-s3-images = 模组描述中来自其他主机的图片，只有在你逐个允许主机后才会加载。每个请求都会列在
+wizard-s3-images-end = 中。
+wizard-activity = 活动
+wizard-s3-tos = 使用目录就意味着使用 GameBanana：需遵守其服务条款，且 GameBanana 要求用户年满 13 岁。
+wizard-tos = GameBanana 服务条款
+wizard-choice = 你想如何开始？
+wizard-use-catalog = 使用目录
+wizard-use-catalog-text = 浏览并安装 GameBanana 上的模组。deadloader 只连接上面列出的主机。
+wizard-local = 暂不使用——本地模式
+wizard-local-text = 完全没有网络请求；只能从磁盘添加模组。你可以稍后在设置中开启目录。
+wizard-choice-error = 请选择两个选项之一。
+wizard-choice-reason = 请先选择一个选项。
+wizard-last-time = 你上次的选择
+wizard-changed-title = 变化内容（{ $date }）
+wizard-changed-foot = 你已于 { $date } 确认过其他步骤；它们没有变化。
+
+# Step 4
+wizard-s4-title = 你的隐私
+wizard-p1 = 无需账户，没有遥测。除了上一步中的 GameBanana 请求，deadloader 不会向任何地方发送任何内容。
+wizard-p1-local = 无需账户，没有遥测。你选择了本地模式，因此 deadloader 完全不会发送任何内容。
+wizard-p2a = 日志保存在这台电脑的
+wizard-p2b = 文件夹中，并会隐藏你的 Windows 用户名：
+wizard-p3 = deadloader 的窗口由 Windows 的组成部分 Microsoft WebView2 绘制。deadloader 会关闭 WebView2 自身的联网功能；Windows 会独立于 deadloader 更新 WebView2。
+wizard-p4 = 你随时可以在
+wizard-p4-end = 中查看 deadloader 做了什么。
+
+# Step 5
+wizard-s5-title = deadloader 的更新
+wizard-u1 = deadloader 可以在启动时到 GitHub 检查自己是否有新版本。
+wizard-updates-label = 启动时在 GitHub 上检查 deadloader 新版本
+wizard-updates-on = 开
+wizard-updates-off = 关（默认）
+wizard-updates-na = 本地模式下不可用
+wizard-u2a = 开启后，deadloader 每次启动时会向
+wizard-u2b = 发送一次请求，并在有新版本时告诉你。
+wizard-u3 = 更新始终是手动的：你需要自己从 GitHub 下载新版本。deadloader 绝不会自行替换自己。
+wizard-u4 = 不可用：本地模式完全不发送网络请求。在设置中开启目录后即可使用此选项。
+wizard-u5 = 你可以稍后在 设置 → 常规 中更改。
+
+# Step 6
+wizard-s6-title = 设置
+wizard-s6-lead = deadloader 查找了游戏并检查了几项内容。目前尚未做任何更改，这里的一切之后都可以在设置中修改。
+wizard-checking = 正在检查…
+wizard-topic-game = 游戏
+wizard-topic-exe = deadloader 的位置
+wizard-topic-disk = 磁盘空间
+wizard-topic-foreign = 游戏的模组文件夹
+wizard-topic-gameinfo = 用于模组的游戏文件
+wizard-game-found = 已找到 Deadlock
+wizard-game-chosen = 已选择文件夹
+wizard-change = 更改…
+wizard-game-missing = 未找到 Deadlock
+wizard-game-missing-text = 未安装 Steam 或游戏，或者游戏文件夹已被移动。请自行选择游戏文件夹——现在或稍后在 设置 → 游戏 中选择。
+wizard-browse = 浏览…
+wizard-browse-title = 选择 Deadlock 文件夹
+wizard-help = 帮助
+wizard-help-a = 在 Steam 中：右键单击 Deadlock → 管理 → 浏览本地文件。选择该文件夹；它通常以
+wizard-help-b = {" "}结尾。
+wizard-exe-ok = 位于固定的文件夹
+wizard-exe-downloads = deadloader 位于你的“下载”文件夹
+wizard-exe-desktop = deadloader 位于你的桌面
+wizard-exe-warn-a = 它的数据保存在 exe 旁边，所以清理时会删掉你的库和配置。请关闭 deadloader，把整个文件夹移到固定位置（例如
+wizard-exe-warn-b = ），然后从那里启动。
+wizard-open-folder = 打开文件夹
+wizard-opened = 已在文件资源管理器中打开
+wizard-linked = 模组以链接方式使用——不占额外磁盘空间
+wizard-linked-text = deadloader 和游戏在同一个驱动器上（{ $drive }）。
+wizard-copied = 模组将被复制，而不是链接
+wizard-copied-text = deadloader 在 { $data } 上，游戏在 { $game } 上。每个启用的模组会再占用一次相同的空间；库中会显示为“已复制——+N MB”。
+wizard-learn-more = 了解详情
+wizard-drives-more = 链接让游戏直接使用库中的文件，无需第二份副本。Windows 只能链接同一驱动器上的文件。如果 deadloader 也在 { $game } 上，就不会复制任何内容。
+wizard-foreign-none = 没有外来的模组文件
+wizard-foreign-none-text = 模组文件夹中没有 deadloader 不认识的内容。
+wizard-foreign-some = { $count } 个来自其他来源的文件
+wizard-foreign-some-text = 这些文件不是 deadloader 放的——可能来自其他模组管理器或手动安装。它会保持原样；稍后可在库中查看。
+wizard-show-files = 显示文件
+wizard-hide-files = 隐藏文件
+wizard-from-dmm = Deadlock Mod Manager
+wizard-gi-setup = 将会设置
+wizard-gi-setup-a = 首次应用模组时，deadloader 会在
+wizard-gi-setup-b = 中添加一行。现在不会更改任何内容。
+wizard-gi-ours = 已设置
+wizard-gi-ours-text = deadloader 的那一行已经存在。
+wizard-gi-foreign = 已被其他程序更改
+wizard-gi-foreign-text = 它看起来不是原始文件——通常是 Deadlock Mod Manager 造成的。deadloader 不会覆盖别人的更改，并会在设置完成后告诉你该怎么做。
+wizard-what-is = 这是什么？
+wizard-gi-more = 是告诉 Deadlock 要加载哪些文件夹的游戏文件。通常在 Steam 中验证游戏文件完整性即可修复；之后 deadloader 会添加它的那一行。
+
+# E1
+wizard-nw-title = deadloader 无法保存数据。
+wizard-nw-why-a = 以下文件所在的文件夹是只读的：
+wizard-nw-why-b = ——Windows 不允许程序写入 Program Files 等位置。
+wizard-nw-path = deadloader 的文件夹
+wizard-nw-do = 怎么办
+wizard-nw-s1 = 退出 deadloader。
+wizard-nw-s2a = 把整个文件夹移到你可以写入的位置，例如
+wizard-nw-s2b = 。不要使用 Program Files。
+wizard-nw-s3a = 从新位置启动
+wizard-nw-s3b = 即可。
+wizard-nw-why-folder = deadloader 把所有内容都放在 exe 旁边，不会散落在你的电脑各处：删除这个文件夹就能彻底移除 deadloader。
+wizard-nw-details = 详细信息
+wizard-nw-copy = 复制详细信息
+wizard-nw-copied = 已复制
+wizard-nw-no-log = 未写入日志——deadloader 无法在那里写入。
+wizard-exit = 退出

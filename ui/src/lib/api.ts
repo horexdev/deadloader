@@ -795,3 +795,12 @@ export const maintenance = {
   /** F13: the catalog on (after its network step) or off (local mode). */
   chooseCatalog: (enabled: boolean) => call<Settings>('choose_catalog', { enabled }),
 };
+
+/** How the app started (crates/app/src/setup.rs `Startup`): E1 shows instead of everything else when blocked. */
+export type Startup = { kind: 'ready' } | { kind: 'no_write'; folder: string; detail: string };
+
+export const startup = {
+  state: () => call<Startup>('startup_state'),
+  /** E1's "Open folder": the folder of deadloader.exe. */
+  openFolder: () => call<null>('blocked_open_folder'),
+};

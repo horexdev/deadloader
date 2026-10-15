@@ -1,0 +1,164 @@
+# The first-run wizard (S1), the re-shown notice, the catalog's network step (F13) and E1 "no write permission".
+wizard-progress = 설정 진행 상황
+wizard-caption-setup = 처음 설정
+wizard-caption-changed = 업데이트된 안내
+wizard-caption-catalog = 카탈로그 켜기
+wizard-caption-review = 처음 실행 안내
+wizard-language = 언어
+wizard-step-welcome = 환영합니다
+wizard-step-risks = 위험
+wizard-step-network = 네트워크
+wizard-step-privacy = 개인정보
+wizard-step-updates = 업데이트
+wizard-step-setup = 설정
+wizard-step-of = { $n }/6단계
+wizard-changed-of = 변경된 단계 { $count }개
+wizard-meta-changed = 변경됨
+wizard-meta-kept = 변경 없음
+wizard-back = 뒤로
+wizard-next = 다음
+wizard-finish = 설정 마치기
+wizard-continue = 계속
+wizard-close = 닫기
+wizard-cancel = 취소
+wizard-to-catalog = 다음으로 카탈로그가 열립니다.
+wizard-to-library = 다음으로 라이브러리가 열립니다(로컬 모드).
+
+# Step 1
+wizard-s1-title = deadloader에 오신 것을 환영합니다
+wizard-s1-lead = deadloader는 GameBanana나 디스크에서 Deadlock 모드를 설치하고, 자신이 만드는 모든 변경 사항을 보여 줍니다.
+wizard-f1a = 게임의 모드 폴더에 모드 파일을 추가하고
+wizard-f1b = 파일에 한 줄을 추가합니다. 이 게임 파일은 Deadlock이 모드를 불러오도록 알려 줍니다.
+wizard-f2 = 모두 되돌릴 수 있습니다. 롤백하면 deadloader가 게임에 넣은 것이 모두 제거됩니다.
+wizard-f3a = 모든 데이터는
+wizard-f3b = 폴더에 저장되며, 이 폴더는
+wizard-f3c = {" "}옆에 있습니다.
+wizard-f4 = deadloader는 Valve나 GameBanana와 관련이 없습니다.
+wizard-f5 = GPL-3에 따른 자유 소프트웨어이며, 어떠한 보증도 제공하지 않습니다.
+wizard-licence = 라이선스(GPL-3)
+wizard-source = 소스 코드
+
+# Step 2
+wizard-s2-title = 모드 사용의 책임은 본인에게 있습니다
+wizard-r1 = Valve는 Deadlock 모드에 대한 공식 정책이 없습니다. 모드 사용은 본인의 결정이며 위험도 본인이 집니다.
+wizard-r2 = 게임 업데이트로 모드가 작동하지 않을 수 있습니다. deadloader는 업데이트 후 다시 설정되지만, 모드는 제작자가 업데이트할 때까지 작동하지 않을 수 있습니다.
+wizard-r3 = 모드는 다른 사람들이 각자의 라이선스로 만든 것입니다. deadloader는 그 내용을 보증할 수 없으며, 파일마다 GameBanana의 바이러스 검사 결과를 보여 줍니다.
+wizard-agree = deadloader가 게임 파일을 변경한다는 것과 모드를 내 책임하에 사용한다는 것을 이해합니다.
+wizard-agree-note = 이것으로 1단계와 2단계를 확인합니다. 계속하려면 필요합니다.
+wizard-agree-error = 계속하려면 이 상자를 선택하세요.
+wizard-agree-reason = 먼저 상자를 선택하세요.
+
+# Step 3
+wizard-s3-title = 네트워크와 GameBanana
+wizard-s3-lead = 카탈로그는 GameBanana의 비공식 API와만 직접 통신하며, 다른 곳과는 통신하지 않습니다. 연결하는 호스트는 다음뿐입니다.
+wizard-hosts = 호스트
+wizard-host-api = 카탈로그와 모드 페이지
+wizard-host-images = 썸네일과 갤러리
+wizard-host-files = 다운로드
+wizard-host-cache = 다운로드(files.gamebanana.com이 이곳으로 리디렉션)
+wizard-host-new = 새 항목
+wizard-s3-images = 모드 설명에 있는 다른 호스트의 이미지는 호스트별로 허용한 뒤에만 불러옵니다. 모든 요청은
+wizard-s3-images-end = 에 표시됩니다.
+wizard-activity = 활동
+wizard-s3-tos = 카탈로그를 사용한다는 것은 GameBanana를 사용한다는 뜻입니다. GameBanana의 서비스 약관이 적용되며, GameBanana는 사용자가 13세 이상이어야 한다고 요구합니다.
+wizard-tos = GameBanana 서비스 약관
+wizard-choice = 어떻게 시작할까요?
+wizard-use-catalog = 카탈로그 사용
+wizard-use-catalog-text = GameBanana의 모드를 찾아보고 설치합니다. deadloader는 위의 호스트에만 연결합니다.
+wizard-local = 지금은 안 함 — 로컬 모드
+wizard-local-text = 네트워크 요청이 전혀 없으며, 모드는 디스크에서만 추가합니다. 카탈로그는 나중에 설정에서 켤 수 있습니다.
+wizard-choice-error = 두 가지 중 하나를 선택하세요.
+wizard-choice-reason = 먼저 하나를 선택하세요.
+wizard-last-time = 이전 선택
+wizard-changed-title = 변경 사항({ $date })
+wizard-changed-foot = 다른 단계는 { $date }에 확인했으며 변경되지 않았습니다.
+
+# Step 4
+wizard-s4-title = 개인정보
+wizard-p1 = 계정도 원격 분석도 없습니다. deadloader는 이전 단계의 GameBanana 요청 외에는 아무 데도 아무것도 보내지 않습니다.
+wizard-p1-local = 계정도 원격 분석도 없습니다. 로컬 모드를 선택했으므로 deadloader는 아무것도 보내지 않습니다.
+wizard-p2a = 로그는 이 PC의
+wizard-p2b = 폴더에 남으며, Windows 사용자 이름을 숨깁니다:
+wizard-p3 = deadloader의 창은 Windows의 일부인 Microsoft WebView2가 그립니다. deadloader는 WebView2 자체의 온라인 기능을 끄며, Windows는 deadloader와 별개로 WebView2를 업데이트합니다.
+wizard-p4 = deadloader가 한 일은 언제든
+wizard-p4-end = 에서 확인할 수 있습니다.
+
+# Step 5
+wizard-s5-title = deadloader 업데이트
+wizard-u1 = deadloader는 시작할 때 GitHub에서 자신의 새 버전이 있는지 확인할 수 있습니다.
+wizard-updates-label = 시작할 때 GitHub에서 deadloader 새 버전 확인
+wizard-updates-on = 켜짐
+wizard-updates-off = 꺼짐(기본값)
+wizard-updates-na = 로컬 모드에서는 사용할 수 없음
+wizard-u2a = 켜면 deadloader가 시작할 때마다
+wizard-u2b = 주소로 요청을 한 번 보내고, 새 버전이 있으면 알려 줍니다.
+wizard-u3 = 업데이트는 항상 수동입니다. 새 버전은 직접 GitHub에서 내려받습니다. deadloader가 스스로를 바꾸는 일은 없습니다.
+wizard-u4 = 사용할 수 없음: 로컬 모드는 네트워크 요청을 전혀 하지 않습니다. 설정에서 카탈로그를 켜면 사용할 수 있습니다.
+wizard-u5 = 나중에 설정 → 일반에서 바꿀 수 있습니다.
+
+# Step 6
+wizard-s6-title = 설정
+wizard-s6-lead = deadloader가 게임을 찾고 몇 가지를 확인했습니다. 아직 아무것도 바뀌지 않았으며, 이 모든 것은 나중에 설정에서 바꿀 수 있습니다.
+wizard-checking = 확인 중…
+wizard-topic-game = 게임
+wizard-topic-exe = deadloader 위치
+wizard-topic-disk = 디스크 공간
+wizard-topic-foreign = 게임의 모드 폴더
+wizard-topic-gameinfo = 모드용 게임 파일
+wizard-game-found = Deadlock을 찾았습니다
+wizard-game-chosen = 폴더를 선택했습니다
+wizard-change = 변경…
+wizard-game-missing = Deadlock을 찾을 수 없습니다
+wizard-game-missing-text = Steam이나 게임이 설치되지 않았거나 게임 폴더가 옮겨졌습니다. 게임 폴더를 직접 선택하세요. 지금 또는 나중에 설정 → 게임에서 선택할 수 있습니다.
+wizard-browse = 찾아보기…
+wizard-browse-title = Deadlock 폴더 선택
+wizard-help = 도움말
+wizard-help-a = Steam에서 Deadlock을 마우스 오른쪽 버튼으로 클릭 → 관리 → 로컬 파일 보기. 그 폴더를 선택하세요. 보통 경로 끝은
+wizard-help-b = {" "}입니다.
+wizard-exe-ok = 고정된 폴더에 있습니다
+wizard-exe-downloads = deadloader가 다운로드 폴더에 있습니다
+wizard-exe-desktop = deadloader가 바탕 화면에 있습니다
+wizard-exe-warn-a = 데이터가 exe 옆에 있어서 정리하다 보면 라이브러리와 프로필이 삭제될 수 있습니다. deadloader를 닫고 폴더 전체를 고정된 위치(예:
+wizard-exe-warn-b = )로 옮긴 다음 거기서 실행하세요.
+wizard-open-folder = 폴더 열기
+wizard-opened = 파일 탐색기에서 열었습니다
+wizard-linked = 모드가 링크됩니다 — 추가 디스크 공간 없음
+wizard-linked-text = deadloader와 게임이 같은 드라이브({ $drive })에 있습니다.
+wizard-copied = 모드가 링크되지 않고 복사됩니다
+wizard-copied-text = deadloader는 { $data }, 게임은 { $game }에 있습니다. 켠 모드마다 용량을 한 번 더 차지하며, 라이브러리에는 “복사됨 — +N MB”로 표시됩니다.
+wizard-learn-more = 자세히 알아보기
+wizard-drives-more = 링크를 쓰면 게임이 두 번째 사본 없이 라이브러리의 파일을 사용합니다. Windows는 같은 드라이브에 있는 파일만 링크할 수 있습니다. deadloader도 { $game }에 있으면 아무것도 복사되지 않습니다.
+wizard-foreign-none = 다른 곳에서 온 모드 파일 없음
+wizard-foreign-none-text = 모드 폴더에 deadloader가 모르는 것이 없습니다.
+wizard-foreign-some = 다른 출처의 파일 { $count }개
+wizard-foreign-some-text = deadloader가 넣은 파일이 아닙니다. 아마 다른 모드 관리자나 수동 설치일 것입니다. 그대로 두니 나중에 라이브러리에서 살펴보세요.
+wizard-show-files = 파일 보기
+wizard-hide-files = 파일 숨기기
+wizard-from-dmm = Deadlock Mod Manager
+wizard-gi-setup = 설정될 예정
+wizard-gi-setup-a = 처음 모드를 적용할 때 deadloader가
+wizard-gi-setup-b = 파일에 한 줄을 추가합니다. 지금은 아무것도 바꾸지 않습니다.
+wizard-gi-ours = 이미 설정됨
+wizard-gi-ours-text = deadloader의 줄이 이미 있습니다.
+wizard-gi-foreign = 다른 프로그램이 변경함
+wizard-gi-foreign-text = 원본처럼 보이지 않습니다. 흔히 Deadlock Mod Manager가 이렇게 합니다. deadloader는 다른 프로그램의 변경을 덮어쓰지 않으며, 설정이 끝난 뒤 해야 할 일을 설명합니다.
+wizard-what-is = 이게 뭔가요?
+wizard-gi-more = 파일은 Deadlock에 어떤 폴더를 불러올지 알려 주는 게임 파일입니다. 보통 Steam에서 게임 파일 무결성을 확인하면 해결되며, 그 뒤 deadloader가 자신의 줄을 추가합니다.
+
+# E1
+wizard-nw-title = deadloader가 데이터를 저장할 수 없습니다.
+wizard-nw-why-a = 다음 파일이 있는 폴더가 읽기 전용입니다:
+wizard-nw-why-b = — Windows는 Program Files 같은 곳에 프로그램이 쓰는 것을 허용하지 않습니다.
+wizard-nw-path = deadloader 폴더
+wizard-nw-do = 해결 방법
+wizard-nw-s1 = deadloader를 종료합니다.
+wizard-nw-s2a = 쓰기가 가능한 위치로 폴더 전체를 옮깁니다. 예:
+wizard-nw-s2b = . Program Files는 사용하지 마세요.
+wizard-nw-s3a = 새 위치에서
+wizard-nw-s3b = 파일을 실행합니다.
+wizard-nw-why-folder = deadloader는 PC 곳곳에 흩어지지 않도록 모든 것을 exe 옆에 둡니다. 폴더를 삭제하면 deadloader가 완전히 제거됩니다.
+wizard-nw-details = 세부 정보
+wizard-nw-copy = 세부 정보 복사
+wizard-nw-copied = 복사됨
+wizard-nw-no-log = 로그에 저장되지 않음 — deadloader가 그곳에 쓸 수 없습니다.
+wizard-exit = 종료

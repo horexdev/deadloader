@@ -1,0 +1,164 @@
+# The first-run wizard (S1), the re-shown notice, the catalog's network step (F13) and E1 "no write permission".
+wizard-progress = セットアップの進行状況
+wizard-caption-setup = 初回セットアップ
+wizard-caption-changed = 更新されたお知らせ
+wizard-caption-catalog = カタログをオンにする
+wizard-caption-review = 初回起動時のお知らせ
+wizard-language = 言語
+wizard-step-welcome = ようこそ
+wizard-step-risks = リスク
+wizard-step-network = ネットワーク
+wizard-step-privacy = プライバシー
+wizard-step-updates = 更新
+wizard-step-setup = セットアップ
+wizard-step-of = ステップ { $n } / 6
+wizard-changed-of = 変更されたステップ: { $count }
+wizard-meta-changed = 変更あり
+wizard-meta-kept = 変更なし
+wizard-back = 戻る
+wizard-next = 次へ
+wizard-finish = セットアップを完了
+wizard-continue = 続ける
+wizard-close = 閉じる
+wizard-cancel = キャンセル
+wizard-to-catalog = 次にカタログが開きます。
+wizard-to-library = 次にライブラリが開きます (ローカルモード)。
+
+# Step 1
+wizard-s1-title = deadloader へようこそ
+wizard-s1-lead = deadloader は GameBanana やディスクから Deadlock の Mod をインストールし、行った変更をすべて表示します。
+wizard-f1a = ゲームの Mod フォルダーに Mod ファイルを追加し、
+wizard-f1b = に 1 行を追加します。これは Deadlock に Mod を読み込ませるためのゲームファイルです。
+wizard-f2 = すべて元に戻せます: ロールバックすると deadloader がゲームに加えたものがすべて取り除かれます。
+wizard-f3a = データはすべて
+wizard-f3b = フォルダーに保存されます。このフォルダーは
+wizard-f3c = の隣にあります。
+wizard-f4 = deadloader は Valve および GameBanana とは無関係です。
+wizard-f5 = GPL-3 のフリーソフトウェアで、一切の保証はありません。
+wizard-licence = ライセンス (GPL-3)
+wizard-source = ソースコード
+
+# Step 2
+wizard-s2-title = Mod の使用は自己責任です
+wizard-r1 = Valve には Deadlock の Mod に関する公式ポリシーがありません。Mod を使うかどうかはご自身の判断と責任です。
+wizard-r2 = ゲームの更新で Mod が動かなくなることがあります。deadloader は更新後に自動で再設定しますが、作者が更新するまで Mod が動かないこともあります。
+wizard-r3 = Mod は他の人がそれぞれのライセンスで作ったものです。deadloader はその内容を保証できません。各ファイルには GameBanana のウイルス検査結果を表示します。
+wizard-agree = deadloader がゲームファイルを変更すること、そして Mod を自己責任で使うことを理解しました。
+wizard-agree-note = これでステップ 1 と 2 を確認したことになります。続行するには必須です。
+wizard-agree-error = 続行するにはこのボックスにチェックを入れてください。
+wizard-agree-reason = 先にボックスにチェックを入れてください。
+
+# Step 3
+wizard-s3-title = ネットワークと GameBanana
+wizard-s3-lead = カタログは GameBanana の非公式 API とだけ直接通信し、それ以外とは通信しません。接続するホストは次のものだけです:
+wizard-hosts = ホスト
+wizard-host-api = カタログと Mod ページ
+wizard-host-images = サムネイルとギャラリー
+wizard-host-files = ダウンロード
+wizard-host-cache = ダウンロード (files.gamebanana.com からのリダイレクト先)
+wizard-host-new = 新規
+wizard-s3-images = Mod の説明文にある他のホストの画像は、ホストごとに許可した後でのみ読み込まれます。すべてのリクエストは
+wizard-s3-images-end = に表示されます。
+wizard-activity = アクティビティ
+wizard-s3-tos = カタログを使うことは GameBanana を使うことです。GameBanana の利用規約が適用され、GameBanana の利用には 13 歳以上であることが必要です。
+wizard-tos = GameBanana 利用規約
+wizard-choice = どのように始めますか?
+wizard-use-catalog = カタログを使う
+wizard-use-catalog-text = GameBanana の Mod を閲覧してインストールします。deadloader は上のホストにだけ接続します。
+wizard-local = 今はしない — ローカルモード
+wizard-local-text = ネットワークリクエストは一切ありません。Mod はディスクからのみ追加します。カタログは後で設定からオンにできます。
+wizard-choice-error = 2 つのうちどちらかを選んでください。
+wizard-choice-reason = 先にどちらかを選んでください。
+wizard-last-time = 前回の選択
+wizard-changed-title = 変更点 ({ $date })
+wizard-changed-foot = ほかのステップは { $date } に確認済みで、変更はありません。
+
+# Step 4
+wizard-s4-title = プライバシー
+wizard-p1 = アカウントもテレメトリもありません。deadloader は前のステップの GameBanana へのリクエスト以外、どこにも何も送信しません。
+wizard-p1-local = アカウントもテレメトリもありません。ローカルモードを選んだので、deadloader は何も送信しません。
+wizard-p2a = ログはこの PC の
+wizard-p2b = フォルダーに残り、Windows のユーザー名は隠されます:
+wizard-p3 = deadloader のウィンドウは Windows の一部である Microsoft WebView2 が描画します。deadloader は WebView2 自身のオンライン機能をオフにします。WebView2 は deadloader とは別に Windows が更新します。
+wizard-p4 = deadloader が何をしたかは、いつでも
+wizard-p4-end = で確認できます。
+
+# Step 5
+wizard-s5-title = deadloader の更新
+wizard-u1 = deadloader は起動時に、自身の新しいバージョンがあるかを GitHub で確認できます。
+wizard-updates-label = 起動時に GitHub で deadloader の新しいバージョンを確認する
+wizard-updates-on = オン
+wizard-updates-off = オフ (既定)
+wizard-updates-na = ローカルモードでは使えません
+wizard-u2a = オンにすると、deadloader は起動のたびに
+wizard-u2b = へ 1 回リクエストを送り、新しいバージョンがあればお知らせします。
+wizard-u3 = 更新は常に手動です。新しいバージョンはご自身で GitHub からダウンロードします。deadloader が自分自身を置き換えることはありません。
+wizard-u4 = 使えません: ローカルモードではネットワークリクエストを一切行いません。設定でカタログをオンにすると使えるようになります。
+wizard-u5 = 後で 設定 → 一般 で変更できます。
+
+# Step 6
+wizard-s6-title = セットアップ
+wizard-s6-lead = deadloader がゲームを探し、いくつか確認しました。まだ何も変更しておらず、ここにあるものは後で設定からすべて変更できます。
+wizard-checking = 確認しています…
+wizard-topic-game = ゲーム
+wizard-topic-exe = deadloader の場所
+wizard-topic-disk = ディスク容量
+wizard-topic-foreign = ゲームの Mod フォルダー
+wizard-topic-gameinfo = Mod 用のゲームファイル
+wizard-game-found = Deadlock が見つかりました
+wizard-game-chosen = フォルダーを選びました
+wizard-change = 変更…
+wizard-game-missing = Deadlock が見つかりません
+wizard-game-missing-text = Steam またはゲームがインストールされていないか、ゲームフォルダーが移動されています。ゲームフォルダーをご自身で選んでください。今でも、後で 設定 → ゲーム からでも選べます。
+wizard-browse = 参照…
+wizard-browse-title = Deadlock のフォルダーを選ぶ
+wizard-help = ヘルプ
+wizard-help-a = Steam で Deadlock を右クリック → 管理 → ローカルファイルを閲覧。そのフォルダーを選んでください。通常、末尾は
+wizard-help-b = {" "}です。
+wizard-exe-ok = 固定のフォルダーにあります
+wizard-exe-downloads = deadloader がダウンロードフォルダーにあります
+wizard-exe-desktop = deadloader がデスクトップにあります
+wizard-exe-warn-a = データは exe の隣にあるため、整理するとライブラリとプロファイルが消えてしまいます。deadloader を閉じ、フォルダーごと固定の場所 (例:
+wizard-exe-warn-b = ) に移して、そこから起動してください。
+wizard-open-folder = フォルダーを開く
+wizard-opened = エクスプローラーで開きました
+wizard-linked = Mod はリンクされます — 追加のディスク容量は不要です
+wizard-linked-text = deadloader とゲームは同じドライブ ({ $drive }) にあります。
+wizard-copied = Mod はリンクではなくコピーされます
+wizard-copied-text = deadloader は { $data }、ゲームは { $game } にあります。有効にした Mod はそれぞれもう一度容量を使います。ライブラリでは「コピー — +N MB」と表示されます。
+wizard-learn-more = 詳しく
+wizard-drives-more = リンクを使うと、ゲームは 2 つ目のコピーなしでライブラリのファイルを使えます。Windows は同じドライブ上のファイルしかリンクできません。deadloader も { $game } に置けば、何もコピーされません。
+wizard-foreign-none = 外部の Mod ファイルはありません
+wizard-foreign-none-text = Mod フォルダーには deadloader の知らないものはありません。
+wizard-foreign-some = 別のソースからのファイル: { $count } 個
+wizard-foreign-some-text = deadloader が置いたものではありません。おそらく別の Mod マネージャーか手動インストールです。そのままにしておくので、後でライブラリで確認してください。
+wizard-show-files = ファイルを表示
+wizard-hide-files = ファイルを隠す
+wizard-from-dmm = Deadlock Mod Manager
+wizard-gi-setup = これから設定されます
+wizard-gi-setup-a = 最初に Mod を適用するとき、deadloader は
+wizard-gi-setup-b = に 1 行を追加します。今は何も変更しません。
+wizard-gi-ours = 設定済み
+wizard-gi-ours-text = deadloader の行はすでにあります。
+wizard-gi-foreign = 別のプログラムが変更しました
+wizard-gi-foreign-text = 元の状態に見えません。Deadlock Mod Manager によることがよくあります。deadloader は他者の変更を上書きせず、セットアップ後にどうすればよいか説明します。
+wizard-what-is = これは何?
+wizard-gi-more = は、Deadlock にどのフォルダーを読み込むかを伝えるゲームファイルです。通常は Steam でゲームファイルの整合性を確認すれば直り、その後 deadloader が自分の行を追加します。
+
+# E1
+wizard-nw-title = deadloader がデータを保存できません。
+wizard-nw-why-a = 次のファイルがあるフォルダーは読み取り専用です:
+wizard-nw-why-b = — Windows は、Program Files などの中にプログラムが書き込むことを許可していません。
+wizard-nw-path = deadloader のフォルダー
+wizard-nw-do = 対処方法
+wizard-nw-s1 = deadloader を終了します。
+wizard-nw-s2a = 書き込みできる場所にフォルダーごと移します。例:
+wizard-nw-s2b = 。Program Files は使わないでください。
+wizard-nw-s3a = 新しい場所から
+wizard-nw-s3b = を起動します。
+wizard-nw-why-folder = deadloader は PC のあちこちに散らばらないよう、すべてを exe の隣に保存します。フォルダーを削除すれば deadloader は完全に削除されます。
+wizard-nw-details = 詳細
+wizard-nw-copy = 詳細をコピー
+wizard-nw-copied = コピーしました
+wizard-nw-no-log = ログには保存されていません — deadloader はそこに書き込めません。
+wizard-exit = 終了

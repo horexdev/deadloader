@@ -1,0 +1,164 @@
+# The first-run wizard (S1), the re-shown notice, the catalog's network step (F13) and E1 "no write permission".
+wizard-progress = Kemajuan penyiapan
+wizard-caption-setup = Penyiapan pertama
+wizard-caption-changed = Pemberitahuan diperbarui
+wizard-caption-catalog = Nyalakan katalog
+wizard-caption-review = Pemberitahuan awal
+wizard-language = Bahasa
+wizard-step-welcome = Selamat datang
+wizard-step-risks = Risiko
+wizard-step-network = Jaringan
+wizard-step-privacy = Privasi
+wizard-step-updates = Pembaruan
+wizard-step-setup = Penyiapan
+wizard-step-of = Langkah { $n } dari 6
+wizard-changed-of = { $count } langkah berubah
+wizard-meta-changed = Berubah
+wizard-meta-kept = Tidak berubah
+wizard-back = Kembali
+wizard-next = Berikutnya
+wizard-finish = Selesaikan penyiapan
+wizard-continue = Lanjutkan
+wizard-close = Tutup
+wizard-cancel = Batal
+wizard-to-catalog = Setelah ini katalog terbuka.
+wizard-to-library = Setelah ini pustaka Anda terbuka (mode lokal).
+
+# Step 1
+wizard-s1-title = Selamat datang di deadloader
+wizard-s1-lead = deadloader memasang mod Deadlock dari GameBanana atau dari disk Anda dan menunjukkan setiap perubahan yang dibuatnya.
+wizard-f1a = deadloader menambahkan file mod ke folder mod game dan satu baris ke
+wizard-f1b = — file game yang memberi tahu Deadlock untuk memuat mod.
+wizard-f2 = Semuanya bisa dibatalkan: pengembalian menghapus dari game semua yang ditaruh deadloader.
+wizard-f3a = Semua datanya tetap di folder
+wizard-f3b = di samping
+wizard-f3c = .
+wizard-f4 = deadloader tidak berafiliasi dengan Valve atau GameBanana.
+wizard-f5 = Perangkat lunak bebas di bawah GPL-3, tanpa jaminan apa pun.
+wizard-licence = Lisensi (GPL-3)
+wizard-source = Kode sumber
+
+# Step 2
+wizard-s2-title = Mod adalah risiko Anda sendiri
+wizard-r1 = Valve tidak punya kebijakan resmi tentang mod untuk Deadlock. Memakai mod adalah keputusan dan risiko Anda.
+wizard-r2 = Pembaruan game bisa merusak mod. deadloader menyiapkan diri lagi setelah pembaruan, tetapi sebuah mod mungkin tidak berfungsi sampai pembuatnya memperbaruinya.
+wizard-r3 = Mod dibuat oleh orang lain dengan lisensi mereka sendiri. deadloader tidak dapat menjamin isinya; untuk setiap file, deadloader menampilkan hasil antivirus GameBanana.
+wizard-agree = Saya mengerti bahwa deadloader mengubah file game dan bahwa saya memakai mod dengan risiko sendiri.
+wizard-agree-note = Ini mengonfirmasi langkah 1 dan 2. Wajib untuk melanjutkan.
+wizard-agree-error = Centang kotak ini untuk melanjutkan.
+wizard-agree-reason = Centang kotaknya dulu.
+
+# Step 3
+wizard-s3-title = Jaringan dan GameBanana
+wizard-s3-lead = Katalog berbicara langsung dengan API tidak resmi GameBanana — dan tidak dengan pihak lain. Hanya host ini yang dihubunginya:
+wizard-hosts = Host
+wizard-host-api = katalog dan halaman mod
+wizard-host-images = gambar mini dan galeri
+wizard-host-files = unduhan
+wizard-host-cache = unduhan (files.gamebanana.com mengalihkan ke sana)
+wizard-host-new = Baru
+wizard-s3-images = Gambar dari host lain dalam deskripsi mod baru dimuat setelah Anda mengizinkan tiap host. Setiap permintaan tercantum di
+wizard-s3-images-end = .
+wizard-activity = Aktivitas
+wizard-s3-tos = Memakai katalog berarti memakai GameBanana: Ketentuan Layanan mereka berlaku, dan GameBanana mewajibkan pengguna berusia 13 tahun atau lebih.
+wizard-tos = Ketentuan Layanan GameBanana
+wizard-choice = Bagaimana Anda ingin memulai?
+wizard-use-catalog = Gunakan katalog
+wizard-use-catalog-text = Jelajahi dan pasang mod dari GameBanana. deadloader hanya terhubung ke host di atas.
+wizard-local = Nanti saja — mode lokal
+wizard-local-text = Tanpa permintaan jaringan sama sekali; mod hanya dari disk. Anda bisa menyalakan katalog nanti di Pengaturan.
+wizard-choice-error = Pilih salah satu dari dua opsi.
+wizard-choice-reason = Pilih opsi dulu.
+wizard-last-time = Pilihan Anda sebelumnya
+wizard-changed-title = Yang berubah ({ $date })
+wizard-changed-foot = Anda sudah mengonfirmasi langkah lainnya pada { $date }; langkah itu tidak berubah.
+
+# Step 4
+wizard-s4-title = Privasi Anda
+wizard-p1 = Tanpa akun dan tanpa telemetri. deadloader tidak mengirim apa pun ke mana pun selain permintaan GameBanana dari langkah sebelumnya.
+wizard-p1-local = Tanpa akun dan tanpa telemetri. Anda memilih mode lokal, jadi deadloader sama sekali tidak mengirim apa pun.
+wizard-p2a = Log tetap di PC ini, di folder
+wizard-p2b = — dan menyembunyikan nama pengguna Windows Anda:
+wizard-p3 = Jendela deadloader digambar oleh Microsoft WebView2, bagian dari Windows. deadloader mematikan fitur online milik WebView2; Windows memperbarui WebView2 secara terpisah dari deadloader.
+wizard-p4 = Anda selalu bisa melihat apa yang dilakukan deadloader di
+wizard-p4-end = .
+
+# Step 5
+wizard-s5-title = Pembaruan deadloader
+wizard-u1 = Saat dimulai, deadloader bisa memeriksa GitHub apakah ada versi dirinya yang lebih baru.
+wizard-updates-label = Periksa versi baru deadloader di GitHub saat mulai
+wizard-updates-on = Aktif
+wizard-updates-off = Nonaktif (bawaan)
+wizard-updates-na = Tidak tersedia dalam mode lokal
+wizard-u2a = Jika aktif, deadloader mengirim satu permintaan ke
+wizard-u2b = setiap kali dimulai dan memberi tahu Anda jika ada versi baru.
+wizard-u3 = Pembaruan selalu manual: Anda sendiri yang mengunduh versi baru dari GitHub. deadloader tidak pernah mengganti dirinya sendiri.
+wizard-u4 = Tidak tersedia: mode lokal sama sekali tidak membuat permintaan jaringan. Opsi ini tersedia setelah Anda menyalakan katalog di Pengaturan.
+wizard-u5 = Anda bisa mengubahnya nanti di Pengaturan → Umum.
+
+# Step 6
+wizard-s6-title = Penyiapan
+wizard-s6-lead = deadloader mencari game dan memeriksa beberapa hal. Belum ada yang diubah, dan Anda bisa mengubah semua ini nanti di Pengaturan.
+wizard-checking = Memeriksa…
+wizard-topic-game = Game
+wizard-topic-exe = Lokasi deadloader
+wizard-topic-disk = Ruang disk
+wizard-topic-foreign = Folder mod game
+wizard-topic-gameinfo = File game untuk mod
+wizard-game-found = Deadlock ditemukan
+wizard-game-chosen = Folder dipilih
+wizard-change = Ubah…
+wizard-game-missing = Deadlock tidak ditemukan
+wizard-game-missing-text = Steam atau game belum terpasang, atau folder game telah dipindahkan. Pilih sendiri folder game — sekarang atau nanti di Pengaturan → Game.
+wizard-browse = Telusuri…
+wizard-browse-title = Pilih folder Deadlock
+wizard-help = Bantuan
+wizard-help-a = Di Steam: klik kanan Deadlock → Kelola → Telusuri file lokal. Pilih folder itu; biasanya berakhiran
+wizard-help-b = .
+wizard-exe-ok = Di folder permanen
+wizard-exe-downloads = deadloader ada di folder Unduhan Anda
+wizard-exe-desktop = deadloader ada di Desktop Anda
+wizard-exe-warn-a = Datanya ada di samping exe, jadi bersih-bersih akan menghapus pustaka dan profil Anda. Tutup deadloader, pindahkan seluruh foldernya ke tempat permanen, misalnya
+wizard-exe-warn-b = , lalu jalankan dari sana.
+wizard-open-folder = Buka folder
+wizard-opened = Dibuka di File Explorer
+wizard-linked = Mod ditautkan — tanpa ruang disk tambahan
+wizard-linked-text = deadloader dan game ada di drive yang sama ({ $drive }).
+wizard-copied = Mod akan disalin, bukan ditautkan
+wizard-copied-text = deadloader ada di { $data } dan game di { $game }. Setiap mod yang diaktifkan memakai ruangnya untuk kedua kali; pustaka menampilkannya sebagai “disalin — +N MB”.
+wizard-learn-more = Pelajari lebih lanjut
+wizard-drives-more = Tautan membuat game memakai file pustaka tanpa salinan kedua. Windows hanya dapat menautkan file pada drive yang sama. Jika deadloader juga ada di { $game }, tidak ada yang disalin.
+wizard-foreign-none = Tidak ada file mod asing
+wizard-foreign-none-text = Folder mod tidak berisi apa pun yang tidak dikenal deadloader.
+wizard-foreign-some = { $count } file dari sumber lain
+wizard-foreign-some-text = Bukan deadloader yang menaruhnya di sana — mungkin pengelola mod lain atau pemasangan manual. deadloader membiarkannya apa adanya; tinjau nanti di Pustaka.
+wizard-show-files = Tampilkan file
+wizard-hide-files = Sembunyikan file
+wizard-from-dmm = Deadlock Mod Manager
+wizard-gi-setup = Akan disiapkan
+wizard-gi-setup-a = deadloader menambahkan satu baris ke
+wizard-gi-setup-b = saat Anda pertama kali menerapkan mod. Sekarang tidak ada yang diubah.
+wizard-gi-ours = Sudah disiapkan
+wizard-gi-ours-text = Baris deadloader sudah ada.
+wizard-gi-foreign = Diubah oleh program lain
+wizard-gi-foreign-text = File ini tidak tampak seperti aslinya — sering kali ulah Deadlock Mod Manager. deadloader tidak menimpa perubahan pihak lain dan akan menjelaskan langkahnya setelah penyiapan.
+wizard-what-is = Apa ini?
+wizard-gi-more = adalah file game yang memberi tahu Deadlock folder mana yang dimuat. Biasanya ini diperbaiki dengan memverifikasi file game di Steam; lalu deadloader menambahkan barisnya.
+
+# E1
+wizard-nw-title = deadloader tidak dapat menyimpan datanya.
+wizard-nw-why-a = Folder di samping
+wizard-nw-why-b = hanya-baca: Windows tidak mengizinkan program menulis di sana (misalnya di dalam Program Files).
+wizard-nw-path = Folder deadloader
+wizard-nw-do = Yang perlu dilakukan
+wizard-nw-s1 = Keluar dari deadloader.
+wizard-nw-s2a = Pindahkan seluruh folder ke tempat yang bisa Anda tulisi, misalnya
+wizard-nw-s2b = . Jangan gunakan Program Files.
+wizard-nw-s3a = Jalankan
+wizard-nw-s3b = dari tempat baru.
+wizard-nw-why-folder = deadloader menyimpan semuanya di samping exe agar tidak ada yang tersebar di PC Anda: menghapus foldernya menghapus deadloader sepenuhnya.
+wizard-nw-details = Detail
+wizard-nw-copy = Salin detail
+wizard-nw-copied = Disalin
+wizard-nw-no-log = Tidak disimpan ke log — deadloader tidak dapat menulis di sana.
+wizard-exit = Keluar

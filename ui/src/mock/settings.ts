@@ -2,6 +2,7 @@
 // the address: `wizard`, `wizard-changed`, `wizard-setup-issues`, `wizard-no-write`, `settings-local`,
 // `settings-advanced-error` (the boards SettingsScreen.dc.html and Wizard.dc.html).
 
+import { NOTICE } from '../lib/notice.svelte';
 import type {
   About,
   CacheUsage,
@@ -103,8 +104,30 @@ function stamp(): string {
   return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}`;
 }
 
+/**
+ * `wizard-changed`: a notice version 2 whose network step changed, so the re-shown notice can be previewed. The real
+ * notice has no change yet; this one exists only in the preview.
+ */
+function previewNoticeChange(): void {
+  if (NOTICE.changes.some((c) => c.version === 2)) {
+    return;
+  }
+  NOTICE.version = 2;
+  NOTICE.changes.push({
+    version: 2,
+    date: '2026-10-14',
+    steps: ['network'],
+    hosts: ['filecacheNN.gamebanana.com'],
+    text: () =>
+      'deadloader now also connects to filecacheNN.gamebanana.com: files.gamebanana.com redirects downloads there. Nothing else changed.',
+  });
+}
+
 export function settingsHandlers(shared: Shared): Record<string, (args: Record<string, unknown>) => unknown> {
   const state = freshState(shared);
+  if (shared.scenario() === 'wizard-changed') {
+    previewNoticeChange();
+  }
   const scenario = () => shared.scenario();
   const selectedRoot = () => state.installations.find((i) => i.selected)?.game_root ?? null;
 
@@ -217,6 +240,15 @@ export function settingsHandlers(shared: Shared): Record<string, (args: Record<s
       shared.setSettings(s);
       return structuredClone(s);
     },
+    startup_state: () =>
+      shared.scenario() === 'wizard-no-write'
+        ? {
+            kind: 'no_write',
+            folder: String.raw`C:\Program Files\deadloader`,
+            detail: String.raw`Access is denied. (os error 5) · C:\Program Files\deadloader\deadloader-data`,
+          }
+        : { kind: 'ready' },
+    blocked_open_folder: () => null,
     open_folder: () => null,
     // A stand-in until the Catalog screen brings its own (D1).
     open_link: () => null,
@@ -262,7 +294,8 @@ export function settingsHandlers(shared: Shared): Record<string, (args: Record<s
     delete_all_data: () => [],
     setup_check: (): SetupCheck => {
       const issues = scenario() === 'wizard-setup-issues';
-      const root = issues ? null : selectedRoot();
+      // With issues Steam knows no installation, until one is chosen with Browse.
+      const root = selectedRoot();
       return {
         game_root: root,
         installations: state.installations.length,
