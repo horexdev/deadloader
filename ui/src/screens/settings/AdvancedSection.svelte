@@ -1,6 +1,7 @@
 <!-- Settings → Advanced: the settings and manifest files as text (50, 156: checked before saving, never saved when
      invalid, a dated backup each time) and the additional allowed domains (53). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import CircleX from '@lucide/svelte/icons/circle-x';
   import Plus from '@lucide/svelte/icons/plus';
@@ -159,7 +160,7 @@
       {#if folder}<span class="st-meta st-pathline"><PathTooltip path={`${folder}\\${name}`} /></span>{/if}
     </div>
     <p class="st-row__help st-row__full">
-      {file === 'settings' ? t('settings-file-settings-lead') : t('settings-file-manifest-lead')}
+      <Text value={file === 'settings' ? t('settings-file-settings-lead') : t('settings-file-manifest-lead')} />
     </p>
     <div class="dl-field st-row__full">
       <label class="dl-visually-hidden" for="st-json">{name}</label>
@@ -184,7 +185,7 @@
                 ><CircleX class="dl-icon" /><span
                   ><strong>{t('settings-json-error')}</strong>
                   {t('settings-json-where', { line: error.line, column: error.column })}
-                  {t('settings-json-fix')}</span
+                  <Text value={t('settings-json-fix')} /></span
                 ></span
               >
               <div class="st-excerpt" aria-hidden="true">
@@ -204,16 +205,16 @@
             {:else if error.kind === 'newer_schema'}
               <span class="dl-field__error"
                 ><CircleX class="dl-icon" /><span
-                  >{t('settings-json-newer', { found: error.found, supported: error.supported })}</span
+                  ><Text value={t('settings-json-newer', { found: error.found, supported: error.supported })} /></span
                 ></span
               >
             {:else if error.kind === 'invalid'}
-              <span class="dl-field__error"><CircleX class="dl-icon" /><span>{t('settings-json-invalid')}</span></span>
+              <span class="dl-field__error"><CircleX class="dl-icon" /><span><Text value={t('settings-json-invalid')} /></span></span>
               <div class="dl-dialog__details">
                 <span>{t('settings-json-details')}</span><span class="dl-mono">{error.detail}</span>
               </div>
             {:else}
-              <span class="dl-field__error"><CircleX class="dl-icon" /><span>{t('settings-json-invalid')}</span></span>
+              <span class="dl-field__error"><CircleX class="dl-icon" /><span><Text value={t('settings-json-invalid')} /></span></span>
             {/if}
           </div>
         {:else if saved[file] !== undefined}

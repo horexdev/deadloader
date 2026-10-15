@@ -14,3 +14,8 @@ body {
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
+
+/* The product name inside UI text (decision 193): set apart by colour only. */
+.dl-brand {
+  color: var(--accent-text);
+}

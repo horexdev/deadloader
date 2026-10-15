@@ -2,6 +2,7 @@
      GameBanana has; download those (catalog on) or import without them. Either way the profile is selected, not
      applied (F14). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import Download from '@lucide/svelte/icons/download';
   import HardDrive from '@lucide/svelte/icons/hard-drive';
@@ -79,7 +80,7 @@
     {/each}
   </div>
   {#if !catalogOn}
-    <p class="pf-note local-mode" role="note"><Unplug class="dl-icon" /><span>{t('profiles-d9-local-mode')}</span></p>
+    <p class="pf-note local-mode" role="note"><Unplug class="dl-icon" /><span><Text value={t('profiles-d9-local-mode')} /></span></p>
   {/if}
   <p>{t('profiles-d9-after', { name: imported.name })}</p>
   {#snippet footer()}

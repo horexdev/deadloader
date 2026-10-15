@@ -1,6 +1,7 @@
 <!-- One row of the queue (board Downloads): the mod, its stage, the progress bar and the lines under it, an inline
      error for a failed task (155), and the row's actions. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
   import CircleDot from '@lucide/svelte/icons/circle-dot';
@@ -162,8 +163,8 @@
     </div>
     {#if failure}
       <div class="error">
-        <span><strong>{failure.what}</strong> {failure.why}</span>
-        {#if failure.todo}<span class="todo">{failure.todo}</span>{/if}
+        <span><strong><Text value={failure.what} /></strong> <Text value={failure.why} /></span>
+        {#if failure.todo}<span class="todo"><Text value={failure.todo} /></span>{/if}
         <div class="error-actions">
           <Button size="sm" icon={RefreshCw} label={t('downloads-retry')} onclick={onretry} />
           {#if keepsArchive}

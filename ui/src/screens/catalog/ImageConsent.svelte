@@ -2,6 +2,7 @@
      from, that the request shows in Activity, and "always allow images from this host" (checked by default, a
      setting). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import ImageIcon from '@lucide/svelte/icons/image';
   import Button from '../../lib/components/Button.svelte';
   import Checkbox from '../../lib/components/Checkbox.svelte';
@@ -23,7 +24,7 @@
 </script>
 
 <Dialog title={t('catalog-image-title')} icon={ImageIcon} size="md" oncancel={() => onanswer(null)}>
-  <p>{t('catalog-image-body-before')} <b class="dl-mono host">{host}</b>{t('catalog-image-body-after')}</p>
+  <p><Text value={t('catalog-image-body-before')} /> <b class="dl-mono host">{host}</b>{t('catalog-image-body-after')}</p>
   <div class="dl-url"><b>{host}</b></div>
   <p class="note">{t('catalog-image-note')}</p>
   <Checkbox label={t('catalog-image-always')} bind:checked={always} />

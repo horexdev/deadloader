@@ -1,6 +1,7 @@
 <!-- Settings → Network: parallel API requests, timeouts, retries, proxy (182). In local mode a banner says these apply
      once the catalog is on. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import CircleX from '@lucide/svelte/icons/circle-x';
   import Unplug from '@lucide/svelte/icons/unplug';
   import Banner from '../../lib/components/Banner.svelte';
@@ -228,7 +229,7 @@
             oncommit={(text) => void saveManual(manual.host, text)}
           />
         </div>
-        <p class="dl-field__hint" id="st-proxy-hint">{proxyError ? t('settings-proxy-invalid') : t('settings-proxy-hint')}</p>
+        <p class="dl-field__hint" id="st-proxy-hint"><Text value={proxyError ? t('settings-proxy-invalid') : t('settings-proxy-hint')} /></p>
       {/if}
     {/snippet}
   </Row>

@@ -1,5 +1,6 @@
 <!-- E9 in D12 (board DownloadsD12): why deadloader stops, and each safety limit with what the archive measured. -->
 <script lang="ts">
+  import Text from '../lib/components/Text.svelte';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import CircleX from '@lucide/svelte/icons/circle-x';
   import type { LimitRow } from './limits';
@@ -12,7 +13,7 @@
   const { rows }: Props = $props();
 </script>
 
-<p>{t('errors-limits-why')}</p>
+<p><Text value={t('errors-limits-why')} /></p>
 <table class="limits">
   <thead>
     <tr>

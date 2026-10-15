@@ -2,6 +2,7 @@
      each, what was blocked, and today's changes in the game folder. Two columns when there is room, one line each in
      the compact form (narrow windows, low heights). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import Folder from '@lucide/svelte/icons/folder';
@@ -86,7 +87,7 @@
     {#if hasHosts}<div class="act-mono act-sum__hosts">{hostsLine}</div>{/if}
     <div class="act-sum__head">
       <Folder class="dl-icon" />
-      <strong>{t('activity-game-today')}</strong><span {@attach tooltip({ text: gameBreak ?? '' })}>{gameLine}</span>
+      <strong>{t('activity-game-today')}</strong><span {@attach tooltip({ text: gameBreak ?? '' })}><Text value={gameLine} /></span>
       {#if game.changes > 0}
         <button type="button" class="act-linkbtn" onclick={onfiles}>{t('activity-show-in-files')}</button>
       {/if}
@@ -126,14 +127,14 @@
       {:else}
         <div class="act-only">
           <CircleCheck class="dl-icon act-ok-icon" />
-          <span><strong>{noHostsWhat}</strong> {noHostsWhy}</span>
+          <span><strong><Text value={noHostsWhat} /></strong> <Text value={noHostsWhy} /></span>
         </div>
       {/if}
     </div>
     <div class="act-sum__col">
       <div class="act-sum__head">
         <Folder class="dl-icon" />
-        <strong>{t('activity-game-today')}</strong><span>{gameLine}</span>
+        <strong>{t('activity-game-today')}</strong><span><Text value={gameLine} /></span>
       </div>
       {#if game.changes > 0}
         {#if gameBreak}<span class="act-sum__break">{gameBreak}</span>{/if}
@@ -143,7 +144,7 @@
         </div>
         {#if game.folders.length > 1}<span class="act-sum__none">{formatList(game.folders.slice(1))}</span>{/if}
       {:else}
-        <span class="act-sum__none">{t('activity-no-game-changes')}</span>
+        <span class="act-sum__none"><Text value={t('activity-no-game-changes')} /></span>
       {/if}
     </div>
   </section>

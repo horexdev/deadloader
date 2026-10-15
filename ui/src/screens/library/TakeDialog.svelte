@@ -1,6 +1,7 @@
 <!-- D11 Take a foreign file under management (decision 16, F9): what will happen — copied into the library as a local
      mod, the original replaced by deadloader's own linked copy, enabled at the bottom of the profile — and its name. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import File from '@lucide/svelte/icons/file';
   import type { ForeignItem } from '../../lib/api';
   import { Button, Dialog, TextInput } from '../../lib/components';
@@ -26,7 +27,7 @@
 </script>
 
 <Dialog title={t('library-d11-title', { name: item.name })} icon={File} {oncancel}>
-  <p>{t('library-d11-lead')}</p>
+  <p><Text value={t('library-d11-lead')} /></p>
   <ol class="steps">
     <li>{t('library-d11-step-copy', { size: formatSize(item.bytes) })}</li>
     <li>{t('library-d11-step-replace')}</li>

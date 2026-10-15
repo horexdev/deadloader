@@ -2,6 +2,7 @@
      the installed ones (picked by name and size before anything is downloaded), Install / Later. When an update
      arrived without a clear partner for every old file, the same dialog asks the user to map them. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
   import Download from '@lucide/svelte/icons/download';
@@ -91,7 +92,7 @@
   </div>
 
   {#if status}
-    <p>{changedSet ? t('library-d5-changed') : t('library-d5-same')}</p>
+    <p><Text value={changedSet ? t('library-d5-changed') : t('library-d5-same')} /></p>
     <div class="table" role="table" aria-label={t('library-d5-map-label')}>
       <div class="row header" role="row">
         <span role="columnheader">{t('library-d5-col-old')}</span><span></span><span role="columnheader">{t('library-d5-col-new')}</span>
@@ -131,7 +132,7 @@
     </div>
     <p class="caption">{t('library-d5-profiles', { old: modVersion(mod) ?? '', new: newVersion ?? '' })}</p>
   {:else if step}
-    <p>{t('library-d5-map-text')}</p>
+    <p><Text value={t('library-d5-map-text')} /></p>
     <div class="table" role="table" aria-label={t('library-d5-map-label')}>
       <div class="row header" role="row">
         <span role="columnheader">{t('library-d5-col-old')}</span><span></span><span role="columnheader">{t('library-d5-col-new')}</span>

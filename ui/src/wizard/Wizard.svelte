@@ -2,6 +2,7 @@
      acknowledgement, the catalog / local-mode choice (108), the update check (157) and the setup checks. The same
      frame shows the re-shown notice with "what changed", the catalog's network step (F13) and "Read it again". -->
 <script lang="ts">
+  import Text from '../lib/components/Text.svelte';
   import AppWindow from '@lucide/svelte/icons/app-window';
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
   import Check from '@lucide/svelte/icons/check';
@@ -266,8 +267,8 @@
             <div class="wz-stepof">{stepOf}</div>
 
             {#if step === 'welcome'}
-              <h1 class="wz-title" id="wz-title">{t('wizard-s1-title')}</h1>
-              <p>{t('wizard-s1-lead')}</p>
+              <h1 class="wz-title" id="wz-title"><Text value={t('wizard-s1-title')} /></h1>
+              <p><Text value={t('wizard-s1-lead')} /></p>
               <ul class="wz-facts">
                 <li>
                   <Package class="dl-icon" /><span
@@ -281,7 +282,7 @@
                     {t('wizard-f3b')} <span class="wz-code">deadloader.exe</span>{t('wizard-f3c')}</span
                   >
                 </li>
-                <li><Info class="dl-icon" /><span>{t('wizard-f4')}</span></li>
+                <li><Info class="dl-icon" /><span><Text value={t('wizard-f4')} /></span></li>
                 <li><CodeXml class="dl-icon" /><span>{t('wizard-f5')}</span></li>
               </ul>
               <div class="wz-links">
@@ -296,8 +297,8 @@
               <h1 class="wz-title" id="wz-title">{t('wizard-s2-title')}</h1>
               <ul class="wz-facts">
                 <li><Info class="dl-icon" /><span>{t('wizard-r1')}</span></li>
-                <li><TriangleAlert class="dl-icon" /><span>{t('wizard-r2')}</span></li>
-                <li><ShieldCheck class="dl-icon" /><span>{t('wizard-r3')}</span></li>
+                <li><TriangleAlert class="dl-icon" /><span><Text value={t('wizard-r2')} /></span></li>
+                <li><ShieldCheck class="dl-icon" /><span><Text value={t('wizard-r3')} /></span></li>
               </ul>
               <div class="wz-consent">
                 <label class="dl-check">
@@ -311,7 +312,7 @@
                     onchange={() => (agreeError = false)}
                   />
                   <span class="dl-check__box"><Check class="dl-icon dl-check__tick" /></span>
-                  <span>{t('wizard-agree')}</span>
+                  <span><Text value={t('wizard-agree')} /></span>
                 </label>
                 <span class="wz-consent__note" id="wz-agree-note">{t('wizard-agree-note')}</span>
                 {#if agreeError && !agreed}
@@ -368,7 +369,7 @@
                     }}
                   /><span class="dl-variant__dot"></span>
                   <span class="wz-opt__title"><LayoutGrid class="dl-icon" />{t('wizard-use-catalog')}</span>
-                  <span class="wz-opt__text">{t('wizard-use-catalog-text')}</span>
+                  <span class="wz-opt__text"><Text value={t('wizard-use-catalog-text')} /></span>
                   {#if mode.kind === 'changed' && mode.previous.catalog === 'catalog'}
                     <span class="dl-badge dl-badge--outline wz-opt__tag">{t('wizard-last-time')}</span>
                   {/if}
@@ -401,21 +402,21 @@
             {:else if step === 'privacy'}
               <h1 class="wz-title" id="wz-title">{t('wizard-s4-title')}</h1>
               <ul class="wz-facts">
-                <li><UserX class="dl-icon" /><span>{local ? t('wizard-p1-local') : t('wizard-p1')}</span></li>
+                <li><UserX class="dl-icon" /><span><Text value={local ? t('wizard-p1-local') : t('wizard-p1')} /></span></li>
                 <li>
                   <FileText class="dl-icon" /><span
                     >{t('wizard-p2a')} <span class="wz-code">deadloader-data</span>
                     {t('wizard-p2b')} <span class="wz-code">C:\Users\…\</span></span
                   >
                 </li>
-                <li><AppWindow class="dl-icon" /><span>{t('wizard-p3')}</span></li>
+                <li><AppWindow class="dl-icon" /><span><Text value={t('wizard-p3')} /></span></li>
               </ul>
               <p class="wz-small">
-                {t('wizard-p4')} <strong class="wz-activity">{t('wizard-activity')}</strong>{t('wizard-p4-end')}
+                <Text value={t('wizard-p4')} /> <strong class="wz-activity">{t('wizard-activity')}</strong>{t('wizard-p4-end')}
               </p>
             {:else if step === 'updates'}
-              <h1 class="wz-title" id="wz-title">{t('wizard-s5-title')}</h1>
-              <p>{t('wizard-u1')}</p>
+              <h1 class="wz-title" id="wz-title"><Text value={t('wizard-s5-title')} /></h1>
+              <p><Text value={t('wizard-u1')} /></p>
               <div class="wz-consent">
                 <label class="dl-switch wz-upd">
                   <input
@@ -429,25 +430,25 @@
                   />
                   <span class="dl-switch__track"><span class="dl-switch__thumb"></span></span>
                   <span
-                    >{t('wizard-updates-label')}<span class="wz-upd__state" id="wz-upd-state"
+                    ><Text value={t('wizard-updates-label')} /><span class="wz-upd__state" id="wz-upd-state"
                       >{local ? t('wizard-updates-na') : updates ? t('wizard-updates-on') : t('wizard-updates-off')}</span
                     ></span
                   >
                 </label>
                 <span class="wz-upd__text" id="wz-upd-text"
-                  >{t('wizard-u2a')} <span class="wz-code">api.github.com</span> {t('wizard-u2b')}</span
+                  ><Text value={t('wizard-u2a')} /> <span class="wz-code">api.github.com</span> {t('wizard-u2b')}</span
                 >
                 {#if local}
                   <span class="wz-note wz-upd__note"><Info class="dl-icon wz-info" />{t('wizard-u4')}</span>
                 {/if}
               </div>
               <ul class="wz-facts">
-                <li><CircleArrowUp class="dl-icon" /><span>{t('wizard-u3')}</span></li>
+                <li><CircleArrowUp class="dl-icon" /><span><Text value={t('wizard-u3')} /></span></li>
                 <li><Info class="dl-icon" /><span>{t('wizard-u5')}</span></li>
               </ul>
             {:else}
               <h1 class="wz-title" id="wz-title">{t('wizard-s6-title')}</h1>
-              <p>{t('wizard-s6-lead')}</p>
+              <p><Text value={t('wizard-s6-lead')} /></p>
               <SetupStep {app} {review} />
             {/if}
           </div>

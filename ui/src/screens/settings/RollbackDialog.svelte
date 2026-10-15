@@ -1,6 +1,7 @@
 <!-- D7 Rollback (F11, decision 20): what leaves the selected profile's game folder, what stays, and the unchecked
      option to delete foreign files too. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import Check from '@lucide/svelte/icons/check';
   import CircleMinus from '@lucide/svelte/icons/circle-minus';
   import Minus from '@lucide/svelte/icons/minus';
@@ -49,7 +50,7 @@
   {oncancel}
 >
   <div class="st-meta st-pathline st-pathline--wrap">
-    {t('settings-d7-from', { profile: preview.selected_profile, others: otherProfiles.length > 0 ? formatList(otherProfiles) : 0 })}
+    <Text value={t('settings-d7-from', { profile: preview.selected_profile, others: otherProfiles.length > 0 ? formatList(otherProfiles) : 0 })} />
     <PathTooltip path={preview.game_root} />
   </div>
   <ul class="st-impact">
@@ -92,11 +93,11 @@
       <input class="dl-check__input" type="checkbox" bind:checked={removeForeign} disabled={busy} />
       <span class="dl-check__box"><Check class="dl-icon dl-check__tick" /><Minus class="dl-icon dl-check__dash" /></span>
       <span class="st-step">
-        <span class="st-mono-ink">{t('settings-d7-foreign', { count: foreignCount })}</span>
+        <span class="st-mono-ink"><Text value={t('settings-d7-foreign', { count: foreignCount })} /></span>
         <span class="st-meta"
           >{#each preview.foreign as file, i (file.name)}{i > 0 ? ', ' : ''}<span class="dl-mono"
               >{file.name}</span
-            >{/each} — {t('settings-d7-foreign-why')}</span
+            >{/each} — <Text value={t('settings-d7-foreign-why')} /></span
         >
       </span>
     </label>

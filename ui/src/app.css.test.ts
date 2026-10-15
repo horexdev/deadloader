@@ -21,3 +21,11 @@ describe('the window frame', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('the product name in texts', () => {
+  it('is set apart in the accent text colour, nothing more (decision 193)', () => {
+    const rule = /\.dl-brand\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/color:\s*var\(--accent-text\)/);
+    expect(rule).not.toMatch(/font-weight|background|gradient/);
+  });
+});

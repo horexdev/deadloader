@@ -1,6 +1,7 @@
 <!-- "Finished this session" (board Downloads): what left the queue since deadloader started, newest first. New lines
      fade in; the list is cleared when deadloader closes. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import Ban from '@lucide/svelte/icons/ban';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -34,7 +35,7 @@
       <Button variant="ghost" size="sm" class="clear" label={t('downloads-clear')} onclick={onclear} />
     {/if}
   </div>
-  <p class="note">{t('downloads-history-note')}</p>
+  <p class="note"><Text value={t('downloads-history-note')} /></p>
   {#if entries.length === 0}
     <p class="empty">{t('downloads-history-empty')}</p>
   {/if}

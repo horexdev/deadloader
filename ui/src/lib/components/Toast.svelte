@@ -1,6 +1,7 @@
 <!-- Toast (design: Toast.md): reports something that just happened without blocking. Neutral, success and info toasts
      leave after 6 s; warnings and errors stay until dismissed. The timer pauses while the toast is hovered or focused. -->
 <script lang="ts">
+  import Text from './Text.svelte';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import CircleX from '@lucide/svelte/icons/circle-x';
   import Info from '@lucide/svelte/icons/info';
@@ -124,8 +125,8 @@
 >
   <Icon class="dl-icon dl-icon--md dl-toast__icon" />
   <div class="dl-toast__body">
-    <div class="dl-toast__title">{title}</div>
-    {#if text}<div class="dl-toast__text">{file ? `${text} ` : text}{#if file}<span class="dl-mono file">{file}</span>{/if}</div>{/if}
+    <div class="dl-toast__title"><Text value={title} /></div>
+    {#if text}<div class="dl-toast__text"><Text value={file ? `${text} ` : text} />{#if file}<span class="dl-mono file">{file}</span>{/if}</div>{/if}
     {#if action || details}
       <div class="dl-toast__actions">
         {#if action}<Button size="sm" label={action.label} icon={action.icon} onclick={action.onclick} />{/if}
