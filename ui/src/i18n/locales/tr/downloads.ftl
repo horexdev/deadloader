@@ -1,0 +1,106 @@
+# Downloads (S6): the queue, its totals, the session’s history, the banners and D4 (choose a variant).
+downloads-title = İndirmeler
+downloads-active = Etkin
+downloads-queued = Sırada
+downloads-speed = Hız
+downloads-per-second = { $size }/sn
+downloads-limit-parallel =
+    { $count ->
+        [one] Aynı anda en fazla { $count } indirme
+       *[other] Aynı anda en fazla { $count } indirme
+    }
+downloads-limit-none = hız sınırı yok
+downloads-limit-speed = en fazla { $speed }/sn
+downloads-change-settings = Ayarlar’da değiştir
+downloads-pause-all = Tümünü duraklat
+downloads-resume-all = Tümünü sürdür
+downloads-add-disk = Diskten ekle
+downloads-add-title = Diskten mod ekle
+downloads-add-filter = Mod dosyaları ve arşivler
+downloads-queue = Sıra
+downloads-queue-empty = Sıra boş. Katalogdan bir mod yükleyin veya diskten dosya ekleyin.
+downloads-history = Bu oturumda bitenler
+downloads-history-note = deadloader kapatılınca temizlenir. Her indirme Etkinlik’te kalır.
+downloads-history-empty = Bu oturumda henüz bir şey bitmedi.
+downloads-clear = Temizle
+downloads-show-in-library = Kütüphanede göster
+downloads-show-in-library-of = Kütüphanede göster: { $name }
+downloads-again = Yeniden indir
+downloads-again-of = Yeniden indir: { $file }
+downloads-pause = Duraklat
+downloads-pause-of = Duraklat: { $file }
+downloads-resume = Sürdür
+downloads-resume-of = Sürdür: { $file }
+downloads-cancel-of = { $file } indirmesini iptal et
+downloads-remove-of = Görevi kaldır: { $file }
+downloads-aside-of = Sonra seç: { $file }
+downloads-open-mod = Mod sayfasını aç — { $name }
+downloads-update = Güncelleme { $version }
+downloads-update-plain = Güncelleme
+downloads-choose = Varyant seç
+downloads-retry = Yeniden dene
+downloads-show-details = Ayrıntıları göster
+downloads-remove-task = Görevi kaldır
+downloads-open-settings = Ayarlar → İndirmeler’i aç
+downloads-open-mod-page = Mod sayfasını aç
+downloads-open-library = Kütüphaneyi aç
+downloads-stage-downloading = İndiriliyor
+downloads-stage-verifying = Doğrulanıyor
+downloads-stage-extracting = Çıkarılıyor
+downloads-stage-choice = Seçiminizi bekliyor
+downloads-stage-paused = Duraklatıldı
+downloads-stage-offline = Duraklatıldı — çevrimdışı
+downloads-stage-disk = Duraklatıldı — disk dolu
+downloads-stage-retrying = Yeniden denemeyi bekliyor
+downloads-stage-queued = Sırada
+downloads-stage-failed = Başarısız
+downloads-progress = { $done } / { $total } · %{ $percent }
+downloads-left-seconds = { $seconds } sn kaldı
+downloads-left-minutes = { $minutes } dk { $seconds } sn kaldı
+downloads-left-hours = { $hours } sa { $minutes } dk kaldı
+downloads-rate = { $speed }/sn · { $left }
+downloads-verifying-note = Sağlama toplamı (md5) GameBanana ile karşılaştırılıyor
+downloads-extracting-note = Yalnızca .vpk dosyaları tutulur
+downloads-choice-note =
+    { $count ->
+        [one] İçinde { $count } varyant
+       *[other] İçinde { $count } varyant
+    }
+downloads-offline-note = Yeniden çevrimiçi olunca kendiliğinden sürer
+downloads-disk-note = { $drive } sürücüsünde boş alan bekliyor
+downloads-disk-note-plain = Boş alan bekliyor
+downloads-paused-note = Kaldığı yerden devam eder
+downloads-held-note = Bekletiliyor — siz sürdürene kadar başlamaz
+downloads-queued-next = Sıradaki — { $count } indirme yuvasından biri boşalınca başlar
+downloads-queued-ahead = Önünde { $count } var
+downloads-queued-offline = Yeniden çevrimiçi olunca başlar
+downloads-retrying-note = { $seconds } sn sonra yeniden denenecek
+downloads-downloaded = indirildi
+downloads-offline-title = Çevrimdışı — indirmeler duraklatıldı.
+downloads-offline-why = Yeniden çevrimiçi olduğunuzda kaldıkları yerden kendiliğinden sürerler. Diskten içe aktarmalar devam eder.
+downloads-try-again = Yeniden dene
+downloads-back-title = Yeniden çevrimiçi.
+downloads-back-why = Duraklatılan indirmeler kaldıkları yerden sürdü.
+downloads-empty-title = İndirme yok
+downloads-empty-text = Katalogdan bir mod yükleyin veya bilgisayarınızdan .vpk, .zip, .7z ya da .rar dosyaları ekleyin. Her biri indirilip açılırken burada görünür. Dosyaları bu pencerenin herhangi bir yerine de bırakabilirsiniz.
+downloads-browse = Kataloğa göz at
+downloads-done-installed = Yüklendi ve etkinleştirildi
+downloads-done-variant = Yüklendi · { $variant }
+downloads-done-updated = { $version } sürümüne güncellendi
+downloads-done-updated-plain = Güncellendi
+downloads-done-cancelled = İptal edildi
+downloads-done-removed = Kaldırıldı — arşiv silindi
+downloads-done-kept = Kütüphanede, etkin değil
+downloads-ago-now = az önce
+downloads-ago-minutes = { $count } dk önce
+downloads-ago-hours = { $count } sa önce
+downloads-d4-title = Bir varyant seçin
+downloads-d4-lead = Bu arşivde aynı oyun dosyalarını değiştiren { $count } varyant var; bu yüzden aynı anda yalnızca biri etkin olabilir.
+downloads-d4-description = GameBanana’daki dosya açıklaması
+downloads-d4-list = Bu arşivdeki varyantlar
+downloads-d4-list-meta = { $count } · birini seçin
+downloads-d4-hint = deadloader { $count } varyantın hepsini kütüphanenizde tutar ve seçtiğinizi “{ $profile }” profilinde sıranın en üstünde etkinleştirir. Bunu daha sonra kütüphanede değiştirebilirsiniz.
+downloads-d4-install = Yükle
+downloads-d4-installed = Varyant “{ $variant }” · “{ $profile }” profilinin en üstünde.
+downloads-cancel = İptal
+downloads-close-esc = Kapat (Esc)

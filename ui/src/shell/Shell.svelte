@@ -9,6 +9,7 @@
   import { SIDEBAR_AUTO_COLLAPSE_PX } from '../lib/layout';
   import type { Router } from '../lib/router.svelte';
   import { formatNumber, formatTime, t } from '../i18n';
+  import ErrorHost from './ErrorHost.svelte';
   import PlayConfirm from './PlayConfirm.svelte';
   import Prompts from '../lib/dialogs/Prompts.svelte';
   import TitleBar from './TitleBar.svelte';
@@ -177,6 +178,7 @@
       oncancel={() => (app.confirm = null)}
     />
   {/if}
+  <ErrorHost {app} />
   <Prompts />
   <ToastStack toasts={app.toasts} dismissLabel={t('toast-dismiss')} ondismiss={(id) => app.dismiss(id)} />
 </div>
