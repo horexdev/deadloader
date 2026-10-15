@@ -11,5 +11,8 @@ publish.workspace = true
 workspace = true
 
 [target.'cfg(windows)'.dependencies]
+# Already in the tree through Tauri's webview layer; used to read back the WebView2 profile folder.
+webview2-com = "0.39"
+windows-core = "0.62"
 windows-registry = "0.100"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_Shell"] }

@@ -1,0 +1,22 @@
+[package]
+name = "deadloader"
+description = "A portable, transparent mod manager for Deadlock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[build-dependencies]
+tauri-build = { version = "=2.7.1" }
+
+[dependencies]
+deadloader-core = { path = "../core" }
+deadloader-platform-windows = { path = "../platform-windows" }
+serde_json = "1"
+tauri = { version = "=2.12.1", default-features = false, features = ["wry", "compression", "common-controls-v6", "custom-protocol"] }
+tauri-plugin-single-instance = "=2.5.1"

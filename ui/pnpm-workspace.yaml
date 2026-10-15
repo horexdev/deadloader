@@ -1,0 +1,7 @@
+# Settings for pnpm (this folder is a single package, not a workspace of several).
+
+# Never resolve a version published less than 14 days ago (in minutes); applies to transitive dependencies too.
+minimumReleaseAge: 20160
+# Install scripts of dependencies stay blocked (pnpm's default): nothing here needs one.
+strictDepBuilds: true
+engineStrict: true
