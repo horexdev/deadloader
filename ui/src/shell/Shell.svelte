@@ -8,12 +8,13 @@
   import type { AppState } from '../lib/app.svelte';
   import { SIDEBAR_AUTO_COLLAPSE_PX } from '../lib/layout';
   import type { Router } from '../lib/router.svelte';
-  import { formatNumber, formatTime, t } from '../i18n';
+  import { formatNumber, t } from '../i18n';
   import ErrorHost from './ErrorHost.svelte';
   import PlayConfirm from './PlayConfirm.svelte';
   import Prompts from '../lib/dialogs/Prompts.svelte';
   import ProfileSwitcher from './ProfileSwitcher.svelte';
   import TitleBar from './TitleBar.svelte';
+  import { sidebarNetwork } from './network';
 
   interface Props {
     app: AppState;
@@ -78,30 +79,7 @@
     return { state, text, title } as const;
   });
 
-  const network = $derived.by(() => {
-    const status = app.network;
-    if (status.kind === 'local_mode') {
-      return {
-        state: 'local',
-        active: false,
-        label: t('network-local'),
-        detail: t('network-local-detail'),
-        title: t('network-title-local'),
-      } as const;
-    }
-    if (status.kind === 'offline') {
-      const time = formatTime(status.since_unix_ms);
-      return {
-        state: 'offline',
-        active: false,
-        label: t('network-offline'),
-        detail: t('network-offline-detail', { time }),
-        title: t('network-title-offline', { time }),
-      } as const;
-    }
-    // Busy or changed: still online here; the catalog shows the banner (E4, E5).
-    return { state: 'online', active: false, label: t('network-online'), title: t('network-title-online') } as const;
-  });
+  const network = $derived(sidebarNetwork(app.network, app.running));
 
   const play = $derived.by(() => {
     const running = app.game?.running === true;

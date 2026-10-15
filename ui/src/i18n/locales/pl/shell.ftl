@@ -26,6 +26,13 @@ network-offline-detail = zapisany katalog z { $time }
 network-local = Tryb lokalny
 network-local-detail = brak żądań
 network-title-online = Online — otwórz Aktywność
+network-title-running =
+    Online — { $count ->
+        [one] trwa { $count } żądanie
+        [few] trwają { $count } żądania
+        [many] trwa { $count } żądań
+       *[other] trwa { $count } żądania
+    } — otwórz Aktywność
 network-title-offline = Offline — zapisany katalog z { $time } — otwórz Aktywność
 network-title-local = Tryb lokalny — brak żądań sieciowych — otwórz Aktywność
 play = Graj

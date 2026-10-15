@@ -26,6 +26,11 @@ network-offline-detail = saved catalog from { $time }
 network-local = Local mode
 network-local-detail = no requests
 network-title-online = Online — open Activity
+network-title-running =
+    Online — { $count ->
+        [one] { $count } request running
+       *[other] { $count } requests running
+    } — open Activity
 network-title-offline = Offline — showing saved catalog from { $time } — open Activity
 network-title-local = Local mode — no network requests — open Activity
 play = Play

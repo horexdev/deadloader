@@ -26,6 +26,7 @@ network-offline-detail = { $time } 保存的目录
 network-local = 本地模式
 network-local-detail = 无请求
 network-title-online = 在线 — 打开活动
+network-title-running = 在线 — 正在进行 { $count } 个请求 — 打开活动
 network-title-offline = 离线 — 显示 { $time } 保存的目录 — 打开活动
 network-title-local = 本地模式 — 无网络请求 — 打开活动
 play = 开始游戏

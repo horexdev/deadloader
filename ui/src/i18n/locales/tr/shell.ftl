@@ -26,6 +26,7 @@ network-offline-detail = saat { $time } itibarıyla kaydedilmiş katalog
 network-local = Yerel çalışma modu
 network-local-detail = istek yok
 network-title-online = Çevrimiçi — Etkinlik bölümünü açın
+network-title-running = Çevrimiçi — { $count } istek sürüyor — Etkinlik bölümünü açın
 network-title-offline = Çevrimdışı — saat { $time } itibarıyla kaydedilmiş katalog — Etkinlik bölümünü açın
 network-title-local = Yerel çalışma modu — ağ isteği yok — Etkinlik bölümünü açın
 play = Oyna

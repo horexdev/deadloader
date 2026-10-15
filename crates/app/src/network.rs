@@ -238,6 +238,13 @@ fn build(wanted: &Wanted) -> Arc<dyn Transport> {
     }
 }
 
+/// Tells the UI how many requests are running every time the number changes; a stale number is never kept.
+pub fn relay_running(client: &Client, outbox: Arc<crate::events::Outbox>) {
+    client.on_running(Box::new(move |running| {
+        outbox.send_live(crate::events::UiEvent::Network { running });
+    }));
+}
+
 /// The shared client and what it was built from.
 pub struct Network {
     client: Arc<Client>,
@@ -383,6 +390,32 @@ mod tests {
             location: location.map(str::to_owned),
             retry_in: None,
         }
+    }
+
+    #[test]
+    fn the_ui_hears_how_many_requests_are_running() {
+        let client = Client::new(
+            Refusing("tests make no requests".to_owned()),
+            HopLog::new(Arc::new(Lines::default()) as Arc<dyn NetworkLog>),
+            deadloader_net::clock::SystemClock,
+            deadloader_net::Allowlist::new(),
+        );
+        let outbox = Arc::new(crate::events::Outbox::new());
+        let ui = crate::events::tests::Recorder::default();
+        outbox.connect(Box::new(ui.clone()));
+        relay_running(&client, Arc::clone(&outbox));
+        let _ = client.get(&Request::new(
+            Purpose::Catalog,
+            Initiator::User,
+            "https://gamebanana.com/apiv11/Mod/1",
+        ));
+        assert_eq!(
+            ui.take(),
+            [
+                crate::events::UiEvent::Network { running: 1 },
+                crate::events::UiEvent::Network { running: 0 },
+            ]
+        );
     }
 
     #[test]

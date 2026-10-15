@@ -232,6 +232,7 @@ pub fn run() -> Result<(), StartError> {
     ));
     let follow = Arc::clone(&network);
     backend.on_settings(Box::new(move |settings| follow.apply(settings)));
+    crate::network::relay_running(network.client(), Arc::clone(&outbox));
     let settings = backend.settings().unwrap_or_default();
     let queue = crate::downloads::open(
         layout.root().join("downloads"),

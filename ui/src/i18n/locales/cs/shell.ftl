@@ -26,6 +26,13 @@ network-offline-detail = uložený katalog z { $time }
 network-local = Místní režim
 network-local-detail = žádné požadavky
 network-title-online = Online — otevřít Aktivitu
+network-title-running =
+    Online — { $count ->
+        [one] běží { $count } požadavek
+        [few] běží { $count } požadavky
+        [many] běží { $count } požadavku
+       *[other] běží { $count } požadavků
+    } — otevřít Aktivitu
 network-title-offline = Offline — uložený katalog z { $time } — otevřít Aktivitu
 network-title-local = Místní režim — žádné síťové požadavky — otevřít Aktivitu
 play = Hrát

@@ -26,6 +26,13 @@ network-offline-detail = сохранённый каталог от { $time }
 network-local = Локальный режим
 network-local-detail = без запросов
 network-title-online = В сети — открыть «Активность»
+network-title-running =
+    В сети — { $count ->
+        [one] выполняется { $count } запрос
+        [few] выполняются { $count } запроса
+        [many] выполняется { $count } запросов
+       *[other] выполняется { $count } запроса
+    } — открыть «Активность»
 network-title-offline = Нет сети — показан каталог, сохранённый в { $time } — открыть «Активность»
 network-title-local = Локальный режим — без сетевых запросов — открыть «Активность»
 play = Играть

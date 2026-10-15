@@ -26,6 +26,7 @@ network-offline-detail = katalog tersimpan dari { $time }
 network-local = Mode lokal
 network-local-detail = tanpa permintaan
 network-title-online = Online — buka Aktivitas
+network-title-running = Online — { $count } permintaan berjalan — buka Aktivitas
 network-title-offline = Offline — katalog tersimpan dari { $time } — buka Aktivitas
 network-title-local = Mode lokal — tanpa permintaan jaringan — buka Aktivitas
 play = Main

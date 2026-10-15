@@ -26,6 +26,11 @@ network-offline-detail = catálogo salvo às { $time }
 network-local = Modo local
 network-local-detail = nenhuma solicitação
 network-title-online = Online — abrir Atividade
+network-title-running =
+    Online — { $count ->
+        [one] { $count } solicitação em andamento
+       *[other] { $count } solicitações em andamento
+    } — abrir Atividade
 network-title-offline = Offline — catálogo salvo às { $time } — abrir Atividade
 network-title-local = Modo local — nenhuma solicitação de rede — abrir Atividade
 play = Jogar

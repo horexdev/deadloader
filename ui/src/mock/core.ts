@@ -759,6 +759,10 @@ export const devtools = {
       state.libraryMock.gameClosed();
     }
   },
+  /** The number of running network requests, pushed like the core does (the sidebar's live count). */
+  setRunning(running: number): void {
+    push({ event: 'network', data: { running } });
+  },
   /** A new network request in the log, pushed like the core does (Activity's live view). */
   addLogRequest(): void {
     activity.addRequest(state.logs, new Date());

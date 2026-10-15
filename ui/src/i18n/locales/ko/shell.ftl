@@ -26,6 +26,7 @@ network-offline-detail = { $time }에 저장된 카탈로그
 network-local = 로컬 모드
 network-local-detail = 요청 없음
 network-title-online = 온라인 — 활동 열기
+network-title-running = 온라인 — 진행 중인 요청 { $count }개 — 활동 열기
 network-title-offline = 오프라인 — { $time }에 저장된 카탈로그 — 활동 열기
 network-title-local = 로컬 모드 — 네트워크 요청 없음 — 활동 열기
 play = 플레이

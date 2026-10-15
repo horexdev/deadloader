@@ -48,6 +48,14 @@ describe('the app state', () => {
     expect(app.updates).toEqual(report);
   });
 
+  it('knows how many network requests are running (the sidebar)', () => {
+    expect(app.running).toBe(0);
+    devtools.setRunning(2);
+    expect(app.running).toBe(2);
+    devtools.setRunning(0);
+    expect(app.running).toBe(0);
+  });
+
   it('follows the game starting and stopping', () => {
     devtools.setGameRunning(true);
     flushSync();
