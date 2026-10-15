@@ -106,13 +106,14 @@ e9 = Arsip terlalu besar untuk diekstrak dengan aman.
                    *[no] Setelah diekstrak, ukurannya melebihi { $limit }.
                 }
             [too_many_files] Arsip ini berisi { $found } file mod, sedangkan batasnya { $limit }.
-            [ratio] { $entry } dikompresi secara mencurigakan — lebih dari { $limit } kali.
+            [ratio] { $entry } dikompresi secara mencurigakan — lebih dari { $limit } kali. Ini ciri khas arsip berbahaya.
             [memory] Untuk mengekstraknya diperlukan memori { $needed }, sedangkan batasnya { $limit }.
            *[other] Arsip ini melampaui salah satu batas keamanan untuk arsip.
         }
     .todo =
         { $reason ->
             [memory] Coba file lain dari mod ini.
+            [ratio] Jangan pasang kecuali Anda memercayai sumbernya; hanya setelah itu naikkan batasnya di Pengaturan → Lanjutan.
            *[other] Jika Anda memercayainya, naikkan batasnya di Pengaturan → Unduhan.
         }
 e10 = Tidak ada file mod di arsip ini.

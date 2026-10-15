@@ -148,13 +148,14 @@ e9 = Archiv je příliš velký na bezpečné rozbalení.
                     [many] Obsahuje { $found } souboru modů, limit je { $limit }.
                    *[other] Obsahuje { $found } souborů modů, limit je { $limit }.
                 }
-            [ratio] { $entry } je podezřele silně zkomprimovaný — víc než { $limit }krát.
+            [ratio] { $entry } je podezřele silně zkomprimovaný — víc než { $limit }krát. To je typické pro škodlivý archiv.
             [memory] Rozbalení vyžaduje { $needed } paměti, limit je { $limit }.
            *[other] Překračuje jeden z bezpečnostních limitů pro archivy.
         }
     .todo =
         { $reason ->
             [memory] Zkuste jiný soubor tohoto modu.
+            [ratio] Instalujte ho jen tehdy, když zdroji důvěřujete; pak můžete limit zvýšit v části Nastavení → Pokročilé.
            *[other] Pokud mu důvěřujete, zvyšte limit v části Nastavení → Stahování.
         }
 e10 = V tomto archivu nejsou žádné soubory modů.

@@ -134,13 +134,14 @@ e9 = The archive is too large to unpack safely.
                     [one] It holds { $found } mod file, and the limit is { $limit }.
                    *[other] It holds { $found } mod files, and the limit is { $limit }.
                 }
-            [ratio] { $entry } is compressed suspiciously well — over { $limit } times.
+            [ratio] { $entry } is compressed suspiciously well — over { $limit } times. That’s typical of a malicious archive.
             [memory] Unpacking it needs { $needed } of memory, and the limit is { $limit }.
            *[other] It goes over one of the safety limits for archives.
         }
     .todo =
         { $reason ->
             [memory] Try another file of this mod.
+            [ratio] Don’t install it unless you trust its source; only then raise the limit in Settings → Advanced.
            *[other] If you trust it, raise the limit in Settings → Downloads.
         }
 e10 = No mod files in this archive.

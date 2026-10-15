@@ -134,13 +134,14 @@ e9 = O arquivo compactado é grande demais para ser extraído com segurança.
                     [one] Ele contém { $found } arquivo de mod, e o limite é { $limit }.
                    *[other] Ele contém { $found } arquivos de mod, e o limite é { $limit }.
                 }
-            [ratio] { $entry } está compactado de forma suspeita — mais de { $limit } vezes.
+            [ratio] { $entry } está compactado de forma suspeita — mais de { $limit } vezes. Isso é típico de um arquivo compactado malicioso.
             [memory] Para extraí-lo são necessários { $needed } de memória, e o limite é { $limit }.
            *[other] Ele ultrapassa um dos limites de segurança para arquivos compactados.
         }
     .todo =
         { $reason ->
             [memory] Tente outro arquivo deste mod.
+            [ratio] Não o instale a menos que confie na origem; só então aumente o limite em Configurações → Avançado.
            *[other] Se você confia nele, aumente o limite em Configurações → Downloads.
         }
 e10 = Nenhum arquivo de mod neste arquivo compactado.

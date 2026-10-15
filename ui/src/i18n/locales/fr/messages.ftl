@@ -134,13 +134,14 @@ e9 = L’archive est trop volumineuse pour être extraite en toute sécurité.
                     [one] Elle contient { $found } fichier de mod, et la limite est de { $limit }.
                    *[other] Elle contient { $found } fichiers de mod, et la limite est de { $limit }.
                 }
-            [ratio] { $entry } est compressé de façon suspecte — plus de { $limit } fois.
+            [ratio] { $entry } est compressé de façon suspecte — plus de { $limit } fois. C’est typique d’une archive malveillante.
             [memory] Son extraction nécessite { $needed } de mémoire, et la limite est de { $limit }.
            *[other] Elle dépasse l’une des limites de sécurité des archives.
         }
     .todo =
         { $reason ->
             [memory] Essayez un autre fichier de ce mod.
+            [ratio] Ne l’installez que si vous faites confiance à sa source ; seulement alors, augmentez la limite dans Paramètres → Avancé.
            *[other] Si vous lui faites confiance, augmentez la limite dans Paramètres → Téléchargements.
         }
 e10 = Aucun fichier de mod dans cette archive.

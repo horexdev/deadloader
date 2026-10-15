@@ -134,13 +134,14 @@ e9 = L’archivio è troppo grande per essere estratto in sicurezza.
                     [one] Contiene { $found } file di mod e il limite è { $limit }.
                    *[other] Contiene { $found } file di mod e il limite è { $limit }.
                 }
-            [ratio] { $entry } è compresso in modo sospetto: oltre { $limit } volte.
+            [ratio] { $entry } è compresso in modo sospetto: oltre { $limit } volte. È tipico di un archivio dannoso.
             [memory] Per estrarlo servono { $needed } di memoria e il limite è { $limit }.
            *[other] Supera uno dei limiti di sicurezza per gli archivi.
         }
     .todo =
         { $reason ->
             [memory] Prova un altro file di questo mod.
+            [ratio] Non installarlo se non ti fidi della fonte; solo in quel caso aumenta il limite in Impostazioni → Avanzate.
            *[other] Se ti fidi, aumenta il limite in Impostazioni → Download.
         }
 e10 = Nessun file di mod in questo archivio.
