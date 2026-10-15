@@ -249,32 +249,7 @@ mod tests {
     use std::io::Write;
 
     /// A VPK v2 whose directory lists the given `dir/name.ext` paths with their CRCs.
-    fn vpk(files: &[(&str, u32)]) -> Vec<u8> {
-        let mut tree = Vec::new();
-        for (path, crc) in files {
-            let (dir, rest) = path.rsplit_once('/').unwrap_or((" ", path));
-            let (name, ext) = rest.rsplit_once('.').unwrap_or((rest, " "));
-            for part in [ext, dir, name] {
-                tree.extend_from_slice(part.as_bytes());
-                tree.push(0);
-            }
-            tree.extend_from_slice(&crc.to_le_bytes());
-            tree.extend_from_slice(&0u16.to_le_bytes());
-            tree.extend_from_slice(&0x7FFFu16.to_le_bytes());
-            tree.extend_from_slice(&0u32.to_le_bytes());
-            tree.extend_from_slice(&0u32.to_le_bytes());
-            tree.extend_from_slice(&0xFFFFu16.to_le_bytes());
-            tree.extend_from_slice(&[0, 0]); // end of this extension's names and directories
-        }
-        tree.push(0); // end of extensions
-        let mut out = Vec::new();
-        out.extend_from_slice(&crate::vpk::SIGNATURE.to_le_bytes());
-        out.extend_from_slice(&2u32.to_le_bytes());
-        out.extend_from_slice(&(tree.len() as u32).to_le_bytes());
-        out.extend_from_slice(&[0u8; 16]);
-        out.extend_from_slice(&tree);
-        out
-    }
+    use crate::testing::vpk;
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir =

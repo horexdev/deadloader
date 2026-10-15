@@ -20,8 +20,11 @@ pub mod place;
 pub mod profiles;
 pub mod remove;
 pub mod selection;
+pub mod session;
 pub mod settings;
 pub mod steam;
+#[cfg(test)]
+pub(crate) mod testing;
 pub mod updates;
 pub mod vdf;
 pub mod vpk;
