@@ -30,7 +30,8 @@ pub struct Conflict {
     pub paths: Vec<String>,
 }
 
-fn game_path(path: &str) -> Option<String> {
+/// The key a game file is compared by, or `None` for files in the package root.
+pub(crate) fn game_path(path: &str) -> Option<String> {
     path.contains('/').then(|| path.to_ascii_lowercase())
 }
 

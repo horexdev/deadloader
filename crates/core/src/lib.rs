@@ -22,5 +22,6 @@ pub mod remove;
 pub mod selection;
 pub mod settings;
 pub mod steam;
+pub mod updates;
 pub mod vdf;
 pub mod vpk;

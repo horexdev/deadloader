@@ -68,6 +68,20 @@ pub struct ModFile {
     #[serde(with = "crate::hex")]
     pub sha256: [u8; 32],
     pub version: Option<String>,
+    /// Set once an update replaced this file (decisions 22, 137, 164): the file stays in the library as an older
+    /// version and is no longer checked for updates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub successor: Option<Successor>,
+}
+
+/// What replaced a library file after an update.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Successor {
+    /// The library file (same mod) holding the newer version.
+    File(String),
+    /// GameBanana dropped the file without a replacement and the user chose to keep this one as it is.
+    None,
 }
 
 /// What we placed in one game installation's addons folder.
@@ -123,6 +137,8 @@ pub enum ModelError {
     DuplicateId(String),
     UnsafePath(String),
     UnknownFile(String),
+    /// Following the successors from this file leads back to it.
+    SuccessorLoop(String),
     InvalidName(String),
     Io(String),
 }
@@ -152,6 +168,7 @@ impl std::fmt::Display for ModelError {
             Self::UnknownFile(id) => {
                 write!(f, "refers to a file that is not in the library: \"{id}\"")
             }
+            Self::SuccessorLoop(id) => write!(f, "the newer versions of \"{id}\" lead back to it"),
             Self::InvalidName(n) => write!(f, "\"{n}\" can't be used as a profile name"),
             Self::Io(e) => write!(f, "{e}"),
         }
@@ -192,6 +209,7 @@ impl Manifest {
                     return Err(ModelError::UnsafePath(f.library_path.clone()));
                 }
             }
+            validate_successors(m)?;
         }
         for install in &self.installations {
             if let Some(r) = install
@@ -211,6 +229,31 @@ impl Manifest {
             .iter()
             .find_map(|m| m.files.iter().find(|f| f.id == id).map(|f| (m, f)))
     }
+}
+
+/// Every successor is another file of the same mod, and following them always ends.
+fn validate_successors(m: &Mod) -> Result<(), ModelError> {
+    let next = |id: &str| -> Result<Option<&str>, ModelError> {
+        let file = m.files.iter().find(|f| f.id == id);
+        match file.and_then(|f| f.successor.as_ref()) {
+            Some(Successor::File(next)) if m.files.iter().any(|f| &f.id == next) => {
+                Ok(Some(next.as_str()))
+            }
+            Some(Successor::File(next)) => Err(ModelError::UnknownFile(next.clone())),
+            Some(Successor::None) | None => Ok(None),
+        }
+    };
+    for f in &m.files {
+        let mut current = f.id.as_str();
+        for _ in 0..m.files.len() {
+            match next(current)? {
+                Some(n) if n == f.id => return Err(ModelError::SuccessorLoop(f.id.clone())),
+                Some(n) => current = n,
+                None => break,
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Relative, no `..`, no drive, root, UNC or stream syntax.
@@ -323,6 +366,7 @@ mod tests {
             len,
             sha256: [7; 32],
             version: Some("1".to_owned()),
+            successor: None,
         }
     }
 
@@ -430,6 +474,74 @@ mod tests {
             m.validate(),
             Err(ModelError::UnknownFile("nope".to_owned()))
         );
+    }
+
+    #[test]
+    fn a_file_without_a_successor_writes_no_successor_field() {
+        // Manifests written before updates existed have no such field, and current ones only where it is set.
+        let text = to_json(&sample()).expect("serialise");
+        assert!(!text.contains("successor"), "{text}");
+        let mut m = sample();
+        m.mods[0].files[0].successor = Some(Successor::File("gb-655209-2".to_owned()));
+        m.mods[0].files[1].successor = Some(Successor::None);
+        let text = to_json(&m).expect("serialise");
+        assert!(
+            text.contains("\"successor\": {\n            \"file\": \"gb-655209-2\""),
+            "{text}"
+        );
+        assert!(text.contains("\"successor\": \"none\""), "{text}");
+        assert_eq!(manifest_from_json(&text).expect("parse"), m);
+    }
+
+    #[test]
+    fn a_successor_must_be_another_file_of_the_same_mod() {
+        let mut m = sample();
+        m.mods[0].files[0].successor = Some(Successor::File("elsewhere".to_owned()));
+        assert_eq!(
+            m.validate(),
+            Err(ModelError::UnknownFile("elsewhere".to_owned()))
+        );
+
+        let mut m = sample();
+        m.mods.push(Mod {
+            id: "other".to_owned(),
+            name: "Other".to_owned(),
+            author: None,
+            source: Source::Local {
+                imported_from: None,
+            },
+            files: vec![file("other-1", 1)],
+        });
+        m.mods[0].files[0].successor = Some(Successor::File("other-1".to_owned()));
+        assert_eq!(
+            m.validate(),
+            Err(ModelError::UnknownFile("other-1".to_owned())),
+            "a file of another mod"
+        );
+
+        let mut m = sample();
+        m.mods[0].files[0].successor = Some(Successor::File("gb-655209-1".to_owned()));
+        assert_eq!(
+            m.validate(),
+            Err(ModelError::SuccessorLoop("gb-655209-1".to_owned()))
+        );
+
+        let mut m = sample();
+        m.mods[0].files[0].successor = Some(Successor::File("gb-655209-2".to_owned()));
+        m.mods[0].files[1].successor = Some(Successor::File("gb-655209-1".to_owned()));
+        assert_eq!(
+            m.validate(),
+            Err(ModelError::SuccessorLoop("gb-655209-1".to_owned()))
+        );
+    }
+
+    #[test]
+    fn a_chain_of_versions_is_valid() {
+        let mut m = sample();
+        m.mods[0].files.push(file("gb-655209-3", 9));
+        m.mods[0].files[0].successor = Some(Successor::File("gb-655209-2".to_owned()));
+        m.mods[0].files[1].successor = Some(Successor::File("gb-655209-3".to_owned()));
+        assert_eq!(m.validate(), Ok(()));
     }
 
     #[test]
