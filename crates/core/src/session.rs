@@ -209,6 +209,8 @@ pub enum SessionError {
     /// The game folder has no `gameinfo.gi` (moved, uninstalled, or its drive is gone): nothing is written there (E2).
     GameNotFound(PathBuf),
     Io(io::Error),
+    /// `favourites.json` can't be read or written; it is left as it is (E23).
+    Favourites(ModelError),
 }
 
 impl std::fmt::Display for SessionError {
@@ -229,6 +231,7 @@ impl std::fmt::Display for SessionError {
                 write!(f, "no Deadlock installation in {}", root.display())
             }
             Self::Io(e) => write!(f, "{e}"),
+            Self::Favourites(e) => write!(f, "{}: {e}", crate::favourites::FILE_NAME),
         }
     }
 }
@@ -245,6 +248,7 @@ impl ToUserMessage for SessionError {
             Self::Import(e) => e.user_message(),
             Self::Remove(e) => e.user_message(),
             Self::Io(e) => from_io(e, Area::Data),
+            Self::Favourites(e) => data_file(e, crate::favourites::FILE_NAME),
             Self::GameNotFound(root) => UserMessage::new(MessageId::E2)
                 .arg("path", root.display())
                 .arg("detail", self),
@@ -305,6 +309,8 @@ pub struct ModView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileView {
     pub id: String,
+    /// The GameBanana file it was downloaded as (or linked to); the mod page tells installed files by it.
+    pub remote_file_id: Option<u64>,
     pub archive_name: String,
     pub inner_path: String,
     pub version: Option<String>,
@@ -994,6 +1000,48 @@ impl Session {
         Ok(())
     }
 
+    /// The catalog mods marked as favourites (34), newest first.
+    pub fn favourites(&self) -> Result<Vec<crate::favourites::Favourite>, SessionError> {
+        crate::favourites::load(&self.favourites_path()).map_err(SessionError::Favourites)
+    }
+
+    /// Marks (`on`) or unmarks a catalog mod as a favourite and saves the list; an unreadable file is never
+    /// overwritten.
+    pub fn set_favourite(
+        &mut self,
+        favourite: crate::favourites::Favourite,
+        on: bool,
+    ) -> Result<Vec<crate::favourites::Favourite>, SessionError> {
+        let path = self.favourites_path();
+        let mut items = self.favourites()?;
+        if !crate::favourites::set(&mut items, favourite, on) {
+            return Ok(items);
+        }
+        let result = crate::favourites::save(&path, &items);
+        let mut event = FileEvent {
+            dst: Some(path.display().to_string()),
+            ..FileEvent::new(FileOp::Write)
+        };
+        if let Err(e) = &result {
+            event.result = Outcome::Failed;
+            event.error = Some(e.to_string());
+        }
+        self.log.record("favourites saved", &event);
+        result.map_err(SessionError::Favourites)?;
+        Ok(items)
+    }
+
+    /// The user confirmed legal age in D3 (109): recorded now and saved with the settings. The caller logs it.
+    pub fn confirm_age(&mut self) -> Result<(), SessionError> {
+        let mut settings = self.settings.clone();
+        settings.confirm_age(time::OffsetDateTime::now_utc());
+        self.update_settings(settings)
+    }
+
+    fn favourites_path(&self) -> PathBuf {
+        self.data_dir.join(crate::favourites::FILE_NAME)
+    }
+
     /// The user's pick in D4: `chosen` become the active variants; the mod's add-ons are enabled with them.
     pub fn choose(&mut self, mod_id: &str, chosen: &[String]) -> Result<(), SessionError> {
         let grouping = self.grouping(mod_id)?;
@@ -1469,6 +1517,7 @@ impl Session {
                 .iter()
                 .map(|f| FileView {
                     id: f.id.clone(),
+                    remote_file_id: f.remote_file_id,
                     archive_name: f.archive_name.clone(),
                     inner_path: f.inner_path.clone(),
                     version: f.version.clone(),
@@ -2563,6 +2612,96 @@ mod tests {
             s.move_mod("nope", 0),
             Err(SessionError::UnknownMod(_))
         ));
+    }
+
+    #[test]
+    fn library_files_say_which_gamebanana_file_they_came_from() {
+        let f = Fixture::new("remote-id");
+        let mut s = open(&f);
+        let queued = f.source("3.bin", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_download(&queued, &haze_download(1_480_331, "haze_v2.vpk"))
+            .expect("imported");
+        s.import_file(&f.source("own.vpk", &[("models/own.vmdl_c", 1)]), "Own")
+            .expect("local mod");
+        let view = s.library();
+        let remote = |name: &str| {
+            view.mods
+                .iter()
+                .find(|m| m.name == name)
+                .and_then(|m| m.files.first())
+                .map(|file| file.remote_file_id)
+        };
+        assert_eq!(remote("Haze V2"), Some(Some(1_480_331)));
+        assert_eq!(remote("Own"), Some(None));
+    }
+
+    fn favourite(id: u64, name: &str) -> crate::favourites::Favourite {
+        crate::favourites::Favourite {
+            section: Section::Mod,
+            id,
+            name: name.to_owned(),
+            author: None,
+            root_category: None,
+            subcategory: None,
+            nsfw: false,
+            date_updated: None,
+        }
+    }
+
+    #[test]
+    fn favourites_are_saved_next_to_the_library_and_logged() {
+        let f = Fixture::new("favourites");
+        let mut s = open(&f);
+        assert_eq!(s.favourites().expect("none yet"), []);
+        let list = s
+            .set_favourite(favourite(655_209, "Haze V2"), true)
+            .expect("marked");
+        assert_eq!(list, [favourite(655_209, "Haze V2")]);
+        let path = f.data().join("favourites.json");
+        assert!(
+            f.ops()
+                .contains(&(FileOp::Write, path.display().to_string())),
+            "{:?}",
+            f.ops()
+        );
+        assert_eq!(open(&f).favourites().expect("kept"), list);
+        let list = s
+            .set_favourite(favourite(655_209, "Haze V2"), false)
+            .expect("unmarked");
+        assert!(list.is_empty());
+        assert!(open(&f).favourites().expect("kept").is_empty());
+    }
+
+    #[test]
+    fn an_unreadable_favourites_file_is_reported_and_left_alone() {
+        let f = Fixture::new("favourites-broken");
+        let mut s = open(&f);
+        let path = f.data().join("favourites.json");
+        std::fs::write(&path, "{ not json").expect("damage");
+        let err = s.favourites().expect_err("refused");
+        assert_eq!(err.user_message().id, MessageId::E23);
+        assert!(s.set_favourite(favourite(1, "One"), true).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("kept"),
+            "{ not json",
+            "never overwritten"
+        );
+    }
+
+    #[test]
+    fn the_age_confirmation_is_saved_with_the_settings() {
+        let f = Fixture::new("age");
+        let mut s = open(&f);
+        assert!(s.settings().acknowledgements.age_confirmed_at.is_none());
+        s.confirm_age().expect("saved");
+        assert!(s.settings().acknowledgements.age_confirmed_at.is_some());
+        assert!(
+            open(&f)
+                .settings()
+                .acknowledgements
+                .age_confirmed_at
+                .is_some()
+        );
     }
 
     fn overview<'a>(list: &'a [ProfileOverview], name: &str) -> &'a ProfileOverview {

@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   Channel: FakeChannel,
 }));
 
-const { api, catalog, downloads, imageUrl, isUserMessage, links, shell, subscribe, updates } = await import('./api');
+const { api, catalog, downloads, favourites, imageUrl, isUserMessage, links, shell, subscribe, updates } = await import('./api');
 
 describe('api', () => {
   beforeEach(() => {
@@ -122,6 +122,30 @@ describe('api', () => {
       ['catalog_activate', { id }],
       ['catalog_consent_prompt', { id }],
       ['catalog_grant', { id, scope: 'always' }],
+    ]);
+  });
+
+  it('calls the favourites, age and link commands by their Rust names', async () => {
+    invoke.mockResolvedValue([]);
+    const favourite = {
+      section: 'mod' as const,
+      id: 655209,
+      name: 'Haze V2',
+      author: null,
+      root_category: null,
+      subcategory: null,
+      nsfw: false,
+      date_updated: null,
+    };
+    await favourites.list();
+    await favourites.set(favourite, true);
+    await api.confirmAge();
+    await api.openLink('https://gamebanana.com/mods/655209');
+    expect(invoke.mock.calls).toEqual([
+      ['favourites', {}],
+      ['set_favourite', { favourite, on: true }],
+      ['confirm_age', {}],
+      ['open_link', { url: 'https://gamebanana.com/mods/655209' }],
     ]);
   });
 

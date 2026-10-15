@@ -87,6 +87,7 @@ export function variantMod(): ModView {
   const names = ['Tracksuit', 'Casual', 'Racing silks', 'Summer dress'];
   const files = names.map((name, n) => ({
     id: `${id}-1-${n}`,
+    remote_file_id: 1_800_420,
     archive_name: 'pocket_four_outfits.zip',
     inner_path: `${name}/pak_pocket_${name.toLowerCase().replace(' ', '_')}.vpk`,
     version: '1.0',

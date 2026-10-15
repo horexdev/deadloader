@@ -11,6 +11,7 @@
   import { formatNumber, formatTime, t } from '../i18n';
   import ErrorHost from './ErrorHost.svelte';
   import PlayConfirm from './PlayConfirm.svelte';
+  import Prompts from '../lib/dialogs/Prompts.svelte';
   import ProfileSwitcher from './ProfileSwitcher.svelte';
   import TitleBar from './TitleBar.svelte';
 
@@ -185,6 +186,7 @@
     />
   {/if}
   <ErrorHost {app} />
+  <Prompts />
   {#if switcher}
     <ProfileSwitcher
       {app}
