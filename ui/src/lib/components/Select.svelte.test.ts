@@ -192,4 +192,39 @@ describe('Select', () => {
     fire(again, 'input');
     expect(one(menu() as HTMLElement, '.dl-menu__status').textContent).toContain('No match');
   });
+
+  it('opens its list above the trigger when there is no room below, outside any scroll area', () => {
+    const { trigger } = setup();
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({ x: 100, y: 740, width: 180, height: 32 }));
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
+    // happy-dom has no layout: the list is 300 px tall.
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('dl-menu') ? 300 : 0;
+    });
+    click(trigger);
+    flushSync();
+    const list = menu();
+    expect(list?.dataset.placement).toBe('above');
+    // Fixed to the window, so an open list never makes the page or a panel scroll.
+    expect(list?.classList.contains('menu')).toBe(true);
+    expect(list?.style.bottom).toBe(`${800 - 740 + 4}px`);
+    vi.restoreAllMocks();
+  });
+
+  it('closes when the page scrolls or the window is resized, not when its own list scrolls', () => {
+    const { trigger } = setup();
+    click(trigger);
+    flushSync();
+    fire(menu() as HTMLElement, 'scroll');
+    flushSync();
+    expect(menu()).not.toBeNull();
+    document.body.dispatchEvent(new Event('scroll'));
+    flushSync();
+    expect(menu()).toBeNull();
+    click(trigger);
+    flushSync();
+    window.dispatchEvent(new Event('resize'));
+    flushSync();
+    expect(menu()).toBeNull();
+  });
 });
