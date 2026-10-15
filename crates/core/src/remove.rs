@@ -392,6 +392,7 @@ mod tests {
                     len: 1,
                 })
                 .collect(),
+            ..InstallationState::default()
         }
     }
 

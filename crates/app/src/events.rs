@@ -55,6 +55,10 @@ pub enum UiEvent {
         task: deadloader_downloads::TaskId,
         installed: crate::backend::Installed,
     },
+    /// New lines in these logs since the last such event (Activity's live view). Sent only while the UI listens.
+    Log {
+        kinds: Vec<deadloader_core::log::Kind>,
+    },
 }
 
 /// What the start found, for a toast or a banner.
@@ -73,6 +77,8 @@ pub enum Notice {
     BrokenProfiles { names: Vec<String> },
     /// Library files that are missing or no longer readable (E14).
     DamagedFiles { files: Vec<String> },
+    /// Items in the game's mod folder deadloader didn't put there and the user hasn't left as they are (N6, F9).
+    Foreign { files: usize },
 }
 
 impl From<&session::Notice> for Notice {
@@ -141,6 +147,15 @@ impl Outbox {
             state.kept.pop_front();
         }
         state.kept.push_back(event);
+    }
+
+    /// Delivers `event` only if the UI listens now; never kept for later. For news that is stale once missed, so it
+    /// can't push out kept events that matter.
+    pub fn send_live(&self, event: UiEvent) {
+        let mut state = self.lock();
+        if state.kept.is_empty() {
+            deliver(&mut state, &event);
+        }
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
@@ -240,6 +255,24 @@ pub(crate) mod tests {
         let got = ui.take();
         assert_eq!(got.len(), KEPT);
         assert_eq!(got[0], UiEvent::Notice(Notice::Swept { files: 3 }));
+    }
+
+    #[test]
+    fn live_events_reach_a_listener_and_are_never_kept() {
+        let outbox = Outbox::new();
+        outbox.send_live(UiEvent::Log {
+            kinds: vec![deadloader_core::log::Kind::App],
+        });
+        let ui = Recorder::default();
+        outbox.connect(Box::new(ui.clone()));
+        assert!(ui.take().is_empty());
+        outbox.send_live(UiEvent::Log {
+            kinds: vec![deadloader_core::log::Kind::Files],
+        });
+        assert_eq!(
+            serde_json::to_value(ui.take()).expect("json"),
+            serde_json::json!([{"event": "log", "data": {"kinds": ["files"]}}])
+        );
     }
 
     /// The shape `ui/src/lib/api.ts` relies on.

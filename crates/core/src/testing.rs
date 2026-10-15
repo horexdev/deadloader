@@ -59,3 +59,88 @@ pub fn remove_all(dir: &Path) {
     walk(dir);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A logs folder in memory that counts how many bytes were read, so tests can tell a part was read, not the whole.
+#[derive(Debug, Default)]
+pub struct MemLogDir {
+    pub files: std::sync::Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
+    pub bytes_read: std::sync::atomic::AtomicU64,
+}
+
+impl MemLogDir {
+    /// Adds `text` to the end of `name` as it is (lines carry their own newlines).
+    pub fn push(&self, name: &str, text: &str) {
+        self.files
+            .lock()
+            .expect("files")
+            .entry(name.to_owned())
+            .or_default()
+            .extend_from_slice(text.as_bytes());
+    }
+
+    pub fn read_so_far(&self) -> u64 {
+        self.bytes_read.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+impl crate::log::LogDir for MemLogDir {
+    fn append_line(&self, name: &str, line: &str) -> std::io::Result<()> {
+        self.push(name, &format!("{line}\n"));
+        Ok(())
+    }
+
+    fn list(&self) -> std::io::Result<Vec<crate::fs::DirEntry>> {
+        Ok(self
+            .files
+            .lock()
+            .expect("files")
+            .iter()
+            .map(|(name, data)| crate::fs::DirEntry {
+                name: name.clone(),
+                is_dir: false,
+                len: data.len() as u64,
+            })
+            .collect())
+    }
+
+    fn remove(&self, name: &str) -> std::io::Result<()> {
+        self.files.lock().expect("files").remove(name);
+        Ok(())
+    }
+
+    fn read(&self, name: &str) -> std::io::Result<Vec<u8>> {
+        let data = self
+            .files
+            .lock()
+            .expect("files")
+            .get(name)
+            .cloned()
+            .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+        self.bytes_read
+            .fetch_add(data.len() as u64, std::sync::atomic::Ordering::Relaxed);
+        Ok(data)
+    }
+
+    fn file_len(&self, name: &str) -> std::io::Result<u64> {
+        self.files
+            .lock()
+            .expect("files")
+            .get(name)
+            .map(|data| data.len() as u64)
+            .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+    }
+
+    fn read_range(&self, name: &str, start: u64, len: u64) -> std::io::Result<Vec<u8>> {
+        let files = self.files.lock().expect("files");
+        let data = files
+            .get(name)
+            .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+        let from = usize::try_from(start).unwrap_or(usize::MAX).min(data.len());
+        let to = from
+            .saturating_add(usize::try_from(len).unwrap_or(usize::MAX))
+            .min(data.len());
+        self.bytes_read
+            .fetch_add((to - from) as u64, std::sync::atomic::Ordering::Relaxed);
+        Ok(data[from..to].to_vec())
+    }
+}

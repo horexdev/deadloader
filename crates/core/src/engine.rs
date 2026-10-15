@@ -354,7 +354,7 @@ fn resolve(
     Ok(wanted)
 }
 
-fn same_root(a: &str, b: &str) -> bool {
+pub(crate) fn same_root(a: &str, b: &str) -> bool {
     let norm = |s: &str| {
         s.replace('/', "\\")
             .trim_end_matches('\\')
@@ -382,6 +382,7 @@ fn record(manifest: &mut Manifest, root: &str, profile: Option<&str>, applied: V
                 game_root: root.to_owned(),
                 applied_profile: None,
                 applied: Vec::new(),
+                ..InstallationState::default()
             });
             manifest.installations.last_mut().expect("just pushed")
         }

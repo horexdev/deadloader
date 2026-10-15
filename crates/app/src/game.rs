@@ -24,6 +24,16 @@ impl Game for SteamGame {
         deadloader_platform_windows::recycle::move_to_recycle_bin(path)
     }
 
+    fn shell(&self, request: &crate::backend::ShellRequest) -> std::io::Result<()> {
+        use crate::backend::ShellRequest;
+        use deadloader_platform_windows::shell;
+        match request {
+            ShellRequest::VerifyGameFiles => shell::open_url(shell::DEADLOCK_VALIDATE_URL),
+            ShellRequest::Reveal(path) => shell::reveal(path),
+            ShellRequest::Notepad(path) => shell::open_in_notepad(path),
+        }
+    }
+
     fn detected(&self) -> Vec<deadloader_core::session::Detected> {
         match deadloader_platform_windows::steam::steam_root() {
             Ok(Some(root)) => deadloader_core::steam::find_installations(&root, &Disk)

@@ -71,6 +71,8 @@
     onreveal?: () => void;
     onfavourite?: () => void;
     oninstall?: () => void;
+    /** The thumbnail could not be loaded (e.g. the core forgot its picture id: fetch the page again). */
+    onthumberror?: () => void;
   }
 
   const {
@@ -95,6 +97,7 @@
     onreveal,
     onfavourite,
     oninstall,
+    onthumberror,
   }: Props = $props();
 
   let failedSrc: string | null = $state(null);
@@ -122,7 +125,10 @@
     {#if missing}
       <div class="dl-card__thumb-missing"><ImageIcon class="dl-icon dl-icon--lg" /></div>
     {:else}
-      <img src={src ?? undefined} alt="" loading="lazy" onerror={() => (failedSrc = src)} />
+      <img src={src ?? undefined} alt="" loading="lazy" onerror={() => {
+          failedSrc = src;
+          onthumberror?.();
+        }} />
     {/if}
     {#if nsfw}
       <div class="dl-card__nsfw"><span><EyeOff class="dl-icon" /> {nsfw.label}</span><small>{nsfw.hint}</small></div>

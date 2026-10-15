@@ -1,22 +1,35 @@
 // What every screen shares: the library, the settings, the game, the network, running downloads and toasts. Filled
 // at start and kept current by the core's pushes (`subscribe`); screens read it and call `api` for their own data.
 
+import type { ErrorAction } from './components/ErrorDialog.svelte';
 import type { ToastData } from './components/ToastStack.svelte';
-import { describe } from '../i18n';
+import { router } from './router.svelte';
+import Undo2 from '@lucide/svelte/icons/undo-2';
+import { describe, t } from '../i18n';
 import {
   api,
   catalog,
   downloads,
   isUserMessage,
+  library as libraryApi,
   shell,
   subscribe,
+  updates as updatesApi,
+  type ApplyResult,
+  type ImportResult,
+  type UpdateStep,
   type ApplyPreview,
+  type CatalogEvent,
   type CatalogStatus,
   type GameStatus,
+  type Installed,
   type LibraryView,
+  type LogKind,
+  type Section,
   type Settings,
   type TaskSnapshot,
   type UiEvent,
+  type UpdateReport,
   type UserMessage,
 } from './api';
 
@@ -24,6 +37,40 @@ import {
 export interface PlayConfirmation extends ApplyPreview {
   profile: string;
   applied: string;
+}
+
+/** A download (or an import from disk) finished in the library and waits for the user to pick variants (D4). */
+export interface PendingChoice {
+  key: string;
+  modId: string;
+  /** The variant groups (library file ids), one pick each. */
+  choices: string[][];
+  name: string;
+  file: string;
+  size: number | null;
+  /** The GameBanana file it came from, for its description in D4. */
+  source?: { section: Section; modId: number; fileId: number };
+}
+
+/** A line of "Finished this session" on the Downloads screen (S6); kept until deadloader closes. */
+export interface FinishedDownload {
+  key: string;
+  name: string;
+  file: string;
+  /** `kept`: a choice put aside, so the mod is in the library but not turned on. */
+  outcome: 'installed' | 'updated' | 'cancelled' | 'removed' | 'kept';
+  variant?: string;
+  version?: string;
+  /** Unix ms. */
+  at: number;
+  /** What "Download again" needs. */
+  again?: { section: Section; modId: number; fileId: number; author: string | null };
+}
+
+/** D12: an error the user asked to see in full, with the actions that fit it. */
+export interface ShownError {
+  message: UserMessage;
+  actions: ErrorAction[];
 }
 
 export class AppState {
@@ -36,7 +83,35 @@ export class AppState {
   playing = $state(false);
   confirm: PlayConfirmation | null = $state(null);
   toasts: ToastData[] = $state([]);
+  /** D12, shown by the shell. */
+  error: ShownError | null = $state(null);
+  /** Downloads finished this session, newest first. */
+  history: FinishedDownload[] = $state([]);
+  /** Downloads waiting for a variant pick (D4). */
+  choices: PendingChoice[] = $state([]);
+  /** Tasks whose install was reported, so leaving the queue isn't a cancel. */
+  // Bookkeeping only, never rendered: no reactivity needed.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #installed = new Set<number>();
+  /** The catalog's latest change other than its status (a page or mod page refreshed in the background). */
+  catalogEvent: Exclude<CatalogEvent, { event: 'status' }> | null = $state(null);
+  /** The latest mod update check (N3): the catalog's and library's badges and the mod page's Update buttons. */
+  updates: UpdateReport | null = $state(null);
+  /** When the last mod update check finished. */
+  updatesAt: number | null = $state(null);
+  /** "Check for updates" is running. */
+  checking = $state(false);
+  /** S9 is open (the sidebar's pending-changes item). */
+  pendingOpen = $state(false);
+  /** Apply (S9) is putting the selected profile into the game folder. */
+  applying = $state(false);
+  /** The last apply or Play found gameinfo.gi changed by another program (D10). */
+  gameinfoForeign = $state(false);
+  /** An update that arrived needs the user to map its files (D5, 169). */
+  mapping: Extract<UpdateStep, { kind: 'needs_mapping' }> | null = $state(null);
   #toastId = 0;
+  /** Who hears of new log lines (Activity's live view). */
+  #logListeners: ((kinds: LogKind[]) => void)[] = [];
 
   /** Running downloads, for the sidebar. */
   get downloads(): number {
@@ -73,7 +148,27 @@ export class AppState {
         break;
       case 'applied_after_game':
         this.library = event.data.library;
-        this.toast({ kind: 'success', title: describe({ id: 'N12', args: { count: Math.max(event.data.changes, 1) } }).what });
+        this.toast({
+          kind: 'success',
+          title: describe({ id: 'N12', args: { count: Math.max(event.data.changes, 1) } }).what,
+          action: { label: t('library-undo'), icon: Undo2, onclick: () => void this.undoApplied() },
+        });
+        break;
+      case 'updates':
+        this.updates = event.data;
+        this.updatesAt = Date.now();
+        break;
+      case 'update_step':
+        this.updateStep(event.data.step);
+        break;
+      case 'notice':
+        if (event.data.kind === 'foreign') {
+          this.toast({
+            kind: 'info',
+            title: describe({ id: 'N6', args: { count: event.data.files } }).what,
+            action: { label: t('library-review'), onclick: () => router.go('library') },
+          });
+        }
         break;
       case 'apply_after_game_failed':
         this.fail(event.data.message);
@@ -81,12 +176,15 @@ export class AppState {
       case 'catalog':
         if (event.data.event === 'status') {
           this.network = event.data.data;
+        } else {
+          this.catalogEvent = event.data;
         }
         break;
       case 'download':
         this.followDownload(event.data);
         break;
       case 'installed':
+        this.followInstalled(event.data.task, event.data.installed);
         if (event.data.installed.changed) {
           this.library = event.data.installed.changed.library;
         } else {
@@ -94,10 +192,16 @@ export class AppState {
         }
         break;
       case 'dropped':
+        this.imported(event.data.outcomes);
         void this.reloadLibrary();
         break;
       case 'drop_failed':
         this.fail(event.data.message);
+        break;
+      case 'log':
+        for (const listener of this.#logListeners) {
+          listener(event.data.kinds);
+        }
         break;
       default:
         break;
@@ -118,8 +222,187 @@ export class AppState {
         );
         break;
       case 'removed':
+        this.followRemoved(event.id);
         this.tasks = this.tasks.filter((t) => t.id !== event.id);
         break;
+    }
+  }
+
+  /** `listener` hears which logs got new lines; returns the function that stops it. */
+  onLog(listener: (kinds: LogKind[]) => void): () => void {
+    this.#logListeners = [...this.#logListeners, listener];
+    return () => {
+      this.#logListeners = this.#logListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private followInstalled(id: number, installed: Installed): void {
+    const task = this.tasks.find((t) => t.id === id);
+    this.#installed.add(id);
+    if (!task) {
+      return;
+    }
+    if (installed.outcome.choices.length > 0) {
+      const source = againOf(task);
+      this.choices = [
+        ...this.choices,
+        {
+          key: `task-${id}`,
+          modId: installed.outcome.mod_id,
+          choices: installed.outcome.choices,
+          name: nameOf(task),
+          file: task.file_name,
+          size: task.total ?? task.size,
+          ...(source ? { source: { section: source.section, modId: source.modId, fileId: source.fileId } } : {}),
+        },
+      ];
+      return;
+    }
+    this.remember(finished(task, 'installed'));
+  }
+
+  private followRemoved(id: number): void {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task || this.#installed.delete(id)) {
+      return;
+    }
+    const outcome = task.state.state === 'done' ? 'updated' : task.state.state === 'failed' ? 'removed' : 'cancelled';
+    this.remember(finished(task, outcome));
+  }
+
+  /** Adds a line to "Finished this session". */
+  remember(entry: FinishedDownload): void {
+    this.history = [entry, ...this.history];
+  }
+
+  clearHistory(): void {
+    this.history = [];
+  }
+
+  /** A choice that didn't come from a download (an import from disk with variants). */
+  addChoice(choice: PendingChoice): void {
+    this.choices = [...this.choices.filter((c) => c.key !== choice.key), choice];
+  }
+
+  /** D4: turns the picked variants on (136: at the top of the selected profile). False when it failed (a toast says why). */
+  async chooseVariant(key: string, files: string[], variant: string): Promise<boolean> {
+    const choice = this.choices.find((c) => c.key === key);
+    if (!choice) {
+      return false;
+    }
+    try {
+      const changed = await api.choose(choice.modId, files);
+      this.library = changed.library;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+    this.choices = this.choices.filter((c) => c.key !== key);
+    this.remember({ key, name: choice.name, file: choice.file, outcome: 'installed', variant, at: Date.now() });
+    return true;
+  }
+
+  /** Cancel on a choice: the mod stays in the library, not turned on. */
+  putChoiceAside(key: string): void {
+    const choice = this.choices.find((c) => c.key === key);
+    if (!choice) {
+      return;
+    }
+    this.choices = this.choices.filter((c) => c.key !== key);
+    this.remember({ key, name: choice.name, file: choice.file, outcome: 'kept', at: Date.now() });
+  }
+
+  /** Files dropped on the window or added from disk (134): one toast for what joined the library, one per refusal. */
+  imported(outcomes: ImportResult[]): void {
+    const added = outcomes.filter((o) => 'Ok' in o).length;
+    if (added > 0) {
+      this.toast({ kind: 'success', title: t('library-added', { count: added }) });
+    }
+    for (const outcome of outcomes) {
+      if ('Err' in outcome) {
+        this.fail(outcome.Err);
+      }
+    }
+  }
+
+  /** Apply (S9): the selected profile goes into the game folder. */
+  async apply(): Promise<void> {
+    if (this.applying || this.playing) {
+      return;
+    }
+    this.applying = true;
+    try {
+      const result = await api.apply();
+      this.applied(result);
+      const enabled = result.library.mods.filter((m) => m.enabled).length;
+      this.toast({
+        kind: 'success',
+        title: describe({ id: 'N8', args: { name: result.library.selected_profile, count: enabled } }).what,
+      });
+    } catch (error) {
+      this.fail(error);
+    } finally {
+      this.applying = false;
+    }
+  }
+
+  /** After Apply or Play: the library, and D10 when gameinfo.gi is someone else's (E3). */
+  private applied(result: ApplyResult): void {
+    this.library = result.library;
+    if (result.gameinfo_foreign) {
+      this.gameinfoForeign = true;
+      const text = describe({ id: 'E3', args: {} });
+      this.toast({
+        kind: 'warning',
+        title: text.what,
+        text: text.why ?? undefined,
+        action: { label: t('library-show-differences'), onclick: () => router.go('library') },
+      });
+    }
+  }
+
+  /** An update the user picked in D5 arrived (169): in the library, or waiting for the user to map files. */
+  updateStep(step: UpdateStep): void {
+    if (step.kind === 'applied') {
+      this.library = step.changed.library;
+      const name = step.changed.library.mods.find((m) => m.id === step.mod_id)?.name ?? step.mod_id;
+      this.toast({ kind: 'success', title: t('library-updated', { name }), text: t('library-updated-text') });
+    } else {
+      this.mapping = step;
+      router.open('library', step.mod_id);
+    }
+  }
+
+  /** Looks for the game again ("Search again" when Deadlock wasn't found). */
+  async refreshGame(): Promise<void> {
+    this.game = await shell.gameStatus().catch(() => this.game);
+  }
+
+  /** "Check for updates" (38, F8). */
+  async checkUpdates(): Promise<void> {
+    if (this.checking) {
+      return;
+    }
+    this.checking = true;
+    try {
+      this.updates = await updatesApi.check();
+      this.updatesAt = Date.now();
+      if (this.updates.available > 0) {
+        this.toast({ kind: 'info', title: describe({ id: 'N3', args: { count: this.updates.available } }).what });
+      }
+    } catch (error) {
+      this.fail(error);
+    } finally {
+      this.checking = false;
+    }
+  }
+
+  /** Undo of what was applied when the game closed (N12, 147). */
+  async undoApplied(): Promise<void> {
+    try {
+      this.library = (await libraryApi.undoApplied()).library;
+    } catch (error) {
+      this.fail(error);
     }
   }
 
@@ -158,7 +441,7 @@ export class AppState {
     this.playing = true;
     try {
       const result = await shell.play();
-      this.library = result.library;
+      this.applied(result);
       this.game = this.game ? { ...this.game, running: true } : this.game;
     } catch (error) {
       this.fail(error);
@@ -182,6 +465,46 @@ export class AppState {
     const text = describe(message);
     this.toast({ kind: 'error', title: text.what, text: [text.why, text.todo].filter(Boolean).join(' ') });
   }
+
+  /** D12: the whole story of an error (what, why, what to do, Details) with its actions. Open it on the user's
+   *  request, e.g. "Show details", never by itself while the user browses (155). */
+  showError(error: unknown, actions: ErrorAction[] = []): void {
+    const message: UserMessage = isUserMessage(error) ? error : { id: 'Internal', args: { detail: String(error) } };
+    this.error = { message, actions };
+  }
+
+  closeError(): void {
+    this.error = null;
+  }
+}
+
+function nameOf(task: TaskSnapshot): string {
+  return task.meta.mod_name || task.file_name;
+}
+
+/** The GameBanana file a task downloads, for "Download again". */
+function againOf(task: TaskSnapshot): FinishedDownload['again'] {
+  const section = task.meta.section;
+  const modId = Number(task.meta.mod_id);
+  const fileId = Number(task.meta.file_id);
+  if ((section !== 'mod' && section !== 'sound') || !Number.isFinite(modId) || !Number.isFinite(fileId)) {
+    return undefined;
+  }
+  return { section, modId, fileId, author: task.meta.author ?? null };
+}
+
+function finished(task: TaskSnapshot, outcome: FinishedDownload['outcome']): FinishedDownload {
+  const again = againOf(task);
+  const version = task.meta.version;
+  return {
+    key: `task-${task.id}`,
+    name: nameOf(task),
+    file: task.file_name,
+    outcome,
+    ...(outcome === 'updated' && version ? { version } : {}),
+    at: Date.now(),
+    ...(again ? { again } : {}),
+  };
 }
 
 export const app = new AppState();

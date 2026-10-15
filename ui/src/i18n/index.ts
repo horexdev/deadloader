@@ -1,6 +1,8 @@
 export {
   describe,
+  formatClock,
   formatDate,
+  formatInstant,
   formatList,
   formatNumber,
   formatSize,
