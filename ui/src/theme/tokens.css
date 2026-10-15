@@ -1,0 +1,139 @@
+/* deadloader — design tokens as CSS custom properties.
+   Generated from tokens.json (name → --name). Load before components/bundle.css. */
+
+@font-face {
+  font-family: "Golos Text";
+  src: url("fonts/GolosText-Variable.woff2") format("woff2");
+  font-weight: 400 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-Variable.woff2") format("woff2");
+  font-weight: 100 800; font-style: normal; font-display: swap;
+}
+
+:root {
+  /* Colour */
+  --bg-chrome: #0f0e13;
+  --bg-app: #141218;
+  --surface: #1b1820;
+  --surface-raised: #241f2b;
+  --surface-hover: #2a2532;
+  --surface-pressed: #332d3d;
+  --surface-sunken: #0e0c12;
+  --scrim: rgba(8, 6, 12, 0.72);
+  --line: #2c2734;
+  --line-strong: #7b7290;
+  --ink: #ece8f2;
+  --ink-muted: #b6aec2;
+  --ink-subtle: #a097ad;
+  --ink-disabled: #5f586a;
+  --accent: #c58ad3;
+  --accent-hover: #d9a9e8;
+  --accent-pressed: #b277c2;
+  --accent-from: #b08ae0;
+  --accent-to: #dd8fbd;
+  --accent-text: #d9a9e8;
+  --accent-soft: #2f2339;
+  --accent-line: #9470ad;
+  --on-accent: #1a1220;
+  --focus: #ebbdf7;
+  --success: #6fd1a8;
+  --success-soft: #13281f;
+  --warning: #e8b65e;
+  --warning-soft: #2b2213;
+  --danger: #f2896a;
+  --danger-hover: #f59c80;
+  --danger-pressed: #e07558;
+  --danger-soft: #2f1a17;
+  --info: #82b8ee;
+  --info-soft: #152234;
+
+  /* Type families */
+  --font-sans: "Golos Text", "Segoe UI", "Microsoft YaHei UI", "Yu Gothic UI", "Malgun Gothic", system-ui, sans-serif;
+  --font-sans-ja: "Golos Text", "Yu Gothic UI", "Meiryo UI", "Segoe UI", system-ui, sans-serif;
+  --font-sans-ko: "Golos Text", "Malgun Gothic", "Segoe UI", system-ui, sans-serif;
+  --font-sans-zh: "Golos Text", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* Spacing */
+  --space-0: 0;
+  --space-half: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-none: none;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-drag: 0 12px 32px rgba(0, 0, 0, 0.50);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* Gradients (static only) */
+  --gradient-accent: linear-gradient(135deg, #b08ae0 0%, #dd8fbd 100%);
+  --gradient-accent-hover: linear-gradient(135deg, #bd9ce8 0%, #e6a1c9 100%);
+  --gradient-accent-pressed: linear-gradient(135deg, #9f79d2 0%, #cd7dad 100%);
+  --gradient-progress: linear-gradient(90deg, #b08ae0 0%, #dd8fbd 100%);
+  --gradient-selected: linear-gradient(90deg, rgba(176, 138, 224, 0.20) 0%, rgba(221, 143, 189, 0.06) 100%);
+  --gradient-wordmark: linear-gradient(100deg, #c39cf0 0%, #eaa3cc 100%);
+
+  /* Motion */
+  --duration-instant: 0ms;
+  --duration-fast: 100ms;
+  --duration-base: 160ms;
+  --duration-slow: 240ms;
+  --duration-exit: 120ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-linear: linear;
+
+  /* Sizes */
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 40px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 32px;
+  --titlebar-h: 36px;
+  --sidebar-w: 240px;
+  --sidebar-rail-w: 56px;
+  --sidebar-auto-collapse: 1100px;
+  --card-w: 220px;
+  --card-info-h: 112px;
+  --row-h: 56px;
+  --row-h-compact: 36px;
+  --dialog-sm: 440px;
+  --dialog-md: 560px;
+  --dialog-lg: 720px;
+  --toast-w: 380px;
+  --window-min-w: 960px;
+  --window-min-h: 600px;
+
+  /* Layers */
+  --z-sticky: 10;
+  --z-titlebar: 20;
+  --z-sidebar-overlay: 50;
+  --z-menu: 100;
+  --z-tooltip: 200;
+  --z-dialog: 300;
+  --z-toast: 400;
+
+  /* Opacity */
+  --opacity-row-disabled: 0.55;
+  --opacity-blur-label: 0.92;
+}
