@@ -709,6 +709,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "deadloader-catalog"
+version = "0.1.0"
+dependencies = [
+ "deadloader-core",
+ "deadloader-gamebanana",
+ "deadloader-html",
+ "deadloader-net",
+ "serde",
+ "serde_json",
+ "time",
+]
+
+[[package]]
 name = "deadloader-core"
 version = "0.1.0"
 dependencies = [
