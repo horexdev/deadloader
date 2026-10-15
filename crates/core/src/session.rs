@@ -1325,9 +1325,15 @@ impl Session {
             .cloned()
             .ok_or_else(|| ProfileError::NotFound(self.selected.clone()))?;
         let backup_name = format!("{}.gi", unique_number());
+        // Every file operation of this apply names it, the gameinfo.gi fix included (Activity: "part of change").
+        let tx = unique_number();
+        let change = crate::log::InChange {
+            log: &*self.log,
+            txn: tx,
+        };
         let fs = Logged {
             fs: &Disk,
-            log: &*self.log,
+            log: &change,
         };
         let gameinfo = ensure_mods_load(
             &fs,
@@ -1348,14 +1354,9 @@ impl Session {
         };
         let manifest_path = self.manifest_path();
         let report = engine
-            .apply(
-                &mut self.manifest,
-                &profile,
-                game_root,
-                false,
-                unique_number(),
-                |m| save_io(&manifest_path, m),
-            )
+            .apply(&mut self.manifest, &profile, game_root, false, tx, |m| {
+                save_io(&manifest_path, m)
+            })
             .map_err(SessionError::Engine)?;
         let root = game_root.display().to_string();
         if profile.game_root.as_deref() != Some(root.as_str()) {
@@ -2361,6 +2362,22 @@ mod tests {
                 .all(|(_, e)| e.result == crate::log::Outcome::Ok),
             "a normal apply logs no failures: {ops:?}"
         );
+    }
+
+    #[test]
+    fn the_file_operations_of_one_apply_carry_one_change_id() {
+        let f = Fixture::new("txn");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_file(&src, "Haze").expect("imported");
+        let imported = f.log.events().len();
+        s.apply(&f.game(), false).expect("applied");
+        let events = f.log.events();
+        assert!(events[..imported].iter().all(|(_, e)| e.txn.is_none()));
+        let txns: std::collections::BTreeSet<Option<u64>> =
+            events[imported..].iter().map(|(_, e)| e.txn).collect();
+        assert_eq!(txns.len(), 1, "{events:?}");
+        assert!(txns.iter().all(Option::is_some), "{events:?}");
     }
 
     #[test]
