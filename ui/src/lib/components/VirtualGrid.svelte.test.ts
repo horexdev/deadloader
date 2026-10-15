@@ -197,4 +197,19 @@ describe('VirtualGrid', () => {
     expect(one(target, '[data-index="1"]').style.transform).toBe(`translate(4px, ${4 + ROW_H + LIST_GAP}px)`);
     expect(one(target, '[data-index="1"]').style.width).toBe(`${1280 - 8}px`);
   });
+
+  it('starts at a remembered scroll position and reports where it is scrolled', () => {
+    const seen: number[] = [];
+    const { target } = render(GridHarness, {
+      count: 10_000,
+      ...library,
+      initialScrollTop: 6000,
+      onscroll: (top: number) => seen.push(top),
+    });
+    const viewport = one(target, '[data-virtual-viewport]');
+    expect(viewport.scrollTop).toBe(6000);
+    expect(indices(target)[0]).toBeGreaterThan(90);
+    scrollTo(viewport, 1200);
+    expect(seen.at(-1)).toBe(1200);
+  });
 });

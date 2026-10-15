@@ -213,7 +213,11 @@ pub enum SessionError {
     GameNotFound(PathBuf),
     /// Only a self-contained `pakNN_dir.vpk` of another tool can be taken under management (D11).
     NotTakeable(String),
+    /// The name is not a foreign item of the game's mod folder (F9).
+    NotForeign(String),
     Io(io::Error),
+    /// `favourites.json` can't be read or written; it is left as it is (E23).
+    Favourites(ModelError),
 }
 
 impl std::fmt::Display for SessionError {
@@ -233,6 +237,9 @@ impl std::fmt::Display for SessionError {
             Self::GameNotFound(root) => {
                 write!(f, "no Deadlock installation in {}", root.display())
             }
+            Self::NotForeign(name) => {
+                write!(f, "{name} is not a foreign item of the game's mod folder")
+            }
             Self::NotTakeable(name) => {
                 write!(
                     f,
@@ -240,6 +247,7 @@ impl std::fmt::Display for SessionError {
                 )
             }
             Self::Io(e) => write!(f, "{e}"),
+            Self::Favourites(e) => write!(f, "{}: {e}", crate::favourites::FILE_NAME),
         }
     }
 }
@@ -256,6 +264,7 @@ impl ToUserMessage for SessionError {
             Self::Import(e) => e.user_message(),
             Self::Remove(e) => e.user_message(),
             Self::Io(e) => from_io(e, Area::Data),
+            Self::Favourites(e) => data_file(e, crate::favourites::FILE_NAME),
             Self::GameNotFound(root) => UserMessage::new(MessageId::E2)
                 .arg("path", root.display())
                 .arg("detail", self),
@@ -264,7 +273,8 @@ impl ToUserMessage for SessionError {
             | Self::UnknownFile(_)
             | Self::NotLinked(_)
             | Self::EmptyName
-            | Self::NotTakeable(_) => UserMessage::new(MessageId::Internal).arg("detail", self),
+            | Self::NotTakeable(_)
+            | Self::NotForeign(_) => UserMessage::new(MessageId::Internal).arg("detail", self),
         }
     }
 }
@@ -389,6 +399,8 @@ pub struct VpkSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileView {
     pub id: String,
+    /// The GameBanana file it was downloaded as (or linked to); the mod page tells installed files by it.
+    pub remote_file_id: Option<u64>,
     pub archive_name: String,
     pub inner_path: String,
     pub version: Option<String>,
@@ -430,6 +442,25 @@ pub struct ProfileImported {
     pub name: String,
     /// Mods and files this library doesn't have (D9).
     pub missing: Vec<profiles::Missing>,
+    /// How many mods the file lists.
+    pub listed: usize,
+    /// The file it came from (its name only), when it was read from one.
+    pub file: Option<String>,
+}
+
+/// A profile as the Profiles screen lists it (S5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfileOverview {
+    pub name: String,
+    /// The game folder it goes into: its own, else the one it is applied to; `None` until one is chosen or applied.
+    pub game_root: Option<String>,
+    /// Enabled mods (that the library has).
+    pub mods: usize,
+    /// Their names, in priority order.
+    pub mod_names: Vec<String>,
+    /// Its files are in its game folder now ("applied" is per installation, 153).
+    pub applied: bool,
+    pub last_applied_unix_ms: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -1070,6 +1101,48 @@ impl Session {
         Ok(())
     }
 
+    /// The catalog mods marked as favourites (34), newest first.
+    pub fn favourites(&self) -> Result<Vec<crate::favourites::Favourite>, SessionError> {
+        crate::favourites::load(&self.favourites_path()).map_err(SessionError::Favourites)
+    }
+
+    /// Marks (`on`) or unmarks a catalog mod as a favourite and saves the list; an unreadable file is never
+    /// overwritten.
+    pub fn set_favourite(
+        &mut self,
+        favourite: crate::favourites::Favourite,
+        on: bool,
+    ) -> Result<Vec<crate::favourites::Favourite>, SessionError> {
+        let path = self.favourites_path();
+        let mut items = self.favourites()?;
+        if !crate::favourites::set(&mut items, favourite, on) {
+            return Ok(items);
+        }
+        let result = crate::favourites::save(&path, &items);
+        let mut event = FileEvent {
+            dst: Some(path.display().to_string()),
+            ..FileEvent::new(FileOp::Write)
+        };
+        if let Err(e) = &result {
+            event.result = Outcome::Failed;
+            event.error = Some(e.to_string());
+        }
+        self.log.record("favourites saved", &event);
+        result.map_err(SessionError::Favourites)?;
+        Ok(items)
+    }
+
+    /// The user confirmed legal age in D3 (109): recorded now and saved with the settings. The caller logs it.
+    pub fn confirm_age(&mut self) -> Result<(), SessionError> {
+        let mut settings = self.settings.clone();
+        settings.confirm_age(time::OffsetDateTime::now_utc());
+        self.update_settings(settings)
+    }
+
+    fn favourites_path(&self) -> PathBuf {
+        self.data_dir.join(crate::favourites::FILE_NAME)
+    }
+
     /// The user's pick in D4: `chosen` become the active variants; the mod's add-ons are enabled with them.
     pub fn choose(&mut self, mod_id: &str, chosen: &[String]) -> Result<(), SessionError> {
         let grouping = self.grouping(mod_id)?;
@@ -1265,7 +1338,119 @@ impl Session {
         Ok(ProfileImported {
             name: profile.name,
             missing: imported.missing,
+            listed: imported.listed,
+            file: None,
         })
+    }
+
+    /// Every profile with its game folder, enabled mods and whether and when it was applied (S5).
+    pub fn profiles_overview(&self) -> Vec<ProfileOverview> {
+        let same = |a: &str, b: &str| a.to_lowercase() == b.to_lowercase();
+        self.profiles
+            .iter()
+            .map(|p| {
+                let applied_in = self.manifest.installations.iter().find(|i| {
+                    i.applied_profile
+                        .as_deref()
+                        .is_some_and(|n| same(n, &p.name))
+                        && p.game_root.as_ref().is_none_or(|r| *r == i.game_root)
+                });
+                let mod_names: Vec<String> = p
+                    .entries
+                    .iter()
+                    .filter(|e| e.enabled)
+                    .filter_map(|e| self.manifest.mods.iter().find(|m| m.id == e.mod_id))
+                    .map(|m| m.name.clone())
+                    .collect();
+                let last_applied = self
+                    .manifest
+                    .last_applied
+                    .iter()
+                    .find(|(k, _)| same(k, &p.name))
+                    .map(|(_, v)| *v);
+                ProfileOverview {
+                    name: p.name.clone(),
+                    game_root: p
+                        .game_root
+                        .clone()
+                        .or_else(|| applied_in.map(|i| i.game_root.clone())),
+                    mods: mod_names.len(),
+                    mod_names,
+                    applied: applied_in.is_some(),
+                    last_applied_unix_ms: last_applied,
+                }
+            })
+            .collect()
+    }
+
+    /// "Change game installation" (153): the folder Apply and Play use for this profile. Nothing is applied.
+    pub fn set_profile_game_root(&mut self, name: &str, root: &Path) -> Result<(), SessionError> {
+        let mut profile = self
+            .profiles
+            .iter()
+            .find(|p| p.name.to_lowercase() == name.to_lowercase())
+            .cloned()
+            .ok_or_else(|| ProfileError::NotFound(name.to_owned()))?;
+        profile.game_root = Some(root.display().to_string());
+        profiles::save(&self.profiles_dir(), &profile)?;
+        self.reload_profiles()
+    }
+
+    /// Before an applied profile is deleted: its files leave every game folder it is applied to (the confirmation
+    /// says so). Returns how many folders changed; refused while the game runs if there is anything to take out.
+    pub fn take_out_of_game(
+        &mut self,
+        name: &str,
+        game_running: bool,
+    ) -> Result<usize, SessionError> {
+        let roots: Vec<String> = self
+            .manifest
+            .installations
+            .iter()
+            .filter(|i| {
+                !i.applied.is_empty()
+                    && i.applied_profile
+                        .as_deref()
+                        .is_some_and(|n| n.to_lowercase() == name.to_lowercase())
+            })
+            .map(|i| i.game_root.clone())
+            .collect();
+        if roots.is_empty() {
+            return Ok(0);
+        }
+        if game_running {
+            return Err(SessionError::Engine(EngineError::GameRunning));
+        }
+        let fs = Logged {
+            fs: &Disk,
+            log: &*self.log,
+        };
+        let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
+        let engine = Engine {
+            fs: &fs,
+            journal: &journal,
+            data_dir: &self.data_dir,
+            direction: self.direction,
+        };
+        let manifest_path = self.manifest_path();
+        for root in &roots {
+            let empty = Profile {
+                name: name.to_owned(),
+                game_root: Some(root.clone()),
+                entries: Vec::new(),
+            };
+            engine
+                .apply(
+                    &mut self.manifest,
+                    &empty,
+                    Path::new(root),
+                    false,
+                    unique_number(),
+                    |m| save_io(&manifest_path, m),
+                )
+                .map_err(SessionError::Engine)?;
+        }
+        Ok(roots.len())
     }
 
     /// Replaces the settings; refused (and nothing saved) if any value is invalid. An unreadable `settings.json`
@@ -1289,9 +1474,15 @@ impl Session {
             .cloned()
             .ok_or_else(|| ProfileError::NotFound(self.selected.clone()))?;
         let backup_name = format!("{}.gi", unique_number());
+        // Every file operation of this apply names it, the gameinfo.gi fix included (Activity: "part of change").
+        let tx = unique_number();
+        let change = crate::log::InChange {
+            log: &*self.log,
+            txn: tx,
+        };
         let fs = Logged {
             fs: &Disk,
-            log: &*self.log,
+            log: &change,
         };
         let gameinfo = ensure_mods_load(
             &fs,
@@ -1313,14 +1504,9 @@ impl Session {
         };
         let manifest_path = self.manifest_path();
         let report = engine
-            .apply(
-                &mut self.manifest,
-                &profile,
-                game_root,
-                false,
-                unique_number(),
-                |m| save_io(&manifest_path, m),
-            )
+            .apply(&mut self.manifest, &profile, game_root, false, tx, |m| {
+                save_io(&manifest_path, m)
+            })
             .map_err(SessionError::Engine)?;
         let root = game_root.display().to_string();
         if counted.linked() + counted.copied() > 0 {
@@ -1341,6 +1527,15 @@ impl Session {
             profiles::save(&self.profiles_dir(), &profile)?;
             self.reload_profiles()?;
         }
+        let mut stamped = self.manifest.clone();
+        stamped
+            .last_applied
+            .retain(|k, _| k.to_lowercase() != profile.name.to_lowercase());
+        stamped
+            .last_applied
+            .insert(profile.name.clone(), now_unix_ms());
+        save_io(&self.manifest_path(), &stamped)?;
+        self.manifest = stamped;
         Ok(Applied {
             changed: report.changed,
             gameinfo,
@@ -1492,6 +1687,13 @@ impl Session {
 
     /// F9 "Leave as is": the item stays where it is and listed, but is never reported again.
     pub fn leave_foreign(&mut self, game_root: &Path, name: &str) -> Result<(), SessionError> {
+        let name = self
+            .foreign(game_root)
+            .into_iter()
+            .find(|i| i.name.eq_ignore_ascii_case(name))
+            .map(|i| i.name)
+            .ok_or_else(|| SessionError::NotForeign(name.to_owned()))?;
+        let name = name.as_str();
         let root = game_root.display().to_string();
         let mut updated = self.manifest.clone();
         let index = match updated
@@ -1799,6 +2001,7 @@ impl Session {
                 .iter()
                 .map(|f| FileView {
                     id: f.id.clone(),
+                    remote_file_id: f.remote_file_id,
                     archive_name: f.archive_name.clone(),
                     inner_path: f.inner_path.clone(),
                     version: f.version.clone(),
@@ -2031,6 +2234,13 @@ fn save_io(path: &Path, manifest: &Manifest) -> io::Result<()> {
 }
 
 /// Distinct per call within this process and across restarts: transaction ids and backup names.
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
+}
+
 fn unique_number() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static LAST: AtomicU64 = AtomicU64::new(0);
@@ -2768,6 +2978,22 @@ mod tests {
     }
 
     #[test]
+    fn the_file_operations_of_one_apply_carry_one_change_id() {
+        let f = Fixture::new("txn");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_file(&src, "Haze").expect("imported");
+        let imported = f.log.events().len();
+        s.apply(&f.game(), false).expect("applied");
+        let events = f.log.events();
+        assert!(events[..imported].iter().all(|(_, e)| e.txn.is_none()));
+        let txns: std::collections::BTreeSet<Option<u64>> =
+            events[imported..].iter().map(|(_, e)| e.txn).collect();
+        assert_eq!(txns.len(), 1, "{events:?}");
+        assert!(txns.iter().all(Option::is_some), "{events:?}");
+    }
+
+    #[test]
     fn stray_library_files_are_deleted_on_start_and_logged() {
         let f = Fixture::new("stray");
         open(&f);
@@ -3158,6 +3384,25 @@ mod tests {
     }
 
     #[test]
+    fn only_a_listed_foreign_item_can_be_left_as_it_is() {
+        let f = Fixture::new("foreignleaveunknown");
+        let mut s = open(&f);
+        let game = foreign_game(&f);
+        assert!(matches!(
+            s.leave_foreign(&game, "nothing_here.vpk"),
+            Err(SessionError::NotForeign(_))
+        ));
+        assert!(
+            open(&f)
+                .manifest()
+                .installations
+                .iter()
+                .all(|i| i.left_foreign.is_empty()),
+            "nothing written"
+        );
+    }
+
+    #[test]
     fn a_foreign_mod_taken_under_management_is_copied_and_then_replaced_by_ours() {
         let f = Fixture::new("foreigntake");
         let mut s = open(&f);
@@ -3291,5 +3536,234 @@ mod tests {
             s.move_mod("nope", 0),
             Err(SessionError::UnknownMod(_))
         ));
+    }
+
+    #[test]
+    fn library_files_say_which_gamebanana_file_they_came_from() {
+        let f = Fixture::new("remote-id");
+        let mut s = open(&f);
+        let queued = f.source("3.bin", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_download(&queued, &haze_download(1_480_331, "haze_v2.vpk"))
+            .expect("imported");
+        s.import_file(&f.source("own.vpk", &[("models/own.vmdl_c", 1)]), "Own")
+            .expect("local mod");
+        let view = s.library();
+        let remote = |name: &str| {
+            view.mods
+                .iter()
+                .find(|m| m.name == name)
+                .and_then(|m| m.files.first())
+                .map(|file| file.remote_file_id)
+        };
+        assert_eq!(remote("Haze V2"), Some(Some(1_480_331)));
+        assert_eq!(remote("Own"), Some(None));
+    }
+
+    fn favourite(id: u64, name: &str) -> crate::favourites::Favourite {
+        crate::favourites::Favourite {
+            section: Section::Mod,
+            id,
+            name: name.to_owned(),
+            author: None,
+            root_category: None,
+            subcategory: None,
+            nsfw: false,
+            date_updated: None,
+        }
+    }
+
+    #[test]
+    fn favourites_are_saved_next_to_the_library_and_logged() {
+        let f = Fixture::new("favourites");
+        let mut s = open(&f);
+        assert_eq!(s.favourites().expect("none yet"), []);
+        let list = s
+            .set_favourite(favourite(655_209, "Haze V2"), true)
+            .expect("marked");
+        assert_eq!(list, [favourite(655_209, "Haze V2")]);
+        let path = f.data().join("favourites.json");
+        assert!(
+            f.ops()
+                .contains(&(FileOp::Write, path.display().to_string())),
+            "{:?}",
+            f.ops()
+        );
+        assert_eq!(open(&f).favourites().expect("kept"), list);
+        let list = s
+            .set_favourite(favourite(655_209, "Haze V2"), false)
+            .expect("unmarked");
+        assert!(list.is_empty());
+        assert!(open(&f).favourites().expect("kept").is_empty());
+    }
+
+    #[test]
+    fn an_unreadable_favourites_file_is_reported_and_left_alone() {
+        let f = Fixture::new("favourites-broken");
+        let mut s = open(&f);
+        let path = f.data().join("favourites.json");
+        std::fs::write(&path, "{ not json").expect("damage");
+        let err = s.favourites().expect_err("refused");
+        assert_eq!(err.user_message().id, MessageId::E23);
+        assert!(s.set_favourite(favourite(1, "One"), true).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("kept"),
+            "{ not json",
+            "never overwritten"
+        );
+    }
+
+    #[test]
+    fn the_age_confirmation_is_saved_with_the_settings() {
+        let f = Fixture::new("age");
+        let mut s = open(&f);
+        assert!(s.settings().acknowledgements.age_confirmed_at.is_none());
+        s.confirm_age().expect("saved");
+        assert!(s.settings().acknowledgements.age_confirmed_at.is_some());
+        assert!(
+            open(&f)
+                .settings()
+                .acknowledgements
+                .age_confirmed_at
+                .is_some()
+        );
+    }
+
+    fn overview<'a>(list: &'a [ProfileOverview], name: &str) -> &'a ProfileOverview {
+        list.iter().find(|p| p.name == name).expect("listed")
+    }
+
+    fn now_ms() -> u64 {
+        u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_millis(),
+        )
+        .expect("ms")
+    }
+
+    #[test]
+    fn the_overview_counts_enabled_mods_and_knows_where_each_profile_is_applied() {
+        let f = Fixture::new("overview");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("haze");
+        s.import_file(
+            &f.source("wraith.vpk", &[("models/wraith/body.vmdl_c", 2)]),
+            "Wraith",
+        )
+        .expect("wraith");
+        let wraith = s.library().mods[0].id.clone();
+        s.set_enabled(&wraith, false).expect("off");
+        s.create_profile("Evening").expect("created");
+
+        let before = s.profiles_overview();
+        let default = overview(&before, crate::profiles::DEFAULT_NAME);
+        assert_eq!(
+            (default.mods, default.mod_names.clone()),
+            (1, vec!["Haze".to_owned()])
+        );
+        assert!(!default.applied);
+        assert_eq!(default.last_applied_unix_ms, None);
+        assert_eq!(default.game_root, None);
+
+        let game = f.game();
+        let start = now_ms();
+        s.apply(&game, false).expect("applied");
+        let end = now_ms();
+        let after = open(&f).profiles_overview();
+        let default = overview(&after, crate::profiles::DEFAULT_NAME);
+        assert!(default.applied);
+        assert_eq!(
+            default.game_root.as_deref(),
+            Some(game.to_string_lossy().as_ref())
+        );
+        let when = default.last_applied_unix_ms.expect("stamped");
+        assert!(start <= when && when <= end, "{start} <= {when} <= {end}");
+        let evening = overview(&after, "Evening");
+        assert!(!evening.applied);
+        assert_eq!((evening.mods, evening.last_applied_unix_ms), (0, None));
+    }
+
+    #[test]
+    fn the_last_apply_follows_a_rename_and_not_a_copy() {
+        let f = Fixture::new("lastapplied");
+        let mut s = open(&f);
+        s.apply(&f.game(), false).expect("applied");
+        s.rename_profile(crate::profiles::DEFAULT_NAME, "Main")
+            .expect("renamed");
+        s.duplicate_profile("Main", "Copy").expect("duplicated");
+        let list = s.profiles_overview();
+        assert!(overview(&list, "Main").last_applied_unix_ms.is_some());
+        assert_eq!(overview(&list, "Copy").last_applied_unix_ms, None);
+        s.delete_profile("Main").expect("deleted");
+        assert!(s.manifest().last_applied.is_empty());
+    }
+
+    #[test]
+    fn a_profile_can_be_given_another_game_installation() {
+        let f = Fixture::new("otherinstall");
+        let mut s = open(&f);
+        s.create_profile("Sasha").expect("created");
+        let other = f.dir.join("E-Deadlock");
+        s.set_profile_game_root("sasha", &other).expect("set");
+        let list = open(&f).profiles_overview();
+        let sasha = overview(&list, "Sasha");
+        assert_eq!(
+            sasha.game_root.as_deref(),
+            Some(other.to_string_lossy().as_ref())
+        );
+        assert!(!sasha.applied, "nothing is applied by choosing a folder");
+        assert!(matches!(
+            s.set_profile_game_root("nobody", &other),
+            Err(SessionError::Profile(ProfileError::NotFound(_)))
+        ));
+    }
+
+    #[test]
+    fn a_profile_taken_out_of_the_game_leaves_no_files_there() {
+        let f = Fixture::new("outofgame");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("haze");
+        let game = f.game();
+        s.apply(&game, false).expect("applied");
+        let addons = game.join("game").join("citadel").join("addons");
+        assert!(addons.join("pak01_dir.vpk").exists());
+        assert!(matches!(
+            s.take_out_of_game("Default", true),
+            Err(SessionError::Engine(EngineError::GameRunning))
+        ));
+        assert!(
+            addons.join("pak01_dir.vpk").exists(),
+            "untouched while the game runs"
+        );
+        assert_eq!(s.take_out_of_game("default", false).expect("taken out"), 1);
+        assert!(!addons.join("pak01_dir.vpk").exists());
+        assert_eq!(
+            s.take_out_of_game("Default", true).expect("nothing left"),
+            0
+        );
+    }
+
+    #[test]
+    fn an_imported_profile_says_how_many_mods_its_file_lists() {
+        let f = Fixture::new("listed");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("haze");
+        let text = s
+            .export_profile(crate::profiles::DEFAULT_NAME)
+            .expect("exported");
+        assert_eq!(s.import_profile(&text).expect("imported").listed, 1);
     }
 }

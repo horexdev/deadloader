@@ -1,0 +1,105 @@
+/* Shared pieces of the Profiles screen's dialogs, from ProfilesScreen.dc.html (class names prefixed pf-). */
+.pf-opts {
+  display: grid;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.pf-opts .dl-variant {
+  padding: 8px 12px;
+  align-items: start;
+  position: relative;
+}
+
+.pf-opts .dl-variant:first-child {
+  border-top: 0;
+}
+
+.pf-opts .dl-variant__dot {
+  margin-top: 2px;
+}
+
+.pf-opt {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pf-opt b {
+  font: var(--type-body-strong);
+  color: var(--ink);
+}
+
+.pf-opt small {
+  font: var(--type-body-sm);
+  color: var(--ink-subtle);
+}
+
+.pf-miss {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.pf-miss:first-of-type {
+  border-top: 0;
+}
+
+.pf-miss__local {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 27px;
+  box-sizing: border-box;
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-subtle);
+}
+
+.pf-miss__name {
+  font: var(--type-body-strong);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-miss__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  font: var(--type-body-sm);
+  color: var(--ink-muted);
+}
+
+.pf-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: var(--type-caption-strong);
+}
+
+.pf-state .dl-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.pf-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font: var(--type-body-sm);
+  color: var(--ink-muted);
+}
+
+.pf-note .dl-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ink-subtle);
+}

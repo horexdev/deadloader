@@ -34,12 +34,22 @@ type Args = Record<string, unknown>;
 const MB = 1_048_576;
 
 function vpkFile(id: string, archive: string, inner: string, version: string, len: number): FileView {
-  return { id, archive_name: archive, inner_path: inner, version, len, damaged: false, newer_in_library: null };
+  return {
+    id,
+    remote_file_id: null,
+    archive_name: archive,
+    inner_path: inner,
+    version,
+    len,
+    damaged: false,
+    newer_in_library: null,
+  };
 }
 
 function gb(n: number, name: string, author: string, version: string, mb: number, enabled = true): ModView {
   const id = `gb-${710_000 + n}`;
   const f = vpkFile(`${id}-1`, `${name.toLowerCase().replace(/\W+/g, '_')}.zip`, 'pak01_dir.vpk', version, mb * MB);
+  f.remote_file_id = 1_900_000 + n;
   return {
     id,
     name,

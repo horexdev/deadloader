@@ -121,7 +121,7 @@ fn update_download(
 }
 
 /// A catalog answer as the message a download-like action shows.
-fn catalog_message(e: &CatalogError) -> UserMessage {
+pub(crate) fn catalog_message(e: &CatalogError) -> UserMessage {
     if let Some(message) = e.message() {
         return message.clone();
     }

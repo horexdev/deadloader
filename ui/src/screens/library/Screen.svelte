@@ -79,7 +79,7 @@
   const switched = $derived(
     view !== null && view.pending_count > 0 && view.applied_profile !== view.selected_profile,
   );
-  const details = $derived(router.param ? (mods.find((m) => m.id === router.param) ?? null) : null);
+  const details = $derived(router.path[0] ? (mods.find((m) => m.id === router.path[0]) ?? null) : null);
   const conflictsOpen = $derived(filter === 'conflicts' && !conflictsClosed && !details);
   const updatesAvailable = $derived(mods.filter((m) => hasUpdate(m.id, app.updates)).length);
   const diskBytes = $derived(mods.reduce((sum, m) => sum + m.bytes, 0));
@@ -132,7 +132,7 @@
 
   // The catalog's Update button lands here with the mod (`#/library/<id>`): its D5.
   $effect(() => {
-    const id = router.param;
+    const id = router.path[0] ?? null;
     if (id && id !== updateShownFor && app.updates) {
       const mod = mods.find((m) => m.id === id);
       if (mod && hasUpdate(mod.id, app.updates)) {
@@ -345,7 +345,7 @@
   }
 
   function open(mod: ModView): void {
-    router.go('library', mod.id);
+    router.open('library', mod.id);
   }
 
   function closeDetails(): void {
@@ -409,7 +409,7 @@
 
   function modPage(mod: ModView): void {
     if (mod.source.kind === 'gamebanana') {
-      router.go('catalog', String(mod.source.mod_id));
+      router.open('catalog', mod.source.section, String(mod.source.mod_id));
     }
   }
 

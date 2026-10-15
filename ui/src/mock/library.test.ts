@@ -4,6 +4,8 @@ import { devtools, invoke, resetMock } from './core';
 import { LibraryMock, libraryMods } from './library';
 
 beforeEach(() => {
+  // The Library's own mock data is seeded on its route.
+  history.replaceState(null, '', '/#/library');
   resetMock();
 });
 

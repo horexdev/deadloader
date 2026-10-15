@@ -133,7 +133,7 @@ describe('the Library screen', () => {
 
   it('opens a mod’s details from the address and deletes it through D6', async () => {
     const target = await start();
-    router.go('library', 'gb-710003');
+    router.open('library', 'gb-710003');
     await settle();
     const details = one(target, 'aside');
     expect(details.textContent).toContain('Celeste — Coral Reef');

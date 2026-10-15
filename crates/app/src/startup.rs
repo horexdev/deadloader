@@ -108,6 +108,9 @@ pub fn run() -> Result<(), StartError> {
             commands::library::add_from_disk,
             commands::profiles::export_profile_dialog,
             commands::profiles::import_profile_dialog,
+            commands::profiles::profiles_overview,
+            commands::profiles::set_profile_installation,
+            commands::profiles::profile_download_missing,
             commands::catalog::catalog_list,
             commands::catalog::catalog_refresh,
             commands::catalog::catalog_prefetch,
@@ -118,6 +121,10 @@ pub fn run() -> Result<(), StartError> {
             commands::catalog::catalog_activate,
             commands::catalog::catalog_consent_prompt,
             commands::catalog::catalog_grant,
+            commands::catalog::favourites,
+            commands::catalog::set_favourite,
+            commands::catalog::confirm_age,
+            commands::catalog::open_link,
             commands::downloads::download_install,
             commands::downloads::downloads,
             commands::downloads::download_control,
@@ -138,6 +145,11 @@ pub fn run() -> Result<(), StartError> {
             commands::library::gameinfo_status,
             commands::library::verify_game_files,
             commands::library::show_place,
+            commands::activity::log_page,
+            commands::activity::log_entry,
+            commands::activity::log_counts,
+            commands::activity::log_summary,
+            commands::activity::open_logs_folder,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
@@ -152,6 +164,7 @@ pub fn run() -> Result<(), StartError> {
         Arc::clone(&log) as deadloader_core::session::SharedLog,
     ));
     let outbox = Arc::new(Outbox::new());
+    wire_activity(&app, &log, &layout, &backend, &outbox);
     // Nothing is requested until the catalog or a download asks; local mode until the first-run choice (108).
     let network = Arc::new(Network::new(
         &backend.settings().unwrap_or_default(),
@@ -222,6 +235,35 @@ pub fn run() -> Result<(), StartError> {
         }
     });
     Ok(())
+}
+
+/// Activity (S7): the log reader for its commands, the Logs settings on the logger, live pushes of new lines.
+fn wire_activity(
+    app: &App,
+    log: &Log,
+    layout: &DataLayout,
+    backend: &Backend,
+    outbox: &Arc<Outbox>,
+) {
+    crate::activity::apply_settings(log, &backend.settings().unwrap_or_default());
+    let follow = Arc::clone(log);
+    backend.on_settings(Box::new(move |settings| {
+        crate::activity::apply_settings(&follow, settings);
+    }));
+    app.manage(Arc::new(crate::activity::Activity::new(
+        Arc::clone(log),
+        layout.logs(),
+        deadloader_core::log::Masker::from_env(),
+    )) as commands::activity::SharedActivity);
+    if let Err(e) = crate::activity::watch(log, Arc::clone(outbox)) {
+        // Activity then shows new lines when it is opened again, not live.
+        write(
+            log,
+            Level::Error,
+            "the activity view's live updates could not start",
+            [("error", e.to_string().into())],
+        );
+    }
 }
 
 /// What the catalog is opened with.

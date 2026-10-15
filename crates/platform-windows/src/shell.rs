@@ -1,12 +1,17 @@
 //! Handing an address to Windows: Deadlock through Steam (Play, F4), Steam's check of the game files (D10, decision
-//! 132) and web pages in the user's browser (D1, decision 31). Only `https://` and those two Steam links are passed
-//! on; anything else is refused before Windows sees it. Also: showing a file in File Explorer and opening a text file
-//! in Notepad, for paths the core chose (never one from the UI).
+//! 132), web pages in the user's browser (D1, decision 31) and folders in File Explorer. Only `https://`, those two
+//! Steam links and existing folders are passed on; anything else is refused before Windows sees it. Also: showing a
+//! file in File Explorer and opening a text file in Notepad, for paths the core chose (never one from the UI).
 
 #![allow(unsafe_code)]
 
+use std::ffi::OsStr;
 use std::io;
-use std::path::{Component, Path};
+use std::os::windows::ffi::OsStrExt;
+use std::path::{Component, Path, PathBuf};
+use windows_sys::Win32::System::SystemInformation::{
+    GetSystemDirectoryW, GetSystemWindowsDirectoryW,
+};
 use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -39,10 +44,34 @@ pub fn open_url(url: &str) -> io::Result<()> {
     execute(url.trim(), None)
 }
 
-/// The program [`reveal`] starts.
-pub const EXPLORER: &str = "explorer.exe";
-/// The program [`open_in_notepad`] starts.
-pub const NOTEPAD: &str = "notepad.exe";
+/// File Explorer, which [`reveal`] starts. Programs are started by their full path in the Windows folders: a bare
+/// name is looked up in the current folder first, where a planted copy could sit (e.g. Downloads, next to the exe).
+pub fn explorer() -> io::Result<PathBuf> {
+    folder(GetSystemWindowsDirectoryW).map(|d| d.join("explorer.exe"))
+}
+
+/// Notepad, which [`open_in_notepad`] starts (see [`explorer`]).
+pub fn notepad() -> io::Result<PathBuf> {
+    folder(GetSystemDirectoryW).map(|d| d.join("notepad.exe"))
+}
+
+/// A Windows folder from one of the `Get…DirectoryW` functions.
+fn folder(get: unsafe extern "system" fn(*mut u16, u32) -> u32) -> io::Result<PathBuf> {
+    let mut buffer = vec![0u16; 260];
+    loop {
+        let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+        // SAFETY: `buffer` is writable for `capacity` UTF-16 units and outlives the call.
+        let len = unsafe { get(buffer.as_mut_ptr(), capacity) } as usize;
+        if len == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if len < buffer.len() {
+            return Ok(PathBuf::from(String::from_utf16_lossy(&buffer[..len])));
+        }
+        // Too small: `len` is the size needed, including the NUL.
+        buffer.resize(len, 0);
+    }
+}
 
 /// File Explorer's command line that opens the folder of `path` with `path` selected.
 pub fn explorer_arguments(path: &Path) -> io::Result<String> {
@@ -57,13 +86,13 @@ pub fn notepad_arguments(path: &Path) -> io::Result<String> {
 /// Shows `path` selected in its folder in File Explorer ("Open folder").
 pub fn reveal(path: &Path) -> io::Result<()> {
     let arguments = explorer_arguments(path)?;
-    execute(EXPLORER, Some(&arguments))
+    execute(&explorer()?.to_string_lossy(), Some(&arguments))
 }
 
 /// Opens a text file in Notepad ("Open file" for `gameinfo.gi`, which has no program of its own).
 pub fn open_in_notepad(path: &Path) -> io::Result<()> {
     let arguments = notepad_arguments(path)?;
-    execute(NOTEPAD, Some(&arguments))
+    execute(&notepad()?.to_string_lossy(), Some(&arguments))
 }
 
 /// An absolute path without `..` or quotes, as text.
@@ -106,9 +135,65 @@ fn execute(target: &str, parameters: Option<&str>) -> io::Result<()> {
     Ok(())
 }
 
+/// Opens an existing folder, given by its full path, in File Explorer. Anything else (a file, a relative path, a
+/// folder that isn't there) is refused before Windows sees it, so only a folder can ever be opened this way.
+pub fn open_folder(path: &Path) -> io::Result<()> {
+    if !path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("only a full folder path is opened, not {}", path.display()),
+        ));
+    }
+    if !std::fs::metadata(path)?.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{} is not a folder", path.display()),
+        ));
+    }
+    let wide = |s: &OsStr| s.encode_wide().chain(Some(0)).collect::<Vec<u16>>();
+    let (verb, target) = (wide(OsStr::new("explore")), wide(path.as_os_str()));
+    // SAFETY: both strings are NUL-terminated UTF-16 that outlive the call; the window, parameters and directory are
+    // optional and passed as null.
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result as isize <= 32 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_an_existing_folder_given_in_full_is_opened() {
+        let dir =
+            std::env::temp_dir().join(format!("deadloader-open-folder-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let file = dir.join("a.txt");
+        std::fs::write(&file, b"x").expect("file");
+        for refused in [Path::new("logs"), &file, &dir.join("missing")] {
+            let err = open_folder(refused).expect_err("refused");
+            assert!(
+                matches!(
+                    err.kind(),
+                    io::ErrorKind::InvalidInput | io::ErrorKind::NotFound
+                ),
+                "{}: {err}",
+                refused.display()
+            );
+        }
+        std::fs::remove_dir_all(&dir).expect("cleanup");
+    }
 
     #[test]
     fn only_web_pages_and_the_deadlock_link_are_opened() {
@@ -142,6 +227,18 @@ mod tests {
         ] {
             assert!(!may_open(refused), "{refused}");
         }
+    }
+
+    #[test]
+    fn explorer_and_notepad_are_started_from_the_windows_folders_by_full_path() {
+        let explorer = explorer().expect("the Windows folder");
+        let notepad = notepad().expect("the system folder");
+        for (program, name) in [(&explorer, "explorer.exe"), (&notepad, "notepad.exe")] {
+            assert!(program.is_absolute(), "{}", program.display());
+            assert!(program.is_file(), "{}", program.display());
+            assert_eq!(program.file_name().and_then(|n| n.to_str()), Some(name));
+        }
+        assert_eq!(notepad.parent().and_then(Path::parent), explorer.parent());
     }
 
     #[test]

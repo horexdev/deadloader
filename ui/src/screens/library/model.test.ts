@@ -29,6 +29,7 @@ function mod(id: string, over: Partial<ModView> = {}): ModView {
     files: [
       {
         id: `${id}-1`,
+        remote_file_id: null,
         archive_name: `${id}_ab12f.zip`,
         inner_path: 'pak01_dir.vpk',
         version: '1',
@@ -49,6 +50,7 @@ function mod(id: string, over: Partial<ModView> = {}): ModView {
 const faun = mod('faun', {
   files: ['pink', 'red'].map((c) => ({
     id: `faun-${c}`,
+    remote_file_id: null,
     archive_name: `faunceleste_${c}_5027e.rar`,
     inner_path: 'pak01_dir.vpk',
     version: 'v1',
@@ -92,6 +94,7 @@ describe('library model', () => {
     const shared = mod('m', {
       files: ['pink', 'blue'].map((c) => ({
         id: `m-${c}`,
+        remote_file_id: null,
         archive_name: 'haze.zip',
         inner_path: `${c}/pak01_dir.vpk`,
         version: null,
