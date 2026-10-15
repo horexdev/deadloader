@@ -10,6 +10,7 @@ use deadloader_net::transport::{
 use deadloader_net::{
     Client, Host, HostSource, Initiator, Purpose, TransportConfig, UreqTransport,
 };
+use deadloader_platform_windows::proxy::SystemProxy;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::time::Duration;
@@ -188,16 +189,34 @@ impl Transport for Refusing {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Wanted {
     Ureq(TransportConfig),
-    /// "Use the system proxy" is not supported yet.
-    SystemProxy,
+    /// A proxy deadloader can't follow: every request is refused with this reason.
+    Refuse(String),
 }
 
-fn wanted(settings: &Settings) -> Wanted {
+/// Windows' proxy settings, read when the network is built or its settings change.
+pub type SystemProxyLookup = Box<dyn Fn() -> std::io::Result<SystemProxy> + Send + Sync>;
+
+fn wanted(settings: &Settings, system: &dyn Fn() -> std::io::Result<SystemProxy>) -> Wanted {
     let network = &settings.network;
     let proxy = match &network.proxy {
         Proxy::None => None,
         Proxy::Manual { address } => Some(address.clone()),
-        Proxy::System => return Wanted::SystemProxy,
+        // Decision 182: what Windows has, or nothing at all rather than a direct connection behind the user's back.
+        Proxy::System => match system() {
+            Ok(SystemProxy::Direct) => None,
+            Ok(SystemProxy::Http(address)) => Some(address),
+            Ok(SystemProxy::Unsupported(reason)) => {
+                return Wanted::Refuse(format!(
+                    "{reason}; no request is sent directly instead — choose \"No proxy\" or enter the proxy by \
+                     hand in Settings → Network"
+                ));
+            }
+            Err(e) => {
+                return Wanted::Refuse(format!(
+                    "Windows' proxy settings could not be read ({e}); no request is sent directly instead"
+                ));
+            }
+        },
     };
     Wanted::Ureq(TransportConfig {
         connect_timeout: Duration::from_secs(u64::from(network.connect_timeout_s)),
@@ -215,11 +234,7 @@ fn build(wanted: &Wanted) -> Arc<dyn Transport> {
                 "the proxy in the network settings can't be used ({e}); no request is sent until it is fixed"
             ))),
         },
-        Wanted::SystemProxy => Arc::new(Refusing(
-            "the system proxy setting isn't supported yet; no request is sent directly instead — choose \"No \
-             proxy\" or enter the proxy by hand in Settings → Network"
-                .to_owned(),
-        )),
+        Wanted::Refuse(reason) => Arc::new(Refusing(reason.clone())),
     }
 }
 
@@ -228,11 +243,24 @@ pub struct Network {
     client: Arc<Client>,
     transport: Switchable,
     wanted: Mutex<Wanted>,
+    system_proxy: SystemProxyLookup,
 }
 
 impl Network {
     pub fn new(settings: &Settings, log: Arc<dyn NetworkLog>) -> Self {
-        let wanted = wanted(settings);
+        Self::with_system_proxy(
+            settings,
+            log,
+            Box::new(deadloader_platform_windows::proxy::system_proxy),
+        )
+    }
+
+    pub fn with_system_proxy(
+        settings: &Settings,
+        log: Arc<dyn NetworkLog>,
+        system_proxy: SystemProxyLookup,
+    ) -> Self {
+        let wanted = wanted(settings, &system_proxy);
         let transport = Switchable::new(build(&wanted));
         let client = Arc::new(Client::new(
             transport.clone(),
@@ -244,6 +272,7 @@ impl Network {
             client,
             transport,
             wanted: Mutex::new(wanted),
+            system_proxy,
         };
         network.configure(settings);
         network
@@ -256,7 +285,7 @@ impl Network {
     /// After a settings change: proxy and timeouts for the next request, local mode, retries, the user's extra hosts
     /// and the GitHub host of the update check. The description-image hosts belong to the catalog.
     pub fn apply(&self, settings: &Settings) {
-        let wanted = wanted(settings);
+        let wanted = wanted(settings, &self.system_proxy);
         let mut current = self.lock_wanted();
         if *current != wanted {
             self.transport.replace(build(&wanted));
@@ -427,9 +456,18 @@ mod tests {
     }
 
     fn network(settings: &Settings) -> (Network, Arc<Lines>) {
+        with_windows_proxy(settings, SystemProxy::Direct)
+    }
+
+    /// A network whose "system proxy" is `windows`, whatever this PC has.
+    fn with_windows_proxy(settings: &Settings, windows: SystemProxy) -> (Network, Arc<Lines>) {
         let lines = Arc::new(Lines::default());
         (
-            Network::new(settings, Arc::clone(&lines) as Arc<dyn NetworkLog>),
+            Network::with_system_proxy(
+                settings,
+                Arc::clone(&lines) as Arc<dyn NetworkLog>,
+                Box::new(move || Ok(windows.clone())),
+            ),
             lines,
         )
     }
@@ -481,19 +519,49 @@ mod tests {
         assert!(!net.client().allowlist().update_check());
     }
 
-    #[test]
-    fn the_system_proxy_refuses_requests_instead_of_going_direct() {
+    fn system(windows: SystemProxy) -> Wanted {
         let mut settings = online();
         settings.network.proxy = Proxy::System;
-        let (net, lines) = network(&settings);
+        wanted(&settings, &move || Ok(windows.clone()))
+    }
+
+    #[test]
+    fn the_system_proxy_is_the_one_set_in_windows() {
+        let Wanted::Ureq(config) = system(SystemProxy::Http("http://proxy.corp:8080".to_owned()))
+        else {
+            panic!("ureq");
+        };
+        assert_eq!(config.proxy.as_deref(), Some("http://proxy.corp:8080"));
+        let Wanted::Ureq(config) = system(SystemProxy::Direct) else {
+            panic!("ureq");
+        };
+        assert_eq!(config.proxy, None);
+    }
+
+    #[test]
+    fn a_windows_proxy_deadloader_cant_follow_refuses_requests_instead_of_going_direct() {
+        let mut settings = online();
+        settings.network.proxy = Proxy::System;
+        let (net, lines) = with_windows_proxy(
+            &settings,
+            SystemProxy::Unsupported("Windows uses a proxy setup script".to_owned()),
+        );
         let err = net.client().get(&catalog_request()).expect_err("refused");
-        assert!(err.to_string().contains("system proxy"), "{err}");
+        assert!(err.to_string().contains("setup script"), "{err}");
         assert_eq!(lines.take()[0].0, "request failed");
 
         // Back to a direct connection on the next request (not sent here: it would reach the internet).
         settings.network.proxy = Proxy::None;
         net.apply(&settings);
         assert!(matches!(*net.lock_wanted(), Wanted::Ureq(_)));
+    }
+
+    #[test]
+    fn unreadable_windows_settings_refuse_requests_too() {
+        let mut settings = online();
+        settings.network.proxy = Proxy::System;
+        let wanted = wanted(&settings, &|| Err(std::io::Error::other("access denied")));
+        assert!(matches!(wanted, Wanted::Refuse(reason) if reason.contains("access denied")));
     }
 
     #[test]
@@ -504,7 +572,7 @@ mod tests {
         settings.network.proxy = Proxy::Manual {
             address: "http://127.0.0.1:3128".to_owned(),
         };
-        let Wanted::Ureq(config) = wanted(&settings) else {
+        let Wanted::Ureq(config) = wanted(&settings, &|| Ok(SystemProxy::Direct)) else {
             panic!("ureq");
         };
         assert_eq!(config.connect_timeout, Duration::from_secs(7));
