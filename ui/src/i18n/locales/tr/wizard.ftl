@@ -1,0 +1,164 @@
+# The first-run wizard (S1), the re-shown notice, the catalog's network step (F13) and E1 "no write permission".
+wizard-progress = Kurulum ilerlemesi
+wizard-caption-setup = İlk kurulum
+wizard-caption-changed = Güncellenen bildirim
+wizard-caption-catalog = Kataloğu aç
+wizard-caption-review = İlk çalıştırma bildirimi
+wizard-language = Dil
+wizard-step-welcome = Hoş geldiniz
+wizard-step-risks = Riskler
+wizard-step-network = Ağ
+wizard-step-privacy = Gizlilik
+wizard-step-updates = Güncellemeler
+wizard-step-setup = Kurulum
+wizard-step-of = Adım { $n } / 6
+wizard-changed-of = { $count } değişen adım
+wizard-meta-changed = Değişti
+wizard-meta-kept = Değişmedi
+wizard-back = Geri
+wizard-next = İleri
+wizard-finish = Kurulumu bitir
+wizard-continue = Devam
+wizard-close = Kapat
+wizard-cancel = İptal
+wizard-to-catalog = Ardından katalog açılır.
+wizard-to-library = Ardından kütüphaneniz açılır (yerel mod).
+
+# Step 1
+wizard-s1-title = deadloader’a hoş geldiniz
+wizard-s1-lead = deadloader, Deadlock modlarını GameBanana’dan veya diskinizden kurar ve yaptığı her değişikliği size gösterir.
+wizard-f1a = Oyunun mod klasörüne mod dosyaları ekler ve
+wizard-f1b = dosyasına bir satır ekler — Deadlock’a modları yüklemesini söyleyen bir oyun dosyası.
+wizard-f2 = Her şey geri alınabilir: geri alma, deadloader’ın oyuna koyduğu her şeyi kaldırır.
+wizard-f3a = Tüm verileri
+wizard-f3b = klasöründe,
+wizard-f3c = {" "}dosyasının yanında kalır.
+wizard-f4 = deadloader’ın Valve veya GameBanana ile hiçbir bağlantısı yoktur.
+wizard-f5 = GPL-3 lisanslı özgür yazılımdır ve hiçbir garanti olmadan sunulur.
+wizard-licence = Lisans (GPL-3)
+wizard-source = Kaynak kodu
+
+# Step 2
+wizard-s2-title = Modlar kendi sorumluluğunuzdadır
+wizard-r1 = Valve’in Deadlock için resmî bir mod politikası yoktur. Mod kullanmak sizin kararınız ve sizin riskinizdir.
+wizard-r2 = Oyun güncellemeleri modları bozabilir. deadloader bir güncellemeden sonra kendini yeniden kurar, ancak bir mod, yazarı onu güncelleyene kadar çalışmayabilir.
+wizard-r3 = Modları başka kişiler kendi lisanslarıyla yapar. deadloader içeriklerine kefil olamaz; her dosya için GameBanana’nın virüs taraması sonucunu gösterir.
+wizard-agree = deadloader’ın oyun dosyalarını değiştirdiğini ve modları kendi sorumluluğumda kullandığımı anlıyorum.
+wizard-agree-note = Bu, 1. ve 2. adımları onaylar. Devam etmek için gereklidir.
+wizard-agree-error = Devam etmek için bu kutuyu işaretleyin.
+wizard-agree-reason = Önce kutuyu işaretleyin.
+
+# Step 3
+wizard-s3-title = Ağ ve GameBanana
+wizard-s3-lead = Katalog doğrudan GameBanana’nın resmî olmayan API’siyle konuşur — başka hiçbir yerle değil. Bağlandığı tek sunucular şunlardır:
+wizard-hosts = Sunucular
+wizard-host-api = katalog ve mod sayfaları
+wizard-host-images = küçük resimler ve galeri
+wizard-host-files = indirmeler
+wizard-host-cache = indirmeler (files.gamebanana.com buraya yönlendirir)
+wizard-host-new = Yeni
+wizard-s3-images = Mod açıklamalarındaki başka sunuculardan gelen resimler, ancak her sunucuya izin verdiğinizde yüklenir. Her istek
+wizard-s3-images-end = {" "}bölümünde listelenir.
+wizard-activity = Etkinlik
+wizard-s3-tos = Kataloğu kullanmak GameBanana’yı kullanmak demektir: onların Hizmet Şartları geçerlidir ve GameBanana kullanıcıların en az 13 yaşında olmasını şart koşar.
+wizard-tos = GameBanana Hizmet Şartları
+wizard-choice = Nasıl başlamak istersiniz?
+wizard-use-catalog = Kataloğu kullan
+wizard-use-catalog-text = GameBanana’dan mod arayın ve kurun. deadloader yalnızca yukarıdaki sunuculara bağlanır.
+wizard-local = Şimdi değil — yerel mod
+wizard-local-text = Hiç ağ isteği yok; modlar yalnızca diskten eklenir. Kataloğu daha sonra Ayarlar’dan açabilirsiniz.
+wizard-choice-error = İki seçenekten birini seçin.
+wizard-choice-reason = Önce bir seçenek seçin.
+wizard-last-time = Önceki seçiminiz
+wizard-changed-title = Neler değişti ({ $date })
+wizard-changed-foot = Diğer adımları { $date } tarihinde onayladınız; onlar değişmedi.
+
+# Step 4
+wizard-s4-title = Gizliliğiniz
+wizard-p1 = Hesap yok, telemetri yok. deadloader, önceki adımdaki GameBanana istekleri dışında hiçbir yere bir şey göndermez.
+wizard-p1-local = Hesap yok, telemetri yok. Yerel modu seçtiniz, bu yüzden deadloader hiçbir şey göndermez.
+wizard-p2a = Günlükler bu bilgisayarda,
+wizard-p2b = klasöründe kalır ve Windows kullanıcı adınızı gizler:
+wizard-p3 = deadloader’ın penceresini Windows’un bir parçası olan Microsoft WebView2 çizer. deadloader, WebView2’nin kendi çevrim içi özelliklerini kapatır; Windows, WebView2’yi deadloader’dan bağımsız olarak günceller.
+wizard-p4 = deadloader’ın ne yaptığını her zaman
+wizard-p4-end = {" "}bölümünde görebilirsiniz.
+
+# Step 5
+wizard-s5-title = deadloader güncellemeleri
+wizard-u1 = deadloader başlarken GitHub’da kendisinin daha yeni bir sürümü olup olmadığını denetleyebilir.
+wizard-updates-label = Başlangıçta GitHub’da yeni deadloader sürümlerini denetle
+wizard-updates-on = Açık
+wizard-updates-off = Kapalı (varsayılan)
+wizard-updates-na = Yerel modda kullanılamaz
+wizard-u2a = Açıksa deadloader her başlangıçta
+wizard-u2b = adresine tek bir istek gönderir ve yeni bir sürüm varsa size söyler.
+wizard-u3 = Güncelleme her zaman elle yapılır: yeni sürümü GitHub’dan kendiniz indirirsiniz. deadloader kendini asla değiştirmez.
+wizard-u4 = Kullanılamaz: yerel mod hiç ağ isteği yapmaz. Bu seçenek, Ayarlar’da kataloğu açtığınızda kullanılabilir olur.
+wizard-u5 = Bunu daha sonra Ayarlar → Genel’den değiştirebilirsiniz.
+
+# Step 6
+wizard-s6-title = Kurulum
+wizard-s6-lead = deadloader oyunu aradı ve birkaç şeyi denetledi. Henüz hiçbir şey değişmedi; bunların hepsini daha sonra Ayarlar’dan değiştirebilirsiniz.
+wizard-checking = Denetleniyor…
+wizard-topic-game = Oyun
+wizard-topic-exe = deadloader’ın konumu
+wizard-topic-disk = Disk alanı
+wizard-topic-foreign = Oyunun mod klasörü
+wizard-topic-gameinfo = Modlar için oyun dosyası
+wizard-game-found = Deadlock bulundu
+wizard-game-chosen = Klasör seçildi
+wizard-change = Değiştir…
+wizard-game-missing = Deadlock bulunamadı
+wizard-game-missing-text = Steam veya oyun kurulu değil ya da oyun klasörü taşınmış. Oyun klasörünü kendiniz seçin — şimdi ya da daha sonra Ayarlar → Oyun’da.
+wizard-browse = Gözat…
+wizard-browse-title = Deadlock klasörünü seçin
+wizard-help = Yardım
+wizard-help-a = Steam’de: Deadlock’a sağ tıklayın → Yönet → Yerel dosyalara göz at. O klasörü seçin; genellikle sonu şöyledir:
+wizard-help-b = {" "}
+wizard-exe-ok = Kalıcı bir klasörde
+wizard-exe-downloads = deadloader, İndirilenler klasörünüzde
+wizard-exe-desktop = deadloader, masaüstünüzde
+wizard-exe-warn-a = Verileri exe’nin yanında durur; temizlik yaparsanız kütüphaneniz ve profilleriniz silinir. deadloader’ı kapatın, tüm klasörü kalıcı bir yere taşıyın (örneğin
+wizard-exe-warn-b = ) ve oradan başlatın.
+wizard-open-folder = Klasörü aç
+wizard-opened = Dosya Gezgini’nde açıldı
+wizard-linked = Modlar bağlanır — ek disk alanı gerekmez
+wizard-linked-text = deadloader ve oyun aynı sürücüde ({ $drive }).
+wizard-copied = Modlar bağlanmayacak, kopyalanacak
+wizard-copied-text = deadloader { $data } sürücüsünde, oyun ise { $game } sürücüsünde. Etkin her mod bu durumda boyutu kadar ikinci kez yer kaplar; kütüphane bunu “kopyalandı — +N MB” olarak gösterir.
+wizard-learn-more = Daha fazla bilgi
+wizard-drives-more = Bağlantı, oyunun kütüphanedeki dosyayı ikinci bir kopya olmadan kullanmasını sağlar. Windows yalnızca aynı sürücüdeki dosyaları bağlayabilir. deadloader da { $game } sürücüsündeyse hiçbir şey kopyalanmaz.
+wizard-foreign-none = Yabancı mod dosyası yok
+wizard-foreign-none-text = Mod klasöründe deadloader’ın tanımadığı hiçbir şey yok.
+wizard-foreign-some = Başka bir kaynaktan { $count } dosya
+wizard-foreign-some-text = Bunları deadloader koymadı — muhtemelen başka bir mod yöneticisi ya da elle kurulum. deadloader onlara dokunmaz; daha sonra Kütüphane’de inceleyin.
+wizard-show-files = Dosyaları göster
+wizard-hide-files = Dosyaları gizle
+wizard-from-dmm = Deadlock Mod Manager
+wizard-gi-setup = Kurulacak
+wizard-gi-setup-a = deadloader, modları ilk kez uyguladığınızda
+wizard-gi-setup-b = dosyasına bir satır ekler. Şu anda hiçbir şey değişmez.
+wizard-gi-ours = Zaten kurulu
+wizard-gi-ours-text = deadloader’ın satırı zaten orada.
+wizard-gi-foreign = Başka bir program tarafından değiştirilmiş
+wizard-gi-foreign-text = Orijinal gibi görünmüyor — bunu genellikle Deadlock Mod Manager yapar. deadloader başkalarının değişikliklerinin üzerine yazmaz ve kurulumdan sonra ne yapmanız gerektiğini açıklar.
+wizard-what-is = Bu nedir?
+wizard-gi-more = dosyası, Deadlock’a hangi klasörleri yükleyeceğini söyleyen bir oyun dosyasıdır. Genellikle Steam’de oyun dosyalarını doğrulamak sorunu çözer; ardından deadloader kendi satırını ekler.
+
+# E1
+wizard-nw-title = deadloader verilerini kaydedemiyor.
+wizard-nw-why-a = Sorun şu:
+wizard-nw-why-b = dosyasının yanındaki klasör salt okunur; Windows programların oraya yazmasına izin vermez (örneğin Program Files içinde).
+wizard-nw-path = deadloader’ın klasörü
+wizard-nw-do = Ne yapmalı
+wizard-nw-s1 = deadloader’dan çıkın.
+wizard-nw-s2a = Tüm klasörü yazabildiğiniz bir yere taşıyın, örneğin
+wizard-nw-s2b = . Program Files kullanmayın.
+wizard-nw-s3a = Yeni yerden
+wizard-nw-s3b = dosyasını başlatın.
+wizard-nw-why-folder = deadloader, bilgisayarınıza hiçbir şey dağılmasın diye her şeyi exe’nin yanında tutar: klasörü silmek deadloader’ı tamamen kaldırır.
+wizard-nw-details = Ayrıntılar
+wizard-nw-copy = Ayrıntıları kopyala
+wizard-nw-copied = Kopyalandı
+wizard-nw-no-log = Günlüğe kaydedilmedi — deadloader oraya yazamıyor.
+wizard-exit = Çıkış

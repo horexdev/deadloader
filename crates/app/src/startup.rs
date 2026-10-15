@@ -69,7 +69,17 @@ pub fn run() -> Result<(), StartError> {
     let layout = DataLayout::beside(&exe).map_err(StartError::DataDir)?;
     // D8: a deletion of all data that couldn't finish at the last exit is finished before anything opens a file there.
     let finished_wipe = deadloader_core::wipe::finish_pending(layout.root());
-    layout.ensure_writable().map_err(StartError::DataDir)?;
+    // E1 (decision 57): without a writable data folder the window opens anyway, to say what to do, and nothing else
+    // runs.
+    let blocked = match layout.ensure_writable() {
+        Ok(()) => None,
+        Err(DataDirError::NotWritable { dir, error }) => Some(crate::setup::Startup::no_write(
+            exe.parent().unwrap_or(&exe),
+            &dir,
+            &error,
+        )),
+        Err(e) => return Err(StartError::DataDir(e)),
+    };
 
     // Decision 92: a second launch hands over to the running instance and exits inside `build`, before it logs or
     // opens anything.
@@ -164,6 +174,8 @@ pub fn run() -> Result<(), StartError> {
             commands::settings::setup_check,
             commands::settings::acknowledge_notice,
             commands::settings::choose_catalog,
+            commands::settings::startup_state,
+            commands::settings::blocked_open_folder,
             commands::activity::log_page,
             commands::activity::log_entry,
             commands::activity::log_counts,
@@ -172,6 +184,10 @@ pub fn run() -> Result<(), StartError> {
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
+    if let Some(state) = blocked {
+        return run_blocked(app, state);
+    }
+    app.manage(crate::setup::Startup::Ready);
 
     let log: Log = Arc::new(Logger::open(layout.logs()));
     app.manage(Arc::clone(&log));
@@ -464,15 +480,24 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
-fn open_main_window(
-    app: &App,
-    layout: &DataLayout,
-    log: &Log,
-    started: Instant,
-) -> tauri::Result<()> {
-    let loaded = AtomicBool::new(false);
-    let on_load_log = Arc::clone(log);
-    let window = WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
+/// E1: only the window, with its profile in a temporary folder that goes at exit; no log, no library, no network.
+fn run_blocked(app: App, state: crate::setup::Startup) -> Result<(), StartError> {
+    let profile = crate::setup::blocked_webview_dir();
+    app.manage(state);
+    main_window(&app, profile.clone())
+        .build()
+        .map_err(StartError::Window)?;
+    app.run(move |_, event| {
+        if let tauri::RunEvent::Exit = event {
+            crate::setup::remove_at_exit(&profile, 40, std::time::Duration::from_millis(250));
+        }
+    });
+    Ok(())
+}
+
+/// The main window as the design wants it, with the WebView2 profile in `profile`.
+fn main_window(app: &App, profile: PathBuf) -> WebviewWindowBuilder<'_, tauri::Wry, App> {
+    WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
         .title("deadloader")
         // Designed at 1280 × 800; the minimum is the design's 960 × 600.
         .inner_size(1280.0, 800.0)
@@ -484,9 +509,20 @@ fn open_main_window(
         // `--bg-app`, so the window is not white before the page paints.
         .background_color(tauri::window::Color(0x14, 0x12, 0x18, 0xff))
         .additional_browser_args(&webview::browser_args())
-        .data_directory(layout.webview())
+        .data_directory(profile)
         // A secure origin (`https://tauri.localhost`): plain-http subresources are blocked as mixed content.
         .use_https_scheme(true)
+}
+
+fn open_main_window(
+    app: &App,
+    layout: &DataLayout,
+    log: &Log,
+    started: Instant,
+) -> tauri::Result<()> {
+    let loaded = AtomicBool::new(false);
+    let on_load_log = Arc::clone(log);
+    let window = main_window(app, layout.webview())
         .on_page_load(move |_, payload| {
             if payload.event() == PageLoadEvent::Finished && !loaded.swap(true, Ordering::Relaxed) {
                 let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);

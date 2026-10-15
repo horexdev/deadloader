@@ -340,3 +340,20 @@ pub async fn choose_catalog(backend: Shared<'_>, log: Log<'_>, enabled: bool) ->
     })
     .await
 }
+
+/// How the app started: the UI shows E1 instead of everything else when the data folder can't be written.
+#[tauri::command]
+pub fn startup_state(state: State<'_, crate::setup::Startup>) -> crate::setup::Startup {
+    state.inner().clone()
+}
+
+/// E1's "Open folder": the folder of deadloader.exe, the only thing that can be opened while blocked.
+#[tauri::command]
+pub fn blocked_open_folder(state: State<'_, crate::setup::Startup>) -> Reply<()> {
+    match state.inner() {
+        crate::setup::Startup::NoWrite { folder, .. } => {
+            crate::setup::open(std::path::Path::new(folder))
+        }
+        crate::setup::Startup::Ready => Ok(()),
+    }
+}
