@@ -229,6 +229,21 @@ describe('the mod page (S3)', () => {
     expect(rows()[2]?.textContent).toContain('Installing');
   });
 
+  it('shows the gallery picture the display scale needs, never a smaller one stretched', async () => {
+    const { modPage } = await import('../../mock/fixtures');
+    const image = modPage(0).gallery[0];
+    const shown = async (scale: number) => {
+      vi.stubGlobal('devicePixelRatio', scale);
+      const { target } = await open('#/catalog/mod/700000');
+      const src = target.querySelector<HTMLImageElement>('.gallery img')?.getAttribute('src');
+      r.cleanup();
+      return src;
+    };
+    expect(await shown(1)).toMatch(new RegExp(`/img/${image?.preview}$`));
+    expect(await shown(1.5)).toMatch(new RegExp(`/img/${image?.large}$`));
+    expect(await shown(2)).toMatch(new RegExp(`/img/${image?.full}$`));
+  });
+
   it('opens GameBanana through D1', async () => {
     const { target } = await open('#/catalog/mod/700000');
     const { prompts } = await import('../../lib/prompts.svelte');

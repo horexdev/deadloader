@@ -158,9 +158,15 @@ pub struct ModPage {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GalleryImage {
-    /// 530 px.
+    /// Sharp up to 530 device pixels: the 530 px variant, else a larger one, else the original. Never a smaller one.
     pub preview: ImageId,
-    /// Full size, on demand.
+    /// Sharp up to 800 device pixels: the 800 px variant, else the original. The UI picks `preview`, `large` or
+    /// `full` by the gallery's width times the display scale; the three are the same id when GameBanana has no
+    /// variant large enough.
+    pub large: ImageId,
+    /// The original, shown with the page when the gallery needs more than 800 device pixels.
+    pub full: ImageId,
+    /// Full size, on demand ("View original").
     pub original: ImageId,
     pub caption: Option<String>,
 }

@@ -5,6 +5,7 @@ import {
   byline,
   clampSearch,
   fileAction,
+  galleryPicture,
   installedVersion,
   libraryModOf,
   relativeTime,
@@ -143,5 +144,22 @@ describe('the catalog model', () => {
     expect(relativeTime(seconds('2026-10-12T12:00:00Z'), now)).toBe('3 days ago');
     expect(relativeTime(seconds('2026-02-15T12:00:00Z'), now)).toBe('8 months ago');
     expect(relativeTime(seconds('2026-10-15T11:59:30Z'), now)).toBe('now');
+  });
+
+  it('shows the gallery from a picture at least as wide as the device pixels it fills', () => {
+    const image = { preview: 'p', large: 'l', full: 'f', original: 'o', caption: null };
+    // 530 CSS px at 100 %: the preview; at 125–150 %: 800 px; at 175 % and above: the original.
+    expect(galleryPicture(image, 530, 1)).toBe('p');
+    expect(galleryPicture(image, 530, 1.25)).toBe('l');
+    expect(galleryPicture(image, 530, 1.5)).toBe('l');
+    expect(galleryPicture(image, 530, 1.75)).toBe('f');
+    expect(galleryPicture(image, 530, 2)).toBe('f');
+    // A narrower gallery (small window) needs fewer pixels.
+    expect(galleryPicture(image, 400, 2)).toBe('l');
+    expect(galleryPicture(image, 350, 1.5)).toBe('p');
+    // Not measured yet: the gallery's full width; a nonsense scale counts as 1.
+    expect(galleryPicture(image, 0, 1.5)).toBe('l');
+    expect(galleryPicture(image, 530, 0)).toBe('p');
+    expect(galleryPicture(image, 530, Number.NaN)).toBe('p');
   });
 });

@@ -314,7 +314,13 @@ export interface AlternateSource {
 export type Antivirus = 'clean' | 'not_reported' | { flagged: string } | { unfinished: string };
 
 export interface GalleryImage {
+  /** Sharp up to 530 device pixels (530 px, a larger variant or the original; never a smaller one). */
   preview: ImageId;
+  /** Sharp up to 800 device pixels (800 px or the original). */
+  large: ImageId;
+  /** The original, for a gallery wider than 800 device pixels; loaded with the page like the other two. */
+  full: ImageId;
+  /** The original on the user's demand ("View original"). */
   original: ImageId;
   caption: string | null;
 }
