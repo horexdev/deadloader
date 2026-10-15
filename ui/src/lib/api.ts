@@ -75,6 +75,42 @@ export interface ImportOutcome {
   skipped: string[];
 }
 
+export interface RemovalPlan {
+  mod_id: string;
+  files: string[];
+  bytes: number;
+  removes_mod: boolean;
+  profiles: string[];
+  applied_in: string[];
+}
+
+export interface Removed {
+  files: string[];
+  leftovers: string[];
+}
+
+export interface MissingFile {
+  archive: string;
+  inner_path: string;
+  remote_file_id: number | null;
+  version: string | null;
+}
+
+export interface Missing {
+  name: string;
+  source: Source;
+  whole_mod: boolean;
+  files: MissingFile[];
+}
+
+export interface ProfileImported {
+  name: string;
+  missing: Missing[];
+}
+
+/** settings.json as the core writes it; sections are typed where screens use them. */
+export type Settings = Record<string, Record<string, unknown>>;
+
 /** Rust `Result<ImportOutcome, UserMessage>` as serde writes it. */
 export type ImportResult = { Ok: ImportOutcome } | { Err: UserMessage };
 
@@ -111,4 +147,14 @@ export const api = {
   profileNames: () => call<string[]>('profile_names'),
   importPaths: (paths: string[]) => call<ImportResult[]>('import_paths', { paths }),
   apply: () => call<ApplyResult>('apply'),
+  removalPlan: (modId: string, files?: string[]) =>
+    call<RemovalPlan>('removal_plan', { modId, files: files ?? null }),
+  remove: (modId: string, files?: string[]) => call<Removed>('remove', { modId, files: files ?? null }),
+  renameProfile: (old: string, newName: string) => call<string[]>('rename_profile', { old, new: newName }),
+  duplicateProfile: (name: string, newName: string) => call<string[]>('duplicate_profile', { name, newName }),
+  deleteProfile: (name: string) => call<string[]>('delete_profile', { name }),
+  exportProfile: (name: string) => call<string>('export_profile', { name }),
+  importProfile: (text: string) => call<ProfileImported>('import_profile', { text }),
+  settings: () => call<Settings>('settings'),
+  updateSettings: (settings: Settings) => call<Settings>('update_settings', { settings }),
 };

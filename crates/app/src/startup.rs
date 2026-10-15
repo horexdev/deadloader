@@ -80,6 +80,15 @@ pub fn run() -> Result<(), StartError> {
             commands::profile_names,
             commands::import_paths,
             commands::apply,
+            commands::removal_plan,
+            commands::remove,
+            commands::rename_profile,
+            commands::duplicate_profile,
+            commands::delete_profile,
+            commands::export_profile,
+            commands::import_profile,
+            commands::settings,
+            commands::update_settings,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;

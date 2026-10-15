@@ -305,7 +305,7 @@ struct ExportedFile {
 }
 
 /// A mod or files of an imported profile this library does not have (D9).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Missing {
     pub name: String,
     pub source: Source,
@@ -314,7 +314,7 @@ pub struct Missing {
     pub files: Vec<MissingFile>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MissingFile {
     pub archive: String,
     pub inner_path: String,
