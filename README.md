@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/readme-banner.png" alt="deadloader — mod manager for Deadlock" width="100%"></p>
+
 # deadloader
 
 A portable, transparent mod manager for [Deadlock](https://store.steampowered.com/app/1422450/) with a built-in
