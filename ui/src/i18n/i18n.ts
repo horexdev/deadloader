@@ -13,18 +13,23 @@ import {
 import { language, showLanguage } from './current.svelte';
 import { FALLBACK, type Lang, resolveLanguage } from './languages';
 import { sizeParts } from './size';
-import english from './locales/en.ftl?raw';
-
-// English is the fallback for anything missing, so it is part of the main bundle; the others load on demand.
-const loaders = import.meta.glob<string>(['./locales/*.ftl', '!./locales/en.ftl'], {
+// A language is a folder of files, `messages.ftl` (spec 04-messages) plus one file per area of the UI, so screens can
+// add their texts without touching each other's files. English is the fallback for anything missing, so it is part of
+// the main bundle; the others load on demand.
+const english = Object.values(
+  import.meta.glob<string>('./locales/en/*.ftl', { query: '?raw', import: 'default', eager: true }),
+);
+const loaders = import.meta.glob<string>(['./locales/*/*.ftl', '!./locales/en/*.ftl'], {
   query: '?raw',
   import: 'default',
 });
 
-function createBundle(lang: Lang, source: string): FluentBundle {
+function createBundle(lang: Lang, sources: readonly string[]): FluentBundle {
   // No bidi isolation marks: none of our languages is written right to left (decision 106).
   const bundle = new FluentBundle(lang, { useIsolating: false });
-  bundle.addResource(new FluentResource(source));
+  for (const source of sources) {
+    bundle.addResource(new FluentResource(source));
+  }
   return bundle;
 }
 
@@ -40,11 +45,13 @@ async function load(lang: Lang): Promise<FluentBundle> {
   if (loaded) {
     return loaded;
   }
-  const loader = loaders[`./locales/${lang}.ftl`];
-  if (!loader) {
+  const files = Object.entries(loaders)
+    .filter(([path]) => path.startsWith(`./locales/${lang}/`))
+    .map(([, loader]) => loader());
+  if (files.length === 0) {
     return fallback;
   }
-  const bundle = createBundle(lang, await loader());
+  const bundle = createBundle(lang, await Promise.all(files));
   bundles.set(lang, bundle);
   return bundle;
 }
