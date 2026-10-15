@@ -8,6 +8,7 @@ mod catalog;
 mod commands;
 mod downloads;
 mod events;
+mod game;
 mod network;
 mod paths;
 #[cfg(test)]
