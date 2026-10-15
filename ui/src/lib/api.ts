@@ -242,6 +242,28 @@ export interface Categories {
   origin: Origin;
 }
 
+export interface CreditGroup {
+  name: string;
+  authors: { name: string; role: string | null }[];
+}
+
+/** A specific rating; unknown ones keep GameBanana's code and English label. */
+export type ContentRating =
+  | 'sexual_themes'
+  | 'sexual_content'
+  | 'skimpy_attire'
+  | 'lewd_angles_and_poses'
+  | 'full_nudity'
+  | { other: { code: string; label: string } };
+
+export interface AlternateSource {
+  url: string;
+  description: string | null;
+}
+
+/** GameBanana's own antivirus scan of a file (131). */
+export type Antivirus = 'clean' | 'not_reported' | { flagged: string } | { unfinished: string };
+
 export interface GalleryImage {
   preview: ImageId;
   original: ImageId;
@@ -257,7 +279,7 @@ export interface CatalogFile {
   description: string | null;
   version: string | null;
   md5: string | null;
-  antivirus: unknown;
+  antivirus: Antivirus;
 }
 
 export type Access = 'load' | 'click' | 'consent';
@@ -284,7 +306,7 @@ export interface ModPage {
   name: string;
   version: string | null;
   author: string | null;
-  credits: unknown[];
+  credits: CreditGroup[];
   category_path: CategoryRef[];
   gallery: GalleryImage[];
   has_audio_preview: boolean;
@@ -299,10 +321,10 @@ export interface ModPage {
   date_updated: number | null;
   nsfw: boolean;
   nsfw_hidden: boolean;
-  content_ratings: unknown[];
+  content_ratings: ContentRating[];
   obsolete: boolean;
   embedded_media: string[];
-  alternate_sources: unknown[];
+  alternate_sources: AlternateSource[];
   files: CatalogFile[];
   archived_files: CatalogFile[];
   origin: Origin;

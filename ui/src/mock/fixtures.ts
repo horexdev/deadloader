@@ -17,15 +17,39 @@ export function pictureId(seed: number, size: 'small' | 'large' | 'gallery' | 'o
   return ((seed * 2654435761 + tag * 97) >>> 0).toString(16).padStart(8, '0').repeat(4);
 }
 
+/** The Mods section's root categories (GameBanana's, numbered by us); Skins holds one subcategory per hero. */
+export const MOD_ROOTS = [
+  { id: 1, name: 'Skins' },
+  { id: 2, name: 'HUD' },
+  { id: 3, name: 'Model Replacement' },
+  { id: 4, name: 'Quality of Life/Fixes' },
+  { id: 5, name: 'Other/Misc' },
+  { id: 6, name: 'Maps' },
+  { id: 7, name: 'Gameplay Modifications' },
+  { id: 8, name: 'Animations' },
+] as const;
+
+export const SOUND_ROOTS = [
+  { id: 50, name: 'Hero voices' },
+  { id: 51, name: 'Weapons' },
+  { id: 52, name: 'Music' },
+] as const;
+
+export const HERO_CATEGORIES = HEROES.map((name, h) => ({ id: 100 + h, name }));
+
+const HUD_NAMES: [string, ...string[]] = ['Compact Top Bar', 'Readable Health Numbers', 'Quiet Kill Feed', 'Minimal Shop'];
+const SOUND_NAMES: [string, ...string[]] = ['Soft Footsteps', 'Retro Hit Marker', 'Lo-fi Menu Music', 'Crisp Reload'];
+
 export function card(i: number): Card {
   const hero = pick(HEROES, i);
+  const hud = i % 4 === 1;
   return {
     id: 700_000 + i,
     section: 'mod',
-    name: `${hero} — ${pick(STYLES, i)}`,
+    name: hud ? `${pick(HUD_NAMES, Math.floor(i / 4))} ${1 + (i % 3)}` : `${hero} — ${pick(STYLES, i)}`,
     author: pick(AUTHORS, i),
-    root_category: { id: 1, name: 'Skins' },
-    subcategory: { id: 100 + (i % HEROES.length), name: hero },
+    root_category: hud ? { id: 2, name: 'HUD' } : { id: 1, name: 'Skins' },
+    subcategory: hud ? null : { id: 100 + (i % HEROES.length), name: hero },
     likes: (i * 37) % 500,
     views: (i * 1301) % 90_000,
     date_added: 1_791_000_000 - i * 86_400,
@@ -39,36 +63,85 @@ export function card(i: number): Card {
   };
 }
 
+export function soundCard(i: number): Card {
+  const root = SOUND_ROOTS[i % SOUND_ROOTS.length] ?? SOUND_ROOTS[0];
+  return {
+    ...card(i),
+    id: 800_000 + i,
+    section: 'sound',
+    name: `${pick(SOUND_NAMES, i)} ${1 + (i % 5)}`,
+    root_category: { id: root.id, name: root.name },
+    subcategory: null,
+    has_audio_preview: i % 2 === 0,
+    nsfw: false,
+    thumbnail: { small: pictureId(500 + i, 'small'), large: pictureId(500 + i, 'large') },
+  };
+}
+
 function file(i: number, n: number): CatalogFile {
   return {
     id: 1_800_000 + i * 10 + n,
-    file_name: `${pick(HEROES, i).toLowerCase().replace(' ', '_')}_${pick(['pink', 'blue', 'gold'], n)}.zip`,
+    file_name: `${pick(HEROES, i).toLowerCase().replace(' ', '_')}_${pick(['pink', 'blue', 'gold', 'crimson'], n)}.zip`,
     size_bytes: 3_200_000 + n * 750_000,
     date_added: 1_791_500_000 + n * 60,
     download_count: 1200 - n * 300,
-    description: n === 0 ? 'Default colours' : null,
+    description: pick(['Default colours', 'Blue trims', 'Gold trims', 'Crimson'], n),
     version: '1.2',
     md5: null,
-    antivirus: 'clean',
+    antivirus: n === 3 ? { unfinished: 'pending' } : 'clean',
   };
 }
 
 const EMPTY_DESCRIPTION: Description = { html: '', links: [], images: [], consent: [], truncated: false };
 
+/** A description using every element the sanitiser writes (S3), with its links and pictures. */
+function description(i: number): Description {
+  const consentImage = pictureId(i * 10 + 7, 'original');
+  const clickImage = pictureId(i * 10 + 8, 'original');
+  return {
+    html:
+      '<p>Replaces the default skin with new trims and a soft glow.<br>Pick one colour, or install them all and switch in the library.</p>' +
+      '<h2>Colours</h2>' +
+      '<ul><li><strong>Pink</strong> — pairs well with <a data-dl-link="0">this HUD</a></li><li><em>Blue</em> trims</li><li><u>Gold</u>, <s>silver</s> (removed)</li></ul>' +
+      '<p><span class="dl-green">Compatible with recolours!</span> <span class="dl-red">Not compatible with older versions.</span></p>' +
+      '<span class="dl-image" data-dl-image="0"></span>' +
+      '<div class="dl-spoiler"><p>The glow is brighter at night.</p></div>' +
+      '<span class="dl-youtube" data-dl-link="1"></span>' +
+      '<p>Install with <code>deadloader</code> or by hand:</p><pre>citadel/addons/pak01_dir.vpk</pre>' +
+      '<hr><table><thead><tr><th>Part</th><th>Size</th></tr></thead><tbody><tr><td>Body</td><td>3 MB</td></tr></tbody></table>' +
+      '<span class="dl-image" data-dl-image="1"></span>' +
+      '<ol><li>Download</li><li>Play</li></ol>' +
+      '<p>Questions? See <a data-dl-link="2">the author page</a>.</p>' +
+      '<p>' +
+      'More notes about the colours, the glow and how the trims were painted. '.repeat(40) +
+      '</p>',
+    links: [
+      { url: 'https://gamebanana.com/mods/700002', host: 'gamebanana.com', internal_mod_id: 700_002 },
+      { url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ', host: 'www.youtube.com', internal_mod_id: null },
+      { url: 'https://example.org/authors/lumen', host: 'example.org', internal_mod_id: null },
+    ],
+    images: [
+      { id: consentImage, host: 'i.imgur.com', alt: 'The skin at night', access: 'consent' },
+      { id: clickImage, host: 'images.gamebanana.com', alt: null, access: 'click' },
+    ],
+    consent: [{ host: 'i.imgur.com', images: [consentImage] }],
+    truncated: false,
+  };
+}
+
 export function modPage(i: number): ModPage {
   const c = card(i);
-  const hero = pick(HEROES, i);
   return {
     id: c.id,
     section: 'mod',
     name: c.name,
     version: '1.2',
     author: c.author,
-    credits: [],
-    category_path: [
-      { id: 1, name: 'Skins' },
-      { id: 100 + (i % HEROES.length), name: hero },
+    credits: [
+      { name: 'Key Authors', authors: [{ name: c.author ?? 'lumen', role: null }] },
+      { name: 'Special thanks', authors: [{ name: 'orbit', role: 'Testing' }] },
     ],
+    category_path: [c.root_category, c.subcategory].filter((x): x is NonNullable<typeof x> => x !== null),
     gallery: [0, 1, 2].map((g) => ({
       preview: pictureId(i * 10 + g, 'gallery'),
       original: pictureId(i * 10 + g, 'original'),
@@ -76,11 +149,9 @@ export function modPage(i: number): ModPage {
     })),
     has_audio_preview: false,
     short_description: 'A recolour with new trims and glow.',
-    description: {
-      ...EMPTY_DESCRIPTION,
-      html: '<p>Replaces the default skin. Pick one colour, or install all three and switch in the library.</p>',
-    },
-    licence: null,
+    description: i % 5 === 4 ? { ...EMPTY_DESCRIPTION, html: '<p>Just the skin.</p>' } : description(i),
+    licence:
+      i % 2 === 0 ? { ...EMPTY_DESCRIPTION, html: '<p>Free to use in your own recolours. Credit the author.</p>' } : null,
     likes: c.likes,
     views: c.views,
     downloads: 4_210,
@@ -89,13 +160,27 @@ export function modPage(i: number): ModPage {
     date_updated: c.date_updated,
     nsfw: c.nsfw,
     nsfw_hidden: false,
-    content_ratings: [],
+    content_ratings: c.nsfw ? ['skimpy_attire', 'sexual_themes'] : [],
     obsolete: false,
-    embedded_media: [],
-    alternate_sources: [],
-    files: [0, 1, 2].map((n) => file(i, n)),
-    archived_files: [],
+    embedded_media: i % 2 === 0 ? ['https://www.youtube.com/watch?v=aqz-KE-bpKQ'] : [],
+    alternate_sources: i % 3 === 0 ? [{ url: 'https://example.org/mirror/skin', description: 'Mirror' }] : [],
+    files: [0, 1, 2, 3].map((n) => file(i, n)),
+    archived_files: i % 2 === 0 ? [{ ...file(i, 9), file_name: 'old_release.zip', version: '1.0' }] : [],
     origin: { kind: 'network' },
+  };
+}
+
+export function soundPage(i: number): ModPage {
+  const c = soundCard(i);
+  return {
+    ...modPage(i),
+    id: c.id,
+    section: 'sound',
+    name: c.name,
+    category_path: c.root_category ? [c.root_category] : [],
+    has_audio_preview: c.has_audio_preview,
+    nsfw: false,
+    content_ratings: [],
   };
 }
 
