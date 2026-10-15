@@ -3,6 +3,7 @@
 use crate::backend::Backend;
 use crate::commands;
 use crate::events::{Outbox, UiEvent};
+use crate::network::{Network, NetworkLog};
 use crate::paths::{DataDirError, DataLayout};
 use crate::push::{self, GameWatch};
 use crate::webview;
@@ -112,6 +113,14 @@ pub fn run() -> Result<(), StartError> {
         Arc::clone(&log) as deadloader_core::session::SharedLog,
     ));
     let outbox = Arc::new(Outbox::new());
+    // Nothing is requested until the catalog or a download asks; local mode until the first-run choice (108).
+    let network = Arc::new(Network::new(
+        &backend.settings().unwrap_or_default(),
+        Arc::clone(&log) as Arc<dyn NetworkLog>,
+    ));
+    let follow = Arc::clone(&network);
+    backend.on_settings(Box::new(move |settings| follow.apply(settings)));
+    app.manage(network);
     app.manage(Arc::clone(&backend));
     app.manage(Arc::clone(&outbox));
     push::start_notices(&backend, &outbox);

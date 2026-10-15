@@ -135,14 +135,19 @@ pub struct NetworkEvent {
     pub req: LogId,
     /// 0 for the request as made, 1 for the first redirect, and so on.
     pub hop: u32,
+    /// 1 for the first try of this hop, 2.. for retries after 429/5xx; written only for retries.
+    #[serde(default = "first_attempt", skip_serializing_if = "is_first_attempt")]
+    pub attempt: u32,
     pub method: String,
     pub url: String,
-    pub host_source: HostSource,
+    /// Which allowlist entry let the hop through; `None` when it was refused (see `blocked`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_source: Option<HostSource>,
     pub initiator: Initiator,
     pub purpose: Purpose,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<u16>,
-    /// Body bytes received.
+    /// The body size the server announced (`Content-Length`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bytes: Option<u64>,
     /// Duration in milliseconds.
@@ -152,6 +157,18 @@ pub struct NetworkEvent {
     pub range: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Refused before any byte left the machine, and why (`host-not-listed`, `local-mode`, `not-https`…).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<String>,
+}
+
+fn first_attempt() -> u32 {
+    1
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde passes a reference
+fn is_first_attempt(attempt: &u32) -> bool {
+    *attempt == 1
 }
 
 /// Why the host was allowed (decision 53).
@@ -159,6 +176,8 @@ pub struct NetworkEvent {
 #[serde(rename_all = "kebab-case")]
 pub enum HostSource {
     Builtin,
+    /// GitHub's API, listed only while deadloader's own update check is on (54).
+    Github,
     User,
     UserImage,
 }
@@ -583,6 +602,8 @@ impl<C: Clock, D: LogDir> Logger<C, D> {
     pub fn network(&self, msg: &str, event: &NetworkEvent) -> Result<LogId, LogError> {
         let lvl = if event.error.is_some() {
             Level::Error
+        } else if event.blocked.is_some() {
+            Level::Warn
         } else {
             Level::Info
         };
@@ -1380,9 +1401,10 @@ mod tests {
         NetworkEvent {
             req,
             hop: 1,
+            attempt: 1,
             method: "GET".into(),
             url: "https://files.gamebanana.com/mods/x.zip".into(),
-            host_source: HostSource::Builtin,
+            host_source: Some(HostSource::Builtin),
             initiator: Initiator::User,
             purpose: Purpose::Download,
             status: Some(206),
@@ -1390,6 +1412,7 @@ mod tests {
             ms: 184,
             range: Some("bytes=1000-".into()),
             error: None,
+            blocked: None,
         }
     }
 
@@ -1434,7 +1457,7 @@ mod tests {
             &NetworkEvent {
                 hop: 0,
                 url: "https://images.example.org/a.png".into(),
-                host_source: HostSource::UserImage,
+                host_source: Some(HostSource::UserImage),
                 initiator: Initiator::Auto,
                 purpose: Purpose::DescriptionImage,
                 status: None,
@@ -1611,6 +1634,57 @@ mod tests {
         let read: ReadLog<FileEvent> =
             read_log(&dir, Kind::Files, day(2026, 10, 15)).expect("read");
         assert_eq!(read.records.first().map(|r| &r.body), Some(&event));
+    }
+
+    #[test]
+    fn refused_hops_retries_and_the_update_check_are_logged() {
+        let (clock, dir) = (TestClock::at(start()), MemDir::default());
+        let log = logger(&clock, &dir);
+        let req = log.request_id();
+        // Refused before any byte left the machine: no host source, the reason instead, level warn.
+        log.network(
+            "request blocked",
+            &NetworkEvent {
+                hop: 0,
+                url: "https://evil.example/x.zip".into(),
+                host_source: None,
+                status: None,
+                bytes: None,
+                ms: 0,
+                range: None,
+                blocked: Some("host-not-listed".into()),
+                ..download_hop(req.clone())
+            },
+        )
+        .expect("written");
+        // The second try of a hop after a 503; the update check's own host source.
+        log.network(
+            "response",
+            &NetworkEvent {
+                hop: 0,
+                attempt: 2,
+                url: "https://api.github.com/repos/horexdev/deadloader/releases/latest".into(),
+                host_source: Some(HostSource::Github),
+                initiator: Initiator::Auto,
+                purpose: Purpose::UpdateCheck,
+                status: Some(200),
+                bytes: None,
+                range: None,
+                ..download_hop(req)
+            },
+        )
+        .expect("written");
+        assert_eq!(
+            dir.lines("network-2026-10-15.jsonl"),
+            [
+                format!(
+                    r#"{{"ts":"2026-10-15T14:03:27.123+03:00","id":"{RUN}-000002","lvl":"warn","msg":"request blocked","req":"{RUN}-000001","hop":0,"method":"GET","url":"https://evil.example/x.zip","initiator":"user","purpose":"download","ms":0,"blocked":"host-not-listed"}}"#
+                ),
+                format!(
+                    r#"{{"ts":"2026-10-15T14:03:27.123+03:00","id":"{RUN}-000003","lvl":"info","msg":"response","req":"{RUN}-000001","hop":0,"attempt":2,"method":"GET","url":"https://api.github.com/repos/horexdev/deadloader/releases/latest","host_source":"github","initiator":"auto","purpose":"update-check","status":200,"ms":184}}"#
+                ),
+            ]
+        );
     }
 
     // --- masking in records ------------------------------------------------------------------------------------
