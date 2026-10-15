@@ -613,10 +613,14 @@ fn downloads_start_in_order_and_never_more_than_the_limit() {
             h.add(n, &content(50_000, n))
         })
         .collect();
+    h.wait_part(ids[0], 10_000);
     h.wait_part(ids[1], 10_000);
+    // Room for a third download to start, if the queue were to start one.
     std::thread::sleep(Duration::from_millis(100));
-    let started: Vec<String> = h.server.calls().into_iter().map(|c| c.url).collect();
-    assert_eq!(started, [url(1), url(2)]);
+    // The first two run side by side, so their requests reach the server in either order.
+    let mut requested: Vec<String> = h.server.calls().into_iter().map(|c| c.url).collect();
+    requested.sort();
+    assert_eq!(requested, [url(1), url(2)]);
     for id in &ids[2..] {
         assert_eq!(h.dl().task(*id).expect("task").state, TaskState::Queued);
     }
@@ -649,6 +653,52 @@ fn the_speed_limit_holds_across_the_queue() {
     let bytes = content(1024 * 1024, 14);
     let id = h.add(1, &bytes);
     h.events.wait("done", removed(id));
+    assert_paced_at_100_kib(&h, id);
+}
+
+#[test]
+fn progress_is_timed_by_when_the_bytes_arrived() {
+    let mut h = Harness::new("speed-late");
+    h.config.speed_limit_kib_per_s = Some(100);
+    h.open();
+    let gate = Gate::new();
+    h.server
+        .fault(&url(1), Fault::HoldAt(5 * TENTH, Arc::clone(&gate)));
+    // The worker can't write while this is held, so the received chunks pile up behind it.
+    let stalled = h.dl().shared().write_budget.lock().expect("lock");
+    let id = h.add(1, &content(200_000, 18));
+    // Five chunks received and the sixth paid for: time stands still until the gate opens.
+    let deadline = std::time::Instant::now() + WAIT;
+    while h.clock.elapsed() < Duration::from_millis(550) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the body never arrived"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    drop(stalled);
+    h.wait_part(id, 5 * TENTH as u64);
+    gate.open();
+    h.events.wait("done", removed(id));
+    // A chunk a tenth of a second, so a progress event for (about) every chunk, however late it was written.
+    let bytes: Vec<u64> = h
+        .events
+        .all()
+        .iter()
+        .filter_map(|e| match e {
+            Event::Progress { bytes, .. } => Some(*bytes),
+            _ => None,
+        })
+        .collect();
+    let widest = bytes.windows(2).map(|w| w[1] - w[0]).max();
+    assert!(widest <= Some(2 * TENTH as u64), "{bytes:?}");
+}
+
+/// A tenth of a second at 100 KiB/s: the largest chunk the limiter grants.
+const TENTH: usize = 10_240;
+
+/// 1 MiB downloaded at 100 KiB/s: the time it took, the progress events and the speed they show.
+fn assert_paced_at_100_kib(h: &Harness, id: TaskId) {
     let secs = h.clock.elapsed().as_secs_f64();
     // 1 MiB at 100 KiB/s = 10.24 s; within 5 %.
     assert!((secs - 10.24).abs() < 0.52, "{secs}");
@@ -669,6 +719,20 @@ fn the_speed_limit_holds_across_the_queue() {
         (late as f64 - 102_400.0).abs() < 102_400.0 * 0.15,
         "smoothed speed {late}"
     );
+}
+
+#[test]
+fn a_finished_download_closes_its_connection_before_the_next_one_starts() {
+    let mut h = Harness::new("close");
+    h.config.parallel = 1;
+    h.open();
+    h.server
+        .fault(&url(1), Fault::CloseSlowly(Duration::from_millis(200)));
+    let first = h.add(1, &content(50_000, 16));
+    let second = h.add(2, &content(50_000, 17));
+    h.events
+        .wait("both done", |e| removed(first)(e) && removed(second)(e));
+    assert_eq!(h.server.most_open(), 1);
 }
 
 #[test]
