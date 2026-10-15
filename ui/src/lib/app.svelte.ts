@@ -14,7 +14,9 @@ import {
   type ApplyPreview,
   type CatalogStatus,
   type GameStatus,
+  type Installed,
   type LibraryView,
+  type Section,
   type Settings,
   type TaskSnapshot,
   type UiEvent,
@@ -25,6 +27,34 @@ import {
 export interface PlayConfirmation extends ApplyPreview {
   profile: string;
   applied: string;
+}
+
+/** A download (or an import from disk) finished in the library and waits for the user to pick variants (D4). */
+export interface PendingChoice {
+  key: string;
+  modId: string;
+  /** The variant groups (library file ids), one pick each. */
+  choices: string[][];
+  name: string;
+  file: string;
+  size: number | null;
+  /** The GameBanana file it came from, for its description in D4. */
+  source?: { section: Section; modId: number; fileId: number };
+}
+
+/** A line of "Finished this session" on the Downloads screen (S6); kept until deadloader closes. */
+export interface FinishedDownload {
+  key: string;
+  name: string;
+  file: string;
+  /** `kept`: a choice put aside, so the mod is in the library but not turned on. */
+  outcome: 'installed' | 'updated' | 'cancelled' | 'removed' | 'kept';
+  variant?: string;
+  version?: string;
+  /** Unix ms. */
+  at: number;
+  /** What "Download again" needs. */
+  again?: { section: Section; modId: number; fileId: number; author: string | null };
 }
 
 /** D12: an error the user asked to see in full, with the actions that fit it. */
@@ -45,6 +75,14 @@ export class AppState {
   toasts: ToastData[] = $state([]);
   /** D12, shown by the shell. */
   error: ShownError | null = $state(null);
+  /** Downloads finished this session, newest first. */
+  history: FinishedDownload[] = $state([]);
+  /** Downloads waiting for a variant pick (D4). */
+  choices: PendingChoice[] = $state([]);
+  /** Tasks whose install was reported, so leaving the queue isn't a cancel. */
+  // Bookkeeping only, never rendered: no reactivity needed.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #installed = new Set<number>();
   #toastId = 0;
 
   /** Running downloads, for the sidebar. */
@@ -96,6 +134,7 @@ export class AppState {
         this.followDownload(event.data);
         break;
       case 'installed':
+        this.followInstalled(event.data.task, event.data.installed);
         if (event.data.installed.changed) {
           this.library = event.data.installed.changed.library;
         } else {
@@ -127,9 +166,86 @@ export class AppState {
         );
         break;
       case 'removed':
+        this.followRemoved(event.id);
         this.tasks = this.tasks.filter((t) => t.id !== event.id);
         break;
     }
+  }
+
+  private followInstalled(id: number, installed: Installed): void {
+    const task = this.tasks.find((t) => t.id === id);
+    this.#installed.add(id);
+    if (!task) {
+      return;
+    }
+    if (installed.outcome.choices.length > 0) {
+      const source = againOf(task);
+      this.choices = [
+        ...this.choices,
+        {
+          key: `task-${id}`,
+          modId: installed.outcome.mod_id,
+          choices: installed.outcome.choices,
+          name: nameOf(task),
+          file: task.file_name,
+          size: task.total ?? task.size,
+          ...(source ? { source: { section: source.section, modId: source.modId, fileId: source.fileId } } : {}),
+        },
+      ];
+      return;
+    }
+    this.remember(finished(task, 'installed'));
+  }
+
+  private followRemoved(id: number): void {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task || this.#installed.delete(id)) {
+      return;
+    }
+    const outcome = task.state.state === 'done' ? 'updated' : task.state.state === 'failed' ? 'removed' : 'cancelled';
+    this.remember(finished(task, outcome));
+  }
+
+  /** Adds a line to "Finished this session". */
+  remember(entry: FinishedDownload): void {
+    this.history = [entry, ...this.history];
+  }
+
+  clearHistory(): void {
+    this.history = [];
+  }
+
+  /** A choice that didn't come from a download (an import from disk with variants). */
+  addChoice(choice: PendingChoice): void {
+    this.choices = [...this.choices.filter((c) => c.key !== choice.key), choice];
+  }
+
+  /** D4: turns the picked variants on (136: at the top of the selected profile). False when it failed (a toast says why). */
+  async chooseVariant(key: string, files: string[], variant: string): Promise<boolean> {
+    const choice = this.choices.find((c) => c.key === key);
+    if (!choice) {
+      return false;
+    }
+    try {
+      const changed = await api.choose(choice.modId, files);
+      this.library = changed.library;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+    this.choices = this.choices.filter((c) => c.key !== key);
+    this.remember({ key, name: choice.name, file: choice.file, outcome: 'installed', variant, at: Date.now() });
+    return true;
+  }
+
+  /** Cancel on a choice: the mod stays in the library, not turned on. */
+  putChoiceAside(key: string): void {
+    const choice = this.choices.find((c) => c.key === key);
+    if (!choice) {
+      return;
+    }
+    this.choices = this.choices.filter((c) => c.key !== key);
+    this.remember({ key, name: choice.name, file: choice.file, outcome: 'kept', at: Date.now() });
   }
 
   async reloadLibrary(): Promise<void> {
@@ -202,6 +318,35 @@ export class AppState {
   closeError(): void {
     this.error = null;
   }
+}
+
+function nameOf(task: TaskSnapshot): string {
+  return task.meta.mod_name || task.file_name;
+}
+
+/** The GameBanana file a task downloads, for "Download again". */
+function againOf(task: TaskSnapshot): FinishedDownload['again'] {
+  const section = task.meta.section;
+  const modId = Number(task.meta.mod_id);
+  const fileId = Number(task.meta.file_id);
+  if ((section !== 'mod' && section !== 'sound') || !Number.isFinite(modId) || !Number.isFinite(fileId)) {
+    return undefined;
+  }
+  return { section, modId, fileId, author: task.meta.author ?? null };
+}
+
+function finished(task: TaskSnapshot, outcome: FinishedDownload['outcome']): FinishedDownload {
+  const again = againOf(task);
+  const version = task.meta.version;
+  return {
+    key: `task-${task.id}`,
+    name: nameOf(task),
+    file: task.file_name,
+    outcome,
+    ...(outcome === 'updated' && version ? { version } : {}),
+    at: Date.now(),
+    ...(again ? { again } : {}),
+  };
 }
 
 export const app = new AppState();

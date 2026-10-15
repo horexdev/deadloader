@@ -5,6 +5,7 @@
 
 import type {
   Card,
+  CatalogStatus,
   Changed,
   LibraryView,
   Listing,
@@ -14,6 +15,7 @@ import type {
   UiEvent,
 } from '../lib/api';
 import { card, libraryMod, modPage, settings as defaultSettings } from './fixtures';
+import * as downloadsPreview from './downloads';
 
 /** Tauri's `Channel`: the UI sets `onmessage`; the mock calls it. */
 export class Channel<T> {
@@ -28,6 +30,10 @@ interface State {
   nextTask: number;
   listener: Channel<UiEvent> | null;
   gameRunning: boolean;
+  /** Pushed right after `subscribe`, like the events the core keeps while nobody listens. */
+  onSubscribe: UiEvent[];
+  /** Overrides the catalog status the settings imply (e.g. offline). */
+  catalogStatus: CatalogStatus | null;
 }
 
 let state: State;
@@ -55,6 +61,8 @@ function fresh(): State {
     nextTask: 1,
     listener: null,
     gameRunning: false,
+    onSubscribe: [],
+    catalogStatus: null,
   };
 }
 
@@ -76,6 +84,32 @@ function applyScenario(s: State): State {
     case 'local':
       s.settings.catalog = { ...s.settings.catalog, enabled: false };
       break;
+    // Downloads (S6): the board `Downloads` and its states; `downloads-empty` is the first start.
+    case 'downloads':
+    case 'downloads-choice':
+    case 'downloads-offline':
+    case 'downloads-disk-full': {
+      const choice = downloadsPreview.variantMod();
+      s.library.mods.push(choice);
+      const queue = downloadsPreview.queue();
+      s.tasks =
+        scenario === 'downloads-offline'
+          ? downloadsPreview.offline(queue)
+          : scenario === 'downloads-disk-full'
+            ? downloadsPreview.diskFull(queue)
+            : scenario === 'downloads-choice'
+              ? queue.slice(0, 2)
+              : queue;
+      s.onSubscribe = downloadsPreview.finishedEvents(choice, {
+        library: structuredClone(s.library),
+        applied: true,
+        waiting_for_game: false,
+      });
+      if (scenario === 'downloads-offline') {
+        s.catalogStatus = { kind: 'offline', since_unix_ms: Date.now() - 12 * 60_000 };
+      }
+      break;
+    }
   }
   return s;
 }
@@ -182,6 +216,9 @@ const handlers: Record<string, (args: Args) => unknown> = {
   subscribe: (args) => {
     state.listener = args.events as Channel<UiEvent>;
     push({ event: 'game', data: { running: state.gameRunning } });
+    for (const event of state.onSubscribe) {
+      push(structuredClone(event));
+    }
     return null;
   },
   system_locale: () => ({ languages: [...navigator.languages], region: null }),
@@ -225,7 +262,8 @@ const handlers: Record<string, (args: Args) => unknown> = {
     state.settings = structuredClone(args.settings as Settings);
     return structuredClone(state.settings);
   },
-  catalog_status: () => (state.settings.catalog?.enabled ? { kind: 'online' } : { kind: 'local_mode' }),
+  catalog_status: () =>
+    state.catalogStatus ?? (state.settings.catalog?.enabled ? { kind: 'online' } : { kind: 'local_mode' }),
   catalog_list: (args) => {
     if (!state.settings.catalog?.enabled) {
       throw { kind: 'local_mode' };
@@ -243,6 +281,12 @@ const handlers: Record<string, (args: Args) => unknown> = {
       task.state = { state: 'paused' };
     } else if (task && args.action === 'resume') {
       task.state = { state: 'downloading' };
+    } else if (task && args.action === 'retry') {
+      task.state = { state: 'queued' };
+    } else if (task && args.action === 'cancel') {
+      state.tasks = state.tasks.filter((t) => t !== task);
+      push({ event: 'download', data: { event: 'removed', id: task.id } });
+      return null;
     }
     if (task) {
       push({ event: 'download', data: { event: 'state', id: task.id, state: task.state } });
@@ -270,6 +314,24 @@ const handlers: Record<string, (args: Args) => unknown> = {
     state.gameRunning = true;
     push({ event: 'game', data: { running: true } });
     return { library: structuredClone(state.library), changed: true, gameinfo_foreign: false };
+  },
+  choose: (args) => {
+    const m = mod(args.modId);
+    const files = (args.files as string[]) ?? [];
+    for (const group of m.variant_groups) {
+      const pick = files.find((f) => group.files.includes(f));
+      if (pick) {
+        group.active = pick;
+      }
+    }
+    m.enabled = true;
+    state.library.mods = [m, ...state.library.mods.filter((x) => x !== m)];
+    return changed();
+  },
+  add_from_disk: () => {
+    const imported = libraryMod(state.library.mods.length + 20, true, true);
+    state.library.mods.unshift(imported);
+    return [{ Ok: { mod_id: imported.id, new_files: imported.files.map((f) => f.id), choices: [], skipped: [] } }];
   },
   window_minimize: () => null,
   window_toggle_maximize: () => null,
