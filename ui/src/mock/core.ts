@@ -14,6 +14,7 @@ import type {
   UiEvent,
 } from '../lib/api';
 import { card, libraryMod, modPage, settings as defaultSettings } from './fixtures';
+import { LibraryMock, libraryConflicts, libraryMods } from './library';
 
 /** Tauri's `Channel`: the UI sets `onmessage`; the mock calls it. */
 export class Channel<T> {
@@ -28,12 +29,16 @@ interface State {
   nextTask: number;
   listener: Channel<UiEvent> | null;
   gameRunning: boolean;
+  /** The game folder Steam knows; null: Deadlock wasn't found. */
+  gameRoot: string | null;
+  /** The Library's part (mock/library.ts). */
+  libraryMock: LibraryMock;
 }
 
 let state: State;
 
 function fresh(): State {
-  return {
+  const s: Omit<State, 'libraryMock'> = {
     library: {
       selected_profile: 'Default',
       applied_profile: 'Default',
@@ -56,7 +61,39 @@ function fresh(): State {
     nextTask: 1,
     listener: null,
     gameRunning: false,
+    gameRoot: String.raw`D:\SteamLibrary\steamapps\common\Deadlock`,
   };
+  s.library.mods = libraryMods();
+  s.library.conflicts = libraryConflicts();
+  return withLibrary(s);
+}
+
+/** The library mock reads and changes the shared state through this host. */
+function withLibrary(s: Omit<State, 'libraryMock'>): State {
+  const full = s as State;
+  full.libraryMock = new LibraryMock({
+    get library() {
+      return full.library;
+    },
+    set library(value) {
+      full.library = value;
+    },
+    get gameRunning() {
+      return full.gameRunning;
+    },
+    set gameRunning(value) {
+      full.gameRunning = value;
+    },
+    get gameRoot() {
+      return full.gameRoot;
+    },
+    set gameRoot(value) {
+      full.gameRoot = value;
+    },
+    catalogEnabled: () => full.settings.catalog?.enabled === true,
+    push: (event) => full.listener?.onmessage(event),
+  });
+  return full;
 }
 
 /**
@@ -75,8 +112,12 @@ function applyScenario(s: State): State {
       s.gameRunning = true;
       break;
     case 'local':
+    case 'library-local':
       s.settings.catalog = { ...s.settings.catalog, enabled: false };
       break;
+  }
+  if (scenario?.startsWith('library-')) {
+    s.libraryMock.scenario(scenario);
   }
   return s;
 }
@@ -183,6 +224,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
   subscribe: (args) => {
     state.listener = args.events as Channel<UiEvent>;
     push({ event: 'game', data: { running: state.gameRunning } });
+    state.libraryMock.subscribed();
     return null;
   },
   system_locale: () => ({ languages: [...navigator.languages], region: null }),
@@ -253,8 +295,8 @@ const handlers: Record<string, (args: Args) => unknown> = {
   updates_check: () => ({ checks: [], available: 0, stopped: null }),
   game_status: () => ({
     running: state.gameRunning,
-    root: String.raw`D:\SteamLibrary\steamapps\common\Deadlock`,
-    installations: 2,
+    root: state.gameRoot,
+    installations: state.gameRoot ? 2 : 0,
   }),
   apply_preview: () => {
     const switched = state.library.selected_profile !== state.library.applied_profile;
@@ -280,7 +322,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */
 export async function invoke<T>(command: string, args: Args = {}): Promise<T> {
-  const handler = handlers[command];
+  const handler = state.libraryMock.handlers()[command] ?? handlers[command];
   if (!handler) {
     throw { id: 'Internal', args: { detail: `mock: ${command} is not implemented` } };
   }
@@ -297,6 +339,9 @@ export const devtools = {
   setGameRunning(running: boolean): void {
     state.gameRunning = running;
     push({ event: 'game', data: { running } });
+    if (!running) {
+      state.libraryMock.gameClosed();
+    }
   },
 };
 
