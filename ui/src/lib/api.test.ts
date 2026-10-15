@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invoke = vi.fn();
-vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 
-const { api, isUserMessage } = await import('./api');
+/** Tauri's channel: the test plays the core and calls `onmessage`. */
+class FakeChannel<T> {
+  onmessage: (message: T) => void = () => {};
+}
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: unknown[]) => invoke(...args),
+  Channel: FakeChannel,
+}));
+
+const { api, isUserMessage, subscribe } = await import('./api');
 
 describe('api', () => {
   beforeEach(() => {
@@ -70,6 +79,22 @@ describe('api', () => {
   it('turns an unexpected failure into an internal message', async () => {
     invoke.mockRejectedValue(new Error('ipc broke'));
     await expect(api.library()).rejects.toEqual({ id: 'Internal', args: { detail: 'Error: ipc broke' } });
+  });
+
+  it('subscribes once with a channel and hands every push to the handler', async () => {
+    invoke.mockResolvedValue(null);
+    const seen: unknown[] = [];
+    await subscribe((event) => seen.push(event));
+    expect(invoke).toHaveBeenCalledTimes(1);
+    const [command, args] = invoke.mock.calls[0] as [string, { events: FakeChannel<unknown> }];
+    expect(command).toBe('subscribe');
+    expect(args.events).toBeInstanceOf(FakeChannel);
+    args.events.onmessage({ event: 'game', data: { running: true } });
+    args.events.onmessage({ event: 'drag_hover', data: { over: false } });
+    expect(seen).toEqual([
+      { event: 'game', data: { running: true } },
+      { event: 'drag_hover', data: { over: false } },
+    ]);
   });
 
   it('recognises core messages', () => {

@@ -1,6 +1,7 @@
 //! What the UI's commands call: the open session and the game on this PC, with no domain logic of its own beyond
 //! decision 138 (edits to the applied profile take effect at once while the game is closed).
 
+use crate::events::Notice;
 use deadloader_core::log::{FileEvent, FileOp, Outcome};
 use deadloader_core::message::{Area, MessageId, ToUserMessage, UserMessage, from_io};
 use deadloader_core::profiles::ProfileError;
@@ -12,6 +13,7 @@ use deadloader_core::settings::{Deletion, Settings};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The game as seen from this PC: whether it runs, and where Steam has it installed.
 pub trait Game: Send + Sync {
@@ -35,6 +37,10 @@ pub struct Backend {
     start_error: Option<UserMessage>,
     game: Box<dyn Game>,
     log: SharedLog,
+    /// What the start found, until the UI takes it.
+    notices: Mutex<Vec<Notice>>,
+    /// Edits made while the game ran since the last apply, for N12.
+    edits_waiting: AtomicUsize,
 }
 
 /// The result of a change in the library.
@@ -45,6 +51,13 @@ pub struct Changed {
     pub applied: bool,
     /// The game is running; the change waits until it is closed (N4).
     pub waiting_for_game: bool,
+}
+
+/// The game was closed and what changed while it ran went into its folder (N12).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AfterGame {
+    pub changes: usize,
+    pub library: LibraryView,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -63,14 +76,44 @@ impl Backend {
                 start_error: None,
                 game,
                 log,
+                notices: Mutex::new(opened.notices.iter().map(Notice::from).collect()),
+                edits_waiting: AtomicUsize::new(0),
             },
             Err(e) => Self {
                 session: Mutex::new(None),
                 start_error: Some(e.user_message()),
                 game,
                 log,
+                notices: Mutex::new(Vec::new()),
+                edits_waiting: AtomicUsize::new(0),
             },
         }
+    }
+
+    /// What the start found; empty after the first call.
+    pub fn take_notices(&self) -> Vec<Notice> {
+        std::mem::take(
+            &mut *self
+                .notices
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+
+    pub fn game_running(&self) -> bool {
+        self.game.running()
+    }
+
+    /// Decision 143: the game was closed, so what was changed in the applied profile while it ran goes into its folder
+    /// now. `None` when there was nothing to apply, or the game runs again. A profile switch still waits for Apply.
+    pub fn game_closed(&self) -> Result<Option<AfterGame>, UserMessage> {
+        // Read before applying: any apply starts the count again.
+        let changes = self.edits_waiting.load(Ordering::Relaxed);
+        let changed = self.follow_up()?;
+        Ok(changed.applied.then_some(AfterGame {
+            changes,
+            library: changed.library,
+        }))
     }
 
     pub fn library(&self) -> Result<LibraryView, UserMessage> {
@@ -132,7 +175,7 @@ impl Backend {
             .iter()
             .any(|o| o.as_ref().is_ok_and(|i| i.choices.is_empty()))
         {
-            self.follow_up()?;
+            self.follow_up_edit()?;
         }
         Ok(outcomes)
     }
@@ -268,6 +311,7 @@ impl Backend {
                 .or_else(|| installations.first().cloned())
                 .ok_or_else(|| UserMessage::new(MessageId::E2))?;
             let applied = s.apply(&root, running)?;
+            self.edits_waiting.store(0, Ordering::Relaxed);
             Ok(ApplyResult {
                 library: s.library(),
                 changed: applied.changed,
@@ -284,7 +328,19 @@ impl Backend {
         edit: impl FnOnce(&mut Session) -> Result<(), deadloader_core::session::SessionError>,
     ) -> Result<Changed, UserMessage> {
         self.with(|s| Ok(edit(s)?))?;
-        self.follow_up()
+        self.follow_up_edit()
+    }
+
+    /// [`Self::follow_up`] after an edit: one that waits for the game counts for N12.
+    fn follow_up_edit(&self) -> Result<Changed, UserMessage> {
+        let changed = self.follow_up()?;
+        if changed.waiting_for_game {
+            self.edits_waiting.fetch_add(1, Ordering::Relaxed);
+        } else if !changed.library.pending {
+            // Back to what the game folder has: nothing waits any more.
+            self.edits_waiting.store(0, Ordering::Relaxed);
+        }
+        Ok(changed)
     }
 
     /// Decision 138: the selected profile is the one in its game folder, so the change goes there now, unless the
@@ -303,6 +359,7 @@ impl Backend {
                 }),
                 (true, Some(root)) => {
                     s.apply(&root, false)?;
+                    self.edits_waiting.store(0, Ordering::Relaxed);
                     Ok(Changed {
                         library: s.library(),
                         applied: true,
@@ -364,7 +421,7 @@ impl From<deadloader_core::session::SessionError> for Failure {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -372,10 +429,10 @@ mod tests {
     const VANILLA: &str = "\"GameInfo\"\r\n{\r\n\tFileSystem\r\n\t{\r\n\t\tSearchPaths\r\n\t\t{\r\n\t\t\tGame\t\t\t\tcitadel\r\n\t\t\tGame\t\t\t\tcore\r\n\t\t}\r\n\t}\r\n}\r\n";
 
     #[derive(Clone, Default)]
-    struct FakeGame {
-        running: Arc<AtomicBool>,
-        installs: Vec<PathBuf>,
-        recycled: Arc<std::sync::Mutex<Vec<PathBuf>>>,
+    pub(crate) struct FakeGame {
+        pub running: Arc<AtomicBool>,
+        pub installs: Vec<PathBuf>,
+        pub recycled: Arc<std::sync::Mutex<Vec<PathBuf>>>,
     }
 
     impl Game for FakeGame {
@@ -391,38 +448,38 @@ mod tests {
         }
     }
 
-    struct Fixture {
-        dir: PathBuf,
+    pub(crate) struct Fixture {
+        pub dir: PathBuf,
     }
 
     impl Fixture {
-        fn new(name: &str) -> Self {
+        pub(crate) fn new(name: &str) -> Self {
             let dir = std::env::temp_dir()
                 .join(format!("deadloader-backend-{name}-{}", std::process::id()));
             clear(&dir);
             std::fs::create_dir_all(&dir).expect("dir");
             Self { dir }
         }
-        fn game(&self) -> PathBuf {
+        pub(crate) fn game(&self) -> PathBuf {
             let root = self.dir.join("Deadlock");
             let citadel = root.join("game").join("citadel");
             std::fs::create_dir_all(&citadel).expect("game");
             std::fs::write(citadel.join("gameinfo.gi"), VANILLA).expect("gameinfo");
             root
         }
-        fn addons(&self) -> PathBuf {
+        pub(crate) fn addons(&self) -> PathBuf {
             self.dir
                 .join("Deadlock")
                 .join("game")
                 .join("citadel")
                 .join("addons")
         }
-        fn mod_file(&self, name: &str, path: &str) -> PathBuf {
+        pub(crate) fn mod_file(&self, name: &str, path: &str) -> PathBuf {
             let file = self.dir.join(name);
             std::fs::write(&file, vpk(path)).expect("vpk");
             file
         }
-        fn backend(&self, game: &FakeGame) -> Backend {
+        pub(crate) fn backend(&self, game: &FakeGame) -> Backend {
             Backend::start(
                 &self.dir.join("deadloader-data"),
                 Box::new(game.clone()),
@@ -614,6 +671,105 @@ mod tests {
             f.addons().join("pak01_dir.vpk").exists(),
             "the game folder is untouched"
         );
+    }
+
+    #[test]
+    fn closing_the_game_applies_what_was_changed_while_it_ran() {
+        let f = Fixture::new("closed");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = backend.apply().expect("applied").library.mods[0].id.clone();
+
+        game.running.store(true, Ordering::Relaxed);
+        backend.set_enabled(&id, false).expect("off");
+        backend.set_enabled(&id, true).expect("on");
+        backend.set_enabled(&id, false).expect("off again");
+        assert!(backend.game_closed().expect("still running").is_none());
+        assert!(f.addons().join("pak01_dir.vpk").exists());
+
+        // 143: right after the game exits.
+        game.running.store(false, Ordering::Relaxed);
+        let after = backend.game_closed().expect("applied").expect("changes");
+        // Off, on, off: one change differs from what the game has.
+        assert_eq!(after.changes, 1);
+        assert!(!after.library.pending);
+        assert!(!f.addons().join("pak01_dir.vpk").exists());
+        // Nothing left to apply.
+        assert!(backend.game_closed().expect("nothing").is_none());
+    }
+
+    #[test]
+    fn a_profile_switch_still_waits_for_apply_after_the_game_closes() {
+        let f = Fixture::new("closedswitch");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        backend.apply().expect("applied");
+        game.running.store(true, Ordering::Relaxed);
+        backend.create_profile("Evening").expect("created");
+        backend.select_profile("Evening").expect("selected");
+        game.running.store(false, Ordering::Relaxed);
+        assert!(backend.game_closed().expect("no apply").is_none());
+        assert!(f.addons().join("pak01_dir.vpk").exists());
+    }
+
+    #[test]
+    fn an_explicit_apply_starts_the_count_of_waiting_edits_again() {
+        let f = Fixture::new("closedcount");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[
+                f.mod_file("haze.vpk", "models/haze/body.vmdl_c"),
+                f.mod_file("wraith.vpk", "models/wraith/body.vmdl_c"),
+            ])
+            .expect("imported");
+        let ids: Vec<String> = backend
+            .apply()
+            .expect("applied")
+            .library
+            .mods
+            .iter()
+            .map(|m| m.id.clone())
+            .collect();
+        game.running.store(true, Ordering::Relaxed);
+        backend.set_enabled(&ids[0], false).expect("off");
+        game.running.store(false, Ordering::Relaxed);
+        backend.apply().expect("applied by hand");
+        game.running.store(true, Ordering::Relaxed);
+        backend.set_enabled(&ids[1], false).expect("off");
+        game.running.store(false, Ordering::Relaxed);
+        assert_eq!(backend.game_closed().expect("ok").expect("one").changes, 1);
+    }
+
+    #[test]
+    fn start_notices_are_kept_until_taken_once() {
+        let f = Fixture::new("notices");
+        let data = f.dir.join("deadloader-data");
+        std::fs::create_dir_all(&data).expect("data");
+        std::fs::write(data.join("settings.json"), r#"{"schema": 1, "zzz": 1}"#).expect("settings");
+        let backend = f.backend(&FakeGame::default());
+        assert_eq!(
+            backend.take_notices(),
+            [crate::events::Notice::SettingsCorrected {
+                fields: vec!["zzz".to_owned()]
+            }]
+        );
+        assert!(backend.take_notices().is_empty());
     }
 
     #[test]

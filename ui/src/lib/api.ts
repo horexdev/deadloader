@@ -1,7 +1,7 @@
 // The UI's only way to the core: typed wrappers around the app's Tauri commands (crates/app/src/commands.rs).
 // Field names mirror the Rust types' serde output (snake_case); command arguments are camelCase, as Tauri expects.
 
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 
 /** An error or notice from the core: a message id from spec 04-messages and named values for its text. */
 export interface UserMessage {
@@ -119,6 +119,34 @@ export interface DialogText {
 
 /** Rust `Result<ImportOutcome, UserMessage>` as serde writes it. */
 export type ImportResult = { Ok: ImportOutcome } | { Err: UserMessage };
+
+/** What the start found (crates/app/src/events.rs `Notice`). */
+export type Notice =
+  | { kind: 'settings_corrected'; fields: string[] }
+  | { kind: 'settings_unreadable'; message: UserMessage }
+  | { kind: 'recovered'; undone: boolean }
+  | { kind: 'swept'; files: number }
+  | { kind: 'broken_profiles'; names: string[] }
+  | { kind: 'damaged_files'; files: string[] };
+
+/** A push from the core (crates/app/src/events.rs `UiEvent`). */
+export type UiEvent =
+  | { event: 'game'; data: { running: boolean } }
+  | { event: 'applied_after_game'; data: { changes: number; library: LibraryView } }
+  | { event: 'apply_after_game_failed'; data: { message: UserMessage } }
+  | { event: 'drag_hover'; data: { over: boolean } }
+  | { event: 'dropped'; data: { outcomes: ImportResult[] } }
+  | { event: 'drop_failed'; data: { message: UserMessage } }
+  | { event: 'notice'; data: Notice };
+
+/**
+ * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.
+ */
+export async function subscribe(onEvent: (event: UiEvent) => void): Promise<void> {
+  const events = new Channel<UiEvent>();
+  events.onmessage = onEvent;
+  await call<null>('subscribe', { events });
+}
 
 export function isUserMessage(value: unknown): value is UserMessage {
   return (

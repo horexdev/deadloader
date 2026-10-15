@@ -2,7 +2,9 @@
 
 use crate::backend::Backend;
 use crate::commands;
+use crate::events::{Outbox, UiEvent};
 use crate::paths::{DataDirError, DataLayout};
+use crate::push::{self, GameWatch};
 use crate::webview;
 use deadloader_core::log::{DiskLogDir, Level, Logger, SystemClock};
 use serde_json::{Map, Value};
@@ -13,7 +15,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tauri::webview::PageLoadEvent;
-use tauri::{App, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    App, AppHandle, DragDropEvent, Manager, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent,
+};
 
 const MAIN_WINDOW: &str = "main";
 
@@ -69,7 +73,9 @@ pub fn run() -> Result<(), StartError> {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             focus_main_window(app);
         }))
+        .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
+            commands::subscribe,
             commands::library,
             commands::set_enabled,
             commands::move_mod,
@@ -100,11 +106,16 @@ pub fn run() -> Result<(), StartError> {
     app.manage(Arc::clone(&log));
     log_start(&log, &layout);
     // Only after `build`: a second instance has exited by now, so it never touches the journal or the library.
-    app.manage(Arc::new(Backend::start(
+    let backend = Arc::new(Backend::start(
         layout.root(),
         Box::new(commands::SteamGame),
         Arc::clone(&log) as deadloader_core::session::SharedLog,
-    )));
+    ));
+    let outbox = Arc::new(Outbox::new());
+    app.manage(Arc::clone(&backend));
+    app.manage(Arc::clone(&outbox));
+    push::start_notices(&backend, &outbox);
+    watch_game(backend, outbox, Arc::clone(&log));
     if let Err(e) = open_main_window(&app, &layout, &log, started) {
         write(
             &log,
@@ -116,6 +127,63 @@ pub fn run() -> Result<(), StartError> {
     }
     app.run(|_, _| {});
     Ok(())
+}
+
+/// Decision 143's watcher: looks for the game every [`push::GAME_POLL`] on its own thread, for the life of the process.
+fn watch_game(backend: Arc<Backend>, outbox: Arc<Outbox>, log: Log) {
+    let thread_log = Arc::clone(&log);
+    let spawned = std::thread::Builder::new()
+        .name("game-watch".to_owned())
+        .spawn(move || {
+            let mut watch = GameWatch::new();
+            loop {
+                if let Some(running) = watch.tick(&backend, &outbox) {
+                    let msg = if running {
+                        "deadlock is running"
+                    } else {
+                        "deadlock is not running"
+                    };
+                    write(&thread_log, Level::Info, msg, []);
+                }
+                std::thread::sleep(push::GAME_POLL);
+            }
+        });
+    if let Err(e) = spawned {
+        // Without it changes made while the game runs wait for Apply or Play instead.
+        write(
+            &log,
+            Level::Error,
+            "the game watcher could not start",
+            [("error", e.to_string().into())],
+        );
+    }
+}
+
+/// Files dragged onto the window (the system's drag and drop, not the page's): a hover state for the UI, and an
+/// import on a worker thread when they are dropped.
+fn on_window_event(window: &Window, event: &WindowEvent) {
+    let WindowEvent::DragDrop(drop) = event else {
+        return;
+    };
+    let app = window.app_handle();
+    let (Some(backend), Some(outbox)) = (
+        app.try_state::<Arc<Backend>>(),
+        app.try_state::<Arc<Outbox>>(),
+    ) else {
+        return;
+    };
+    match drop {
+        DragDropEvent::Enter { .. } => outbox.send(UiEvent::DragHover { over: true }),
+        DragDropEvent::Leave => outbox.send(UiEvent::DragHover { over: false }),
+        DragDropEvent::Drop { paths, .. } => {
+            let (backend, outbox, paths) =
+                (Arc::clone(&backend), Arc::clone(&outbox), paths.clone());
+            tauri::async_runtime::spawn_blocking(move || {
+                push::import_dropped(&backend, &outbox, &paths);
+            });
+        }
+        _ => {}
+    }
 }
 
 fn open_main_window(
