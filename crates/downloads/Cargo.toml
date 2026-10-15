@@ -1,0 +1,22 @@
+[package]
+name = "deadloader-downloads"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+deadloader-core = { path = "../core" }
+deadloader-net = { path = "../net" }
+# GameBanana lists an md5 for every file (R02). Same digest 0.11 family as core's sha2, so it adds only the md5 code.
+md-5 = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+time = { version = "0.3.55", default-features = false, features = ["std"] }

@@ -737,6 +737,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "deadloader-downloads"
+version = "0.1.0"
+dependencies = [
+ "deadloader-core",
+ "deadloader-net",
+ "md-5",
+ "serde",
+ "serde_json",
+ "time",
+]
+
+[[package]]
 name = "deadloader-gamebanana"
 version = "0.1.0"
 dependencies = [
@@ -2118,6 +2130,16 @@ dependencies = [
  "log",
  "tendril",
  "web_atoms 0.3.0",
+]
+
+[[package]]
+name = "md-5"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
+dependencies = [
+ "cfg-if",
+ "digest 0.11.3",
 ]
 
 [[package]]
