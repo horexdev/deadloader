@@ -58,7 +58,6 @@
 .wz-ack{font:var(--type-caption);color:var(--success);display:inline-flex;gap:4px;align-items:center}
 .wz-ack .dl-icon{width:12px;height:12px}
 .wz-reason{display:inline-flex;gap:6px;align-items:center;font:var(--type-body-sm);color:var(--ink-muted);text-align:right}
-.wz-lang .dl-menu{position:absolute;left:0;bottom:calc(100% + 4px);width:100%}
 .wz-changed{display:grid;gap:4px;padding:12px 14px;background:var(--info-soft);border:1px solid var(--line);border-left:3px solid var(--info);border-radius:var(--radius-md)}
 .wz-changed__title{display:flex;gap:8px;align-items:center;font:var(--type-body-strong);color:var(--ink)}
 .wz-changed__title .dl-icon{color:var(--info)}

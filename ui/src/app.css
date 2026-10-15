@@ -3,6 +3,8 @@ body,
 #app {
   height: 100%;
   margin: 0;
+  /* The window never scrolls as a whole: the shell's own areas scroll. */
+  overflow: hidden;
 }
 
 body {
