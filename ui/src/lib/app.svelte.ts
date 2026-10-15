@@ -16,6 +16,7 @@ import {
   subscribe,
   updates as updatesApi,
   type ApplyResult,
+  type Applying,
   type ImportResult,
   type UpdateStep,
   type ApplyPreview,
@@ -108,6 +109,9 @@ export class AppState {
   pendingOpen = $state(false);
   /** Apply (S9) is putting the selected profile into the game folder. */
   applying = $state(false);
+  /** How far the running apply is (any apply: Apply, Play, an edit, the one after the game closed); null when none
+   *  runs or it ends too quickly to report. */
+  progress: Applying | null = $state(null);
   /** The last apply or Play found gameinfo.gi changed by another program (D10). */
   gameinfoForeign = $state(false);
   /** An update that arrived needs the user to map its files (D5, 169). */
@@ -204,6 +208,9 @@ export class AppState {
         for (const listener of this.#logListeners) {
           listener(event.data.kinds);
         }
+        break;
+      case 'applying':
+        this.progress = event.data.finished ? null : event.data;
         break;
       default:
         break;
@@ -345,6 +352,7 @@ export class AppState {
       this.fail(error);
     } finally {
       this.applying = false;
+      this.progress = null;
     }
   }
 
@@ -461,6 +469,7 @@ export class AppState {
       this.fail(error);
     } finally {
       this.playing = false;
+      this.progress = null;
     }
   }
 

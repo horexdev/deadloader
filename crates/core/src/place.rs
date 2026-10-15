@@ -46,12 +46,25 @@ pub fn place(
     dest: &Path,
     expected_sha256: &[u8; 32],
 ) -> Result<Placement, PlaceError> {
+    place_with(fs, source, dest, expected_sha256, &mut |_| {})
+}
+
+/// [`place`], telling `on_bytes` how far a copy is (a link is instant and tells nothing).
+pub fn place_with(
+    fs: &impl FileOps,
+    source: &Path,
+    dest: &Path,
+    expected_sha256: &[u8; 32],
+    on_bytes: &mut dyn FnMut(u64),
+) -> Result<Placement, PlaceError> {
     match fs.hard_link(source, dest) {
         Ok(()) => return Ok(Placement::Linked),
         Err(e) if needs_copy(&e) => {}
         Err(e) => return Err(PlaceError::Io(e)),
     }
-    let (bytes, actual) = fs.copy_verified(source, dest).map_err(PlaceError::Io)?;
+    let (bytes, actual) = fs
+        .copy_verified_with(source, dest, on_bytes)
+        .map_err(PlaceError::Io)?;
     if &actual != expected_sha256 {
         // Best effort: a failed cleanup leaves a temp name the intent journal removes on the next start.
         let _ = fs.remove_file(dest);
@@ -132,6 +145,33 @@ mod tests {
             &sha(b"x"),
         );
         assert_eq!(placed.expect("placed"), Placement::Copied { bytes: 1 });
+    }
+
+    #[test]
+    fn a_copy_tells_how_many_bytes_it_wrote_and_a_link_tells_nothing() {
+        let fs = MemFs::default()
+            .volume("C:", true)
+            .volume("D:", true)
+            .with(r"C:\lib\a.vpk", b"mod data")
+            .with(r"D:\lib\b.vpk", b"other");
+        let mut bytes = Vec::new();
+        place_with(
+            &fs,
+            Path::new(r"C:\lib\a.vpk"),
+            Path::new(r"D:\game\~a"),
+            &sha(b"mod data"),
+            &mut |n| bytes.push(n),
+        )
+        .expect("copied");
+        place_with(
+            &fs,
+            Path::new(r"D:\lib\b.vpk"),
+            Path::new(r"D:\game\~b"),
+            &sha(b"other"),
+            &mut |n| bytes.push(n),
+        )
+        .expect("linked");
+        assert_eq!(bytes, [8]);
     }
 
     #[test]

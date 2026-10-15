@@ -199,6 +199,7 @@ export type UiEvent =
   | { event: 'updates'; data: UpdateReport }
   | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } }
   | { event: 'log'; data: { kinds: LogKind[] } }
+  | { event: 'applying'; data: Applying }
   /** How many network requests are running now (the sidebar's live count). */
   | { event: 'network'; data: { running: number } };
 
@@ -674,6 +675,24 @@ export type Change =
   | { kind: 'version'; from: string; to: string };
 
 export type PendingChange = { mod_id: string; name: string } & Change;
+
+/** How far a running apply is (crates/app/src/progress.rs `Applying`): the Library's applying banner. */
+export interface Applying {
+  /** Steps of the change done and planned (files placed under temporary names, renamed into place, removed). */
+  done: number;
+  total: number;
+  /** Files placed so far: hard links (no time, no space) and copies. */
+  linked: number;
+  copied: number;
+  /** Size of the files placed so far (a copy as far as written), of all files to place, and of what was copied. */
+  bytes_done: number;
+  bytes_total: number;
+  bytes_copied: number;
+  /** The time the rest takes at the copy rate so far; null without copies or too early to tell. */
+  left_ms: number | null;
+  /** The apply ended: the banner goes. */
+  finished: boolean;
+}
 
 /** The part of a mod a change is about; what "Undo this change" takes back. */
 export type Aspect = 'enabled' | 'files' | 'order';

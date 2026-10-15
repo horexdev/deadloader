@@ -30,7 +30,7 @@ async function start(scenario?: string): Promise<HTMLElement> {
   history.replaceState(null, '', scenario ? `/?scenario=${scenario}#/library` : '/#/library');
   resetMock();
   router.go('library');
-  Object.assign(app, { pendingOpen: false, mapping: null, updates: null, updatesAt: null, toasts: [], gameinfoForeign: false });
+  Object.assign(app, { pendingOpen: false, mapping: null, updates: null, updatesAt: null, toasts: [], gameinfoForeign: false, progress: null });
   await app.start();
   const { target } = render(Screen, {});
   // happy-dom has no layout: give the list a viewport.
@@ -188,6 +188,49 @@ describe('the Library screen', () => {
     click(button(panel, 'Undo all'));
     await settle();
     expect(app.library?.mods[0]?.enabled).toBe(true);
+  });
+
+  it('shows how far an apply is in the banner, and drops the banner when it ends', async () => {
+    const target = await start();
+    expect(target.querySelector('.applying')).toBeNull();
+    app.handle({
+      event: 'applying',
+      data: {
+        done: 3,
+        total: 4,
+        linked: 9,
+        copied: 1,
+        bytes_done: 300,
+        bytes_total: 400,
+        bytes_copied: 100,
+        left_ms: 4200,
+        finished: false,
+      },
+    });
+    await settle();
+    const banner = one(target, '.applying');
+    expect(banner.textContent).toContain('Applying profile');
+    expect(banner.textContent).toContain('Step 4 of 4');
+    expect(banner.textContent).toContain('9 files linked, 1 copied');
+    expect(banner.textContent).toContain('About 5 s left');
+    expect(one(banner, '[role=progressbar]').getAttribute('aria-valuenow')).toBe('75');
+
+    app.handle({
+      event: 'applying',
+      data: {
+        done: 4,
+        total: 4,
+        linked: 9,
+        copied: 1,
+        bytes_done: 400,
+        bytes_total: 400,
+        bytes_copied: 100,
+        left_ms: null,
+        finished: true,
+      },
+    });
+    await settle();
+    expect(target.querySelector('.applying')).toBeNull();
   });
 
   it('lists foreign files and takes one under management through D11', async () => {

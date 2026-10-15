@@ -18,10 +18,12 @@
     stage?: string;
     /** Bottom line: amounts and percentage, then speed and time left. */
     detail?: string;
+    /** Bold start of the bottom line, before `detail` (the applying banner's "Step 4 of 10"). */
+    lead?: string;
     rate?: string;
   }
 
-  const { value, label, state = 'active', valueText, thin = false, name, stage, detail, rate }: Props = $props();
+  const { value, label, state = 'active', valueText, thin = false, name, stage, detail, lead, rate }: Props = $props();
 
   const fraction = $derived(Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0);
   const indeterminate = $derived(state === 'indeterminate');
@@ -42,9 +44,9 @@
     </div>
   {/if}
   <div class="dl-progress__track"><div class="dl-progress__fill" style:--value={fraction}></div></div>
-  {#if !thin && (detail || rate)}
+  {#if !thin && (detail || lead || rate)}
     <div class="dl-progress__meta">
-      {#if detail}<span>{detail}</span>{/if}{#if rate}<span>{rate}</span>{/if}
+      {#if lead}<span><strong>{lead}</strong>{#if detail}{' · ' + detail}{/if}</span>{:else if detail}<span>{detail}</span>{/if}{#if rate}<span>{rate}</span>{/if}
     </div>
   {/if}
 </div>

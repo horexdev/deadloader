@@ -34,6 +34,27 @@ library-switch-why-first = Aplique { $name } agora ou aperte Jogar — o deadloa
 library-review-switch = Ver a troca
 library-applying-what = Aplicando o perfil { $name }…
 library-applying-why = Você pode continuar navegando; Jogar volta quando terminar.
+library-applying-step = Etapa { $done } de { $total }
+library-applying-linked =
+    { $count ->
+        [one] { $count } arquivo vinculado
+       *[other] { $count } arquivos vinculados
+    }
+library-applying-copied =
+    { $count ->
+        [one] { $count } arquivo copiado
+       *[other] { $count } arquivos copiados
+    }
+library-applying-both =
+    { $linked ->
+        [one] { $linked } arquivo vinculado
+       *[other] { $linked } arquivos vinculados
+    }, { $copied ->
+        [one] { $copied } copiado
+       *[other] { $copied } copiados
+    }
+library-applying-left-seconds = Faltam cerca de { $seconds } s
+library-applying-left-minutes = Faltam cerca de { $minutes } min { $seconds } s
 library-show = Mostrar
 library-tab-all = Todos
 library-tab-enabled = Ativados
