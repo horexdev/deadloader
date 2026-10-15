@@ -52,7 +52,8 @@ export default defineConfig(({ mode }) => ({
     include: ['src/**/*.test.ts', 'build/**/*.test.ts'],
     environment: 'happy-dom',
     setupFiles: ['src/lib/test/setup.ts'],
-    // Tests read the design stylesheets and the font stacks per script as text; other CSS is not processed in tests.
-    css: { include: [/theme\/(tokens|components)\.css/, /i18n\/fonts\.css/] },
+    // Tests read the design stylesheets, the font stacks per script and the wizard's layout as text; other CSS is not
+    // processed in tests.
+    css: { include: [/theme\/(tokens|components)\.css/, /i18n\/fonts\.css/, /wizard\/wizard\.css/] },
   },
 }));
