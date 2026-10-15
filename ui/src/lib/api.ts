@@ -111,6 +111,12 @@ export interface ProfileImported {
 /** settings.json as the core writes it; sections are typed where screens use them. */
 export type Settings = Record<string, Record<string, unknown>>;
 
+/** The translated texts of a system file dialog. */
+export interface DialogText {
+  title: string;
+  filter: string;
+}
+
 /** Rust `Result<ImportOutcome, UserMessage>` as serde writes it. */
 export type ImportResult = { Ok: ImportOutcome } | { Err: UserMessage };
 
@@ -157,4 +163,7 @@ export const api = {
   importProfile: (text: string) => call<ProfileImported>('import_profile', { text }),
   settings: () => call<Settings>('settings'),
   updateSettings: (settings: Settings) => call<Settings>('update_settings', { settings }),
+  addFromDisk: (text: DialogText) => call<ImportResult[]>('add_from_disk', { text }),
+  exportProfileDialog: (name: string, text: DialogText) => call<boolean>('export_profile_dialog', { name, text }),
+  importProfileDialog: (text: DialogText) => call<ProfileImported | null>('import_profile_dialog', { text }),
 };
