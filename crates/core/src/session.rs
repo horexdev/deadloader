@@ -24,6 +24,7 @@ use crate::remove::{
 };
 use crate::selection;
 use crate::settings::{self, Settings, SettingsError, Warning};
+use crate::updates::{self, ConfirmedUpdate, OverlapOutcome, UpdateError};
 use crate::vpk::read_index;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -33,6 +34,53 @@ use std::sync::Arc;
 
 /// Where the session reports file operations (the files log).
 pub type SharedLog = Arc<dyn FileLog + Send + Sync>;
+
+/// Where a file of a replaced download goes (D5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UpdateProposal {
+    /// The old library file.
+    pub old: String,
+    pub proposed: Proposed,
+}
+
+impl UpdateProposal {
+    /// One clear partner: applied without asking. A tie or no overlap needs the user (169).
+    pub fn is_settled(&self) -> bool {
+        matches!(
+            self.proposed,
+            Proposed::Pair { .. } | Proposed::Overlap { .. }
+        )
+    }
+
+    /// The proposed new library file, when settled.
+    pub fn new_file(&self) -> Option<&str> {
+        match &self.proposed {
+            Proposed::Pair { new } | Proposed::Overlap { new, .. } => Some(new),
+            Proposed::Tie { .. } | Proposed::NoOverlap => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Proposed {
+    /// The same place in the old and the new archive.
+    Pair { new: String },
+    /// The new file changing most of the same game files.
+    Overlap {
+        new: String,
+        shared_paths: usize,
+        identical: usize,
+    },
+    /// Several new files score the same: the user picks.
+    Tie {
+        candidates: Vec<String>,
+        shared_paths: usize,
+        identical: usize,
+    },
+    /// No new file changes any game file of the old one: the user maps it, or keeps it.
+    NoOverlap,
+}
 
 /// What the download queue knows about a verified download: which GameBanana file of which mod it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +129,7 @@ pub enum SessionError {
     Remove(RemoveError),
     UnknownMod(String),
     UnknownFile(String),
+    Update(UpdateError),
     /// The game folder has no `gameinfo.gi` (moved, uninstalled, or its drive is gone): nothing is written there (E2).
     GameNotFound(PathBuf),
     Io(io::Error),
@@ -97,6 +146,7 @@ impl std::fmt::Display for SessionError {
             Self::Remove(e) => write!(f, "{e}"),
             Self::UnknownMod(id) => write!(f, "the mod \"{id}\" is not in the library"),
             Self::UnknownFile(id) => write!(f, "the file \"{id}\" is not in the library"),
+            Self::Update(e) => write!(f, "{e}"),
             Self::GameNotFound(root) => {
                 write!(f, "no Deadlock installation in {}", root.display())
             }
@@ -120,6 +170,7 @@ impl ToUserMessage for SessionError {
             Self::GameNotFound(root) => UserMessage::new(MessageId::E2)
                 .arg("path", root.display())
                 .arg("detail", self),
+            Self::Update(e) => e.user_message(),
             Self::UnknownMod(_) | Self::UnknownFile(_) => {
                 UserMessage::new(MessageId::Internal).arg("detail", self)
             }
@@ -467,7 +518,7 @@ impl Session {
             remote_file_id: None,
             archive_name: None,
         };
-        self.import_request(&req, None)
+        self.import_request(&req, None, true)
     }
 
     /// A verified download from the catalog (F2): its files join the library mod of that GameBanana mod, a new one
@@ -494,13 +545,144 @@ impl Session {
             remote_file_id: Some(download.file_id),
             archive_name: Some(download.file_name.clone()),
         };
-        self.import_request(&req, download.author.as_deref())
+        self.import_request(&req, download.author.as_deref(), true)
+    }
+
+    /// A downloaded update (D5): its files join the mod but nothing is enabled; [`Session::propose_update`] and
+    /// [`Session::apply_update`] put them where the old files were. Returns the new library file ids.
+    pub fn import_update_file(
+        &mut self,
+        path: &Path,
+        download: &Download,
+    ) -> Result<Vec<String>, SessionError> {
+        let req = self.download_request(path, download);
+        Ok(self
+            .import_request(&req, download.author.as_deref(), false)?
+            .new_files)
+    }
+
+    fn download_request(&self, path: &Path, download: &Download) -> ImportRequest {
+        let mod_id = match download.section {
+            Section::Mod => format!("gb-{}", download.mod_id),
+            Section::Sound => format!("gb-sound-{}", download.mod_id),
+        };
+        ImportRequest {
+            source: path.to_path_buf(),
+            mod_id,
+            name: download.mod_name.clone(),
+            mod_source: Source::GameBanana {
+                section: download.section,
+                mod_id: download.mod_id,
+            },
+            version: download.version.clone(),
+            remote_file_id: Some(download.file_id),
+            archive_name: Some(download.file_name.clone()),
+        }
+    }
+
+    /// Which new library file holds the newer version of each file of the replaced GameBanana file (step 2 of
+    /// decision 164): by place in the archive first, then by the game files they change. Only a settled proposal
+    /// for every file may be applied without asking (169).
+    pub fn propose_update(
+        &self,
+        mod_id: &str,
+        replaced_remote_id: u64,
+        new_files: &[String],
+    ) -> Result<Vec<UpdateProposal>, SessionError> {
+        let m = self
+            .manifest
+            .mods
+            .iter()
+            .find(|m| m.id == mod_id)
+            .ok_or_else(|| SessionError::UnknownMod(mod_id.to_owned()))?;
+        let old: Vec<&crate::library::ModFile> = m
+            .files
+            .iter()
+            .filter(|f| {
+                f.remote_file_id == Some(replaced_remote_id)
+                    && !matches!(f.successor, Some(crate::library::Successor::File(_)))
+            })
+            .collect();
+        let mut new: Vec<&crate::library::ModFile> = Vec::new();
+        for id in new_files {
+            new.push(
+                m.files
+                    .iter()
+                    .find(|f| &f.id == id)
+                    .ok_or_else(|| SessionError::UnknownFile(id.clone()))?,
+            );
+        }
+        let pairing = updates::pair_within_archive(&old, &new);
+        let mut proposals: Vec<UpdateProposal> = pairing
+            .pairs
+            .into_iter()
+            .map(|p| UpdateProposal {
+                old: p.old,
+                proposed: Proposed::Pair { new: p.new },
+            })
+            .collect();
+        let index_of = |id: &String| {
+            self.indexes.get(id).cloned().unwrap_or(FileIndex {
+                id: id.clone(),
+                entries: Vec::new(),
+            })
+        };
+        let old_left: Vec<FileIndex> = pairing.old_left.iter().map(index_of).collect();
+        let new_left: Vec<FileIndex> = pairing.new_left.iter().map(index_of).collect();
+        proposals.extend(
+            updates::match_by_overlap(&old_left, &new_left)
+                .into_iter()
+                .map(|m| UpdateProposal {
+                    old: m.old,
+                    proposed: match m.outcome {
+                        OverlapOutcome::Match {
+                            new,
+                            shared_paths,
+                            identical,
+                        } => Proposed::Overlap {
+                            new,
+                            shared_paths,
+                            identical,
+                        },
+                        OverlapOutcome::Tie {
+                            candidates,
+                            shared_paths,
+                            identical,
+                        } => Proposed::Tie {
+                            candidates,
+                            shared_paths,
+                            identical,
+                        },
+                        OverlapOutcome::NoOverlap => Proposed::NoOverlap,
+                    },
+                }),
+        );
+        Ok(proposals)
+    }
+
+    /// A confirmed update (39): the old files stay (22) and point at their successors, and the new files are active
+    /// wherever the old ones were (137). The manifest and the changed profiles are saved; nothing changes on error.
+    pub fn apply_update(&mut self, update: &ConfirmedUpdate) -> Result<(), SessionError> {
+        let mut manifest = self.manifest.clone();
+        let mut profiles = self.profiles.clone();
+        let changed = updates::apply_update(&mut manifest, &mut profiles, update)
+            .map_err(SessionError::Update)?;
+        save_manifest(&self.manifest_path(), &manifest)?;
+        for &i in &changed {
+            profiles::save(&self.profiles_dir(), &profiles[i])?;
+        }
+        self.manifest = manifest;
+        self.profiles = profiles;
+        let added: Vec<String> = update.added.iter().map(|f| f.id.clone()).collect();
+        self.index(&added);
+        Ok(())
     }
 
     fn import_request(
         &mut self,
         req: &ImportRequest,
         author: Option<&str>,
+        install: bool,
     ) -> Result<ImportOutcome, SessionError> {
         let path = &req.source;
         let mod_id = req.mod_id.clone();
@@ -538,6 +720,14 @@ impl Session {
             }
         }
         self.index(&imported.new_files);
+        if !install {
+            return Ok(ImportOutcome {
+                mod_id,
+                new_files: imported.new_files,
+                choices: Vec::new(),
+                skipped: imported.skipped,
+            });
+        }
         let choices = selection::choices_needed(&imported.grouping, &imported.new_files);
         if choices.is_empty() {
             let grouping = imported.grouping.clone();
@@ -1101,6 +1291,7 @@ mod tests {
     use super::*;
     use crate::log::{FileOp, MemFileLog};
     use crate::testing::{remove_all, temp_dir, vpk};
+    use crate::updates::Mapping;
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -1229,6 +1420,99 @@ mod tests {
         let view = s.library();
         assert_eq!(view.mods.len(), 1, "one GameBanana mod (144)");
         assert_eq!(view.mods[0].files.len(), 2);
+    }
+
+    /// v1 of Haze installed and active, v2 imported as its update (D5): the old one stays active until confirmed.
+    fn haze_v1_and_its_update(f: &Fixture, v2_path: &str) -> (Session, String, Vec<String>) {
+        let mut s = open(f);
+        s.import_download(
+            &f.source("1.bin", &[("models/haze/body.vmdl_c", 1)]),
+            &haze_download(1, "haze.vpk"),
+        )
+        .expect("v1");
+        let v1 = s.manifest.mods[0].files[0].id.clone();
+        let new = s
+            .import_update_file(
+                &f.source("2.bin", &[(v2_path, 2)]),
+                &haze_download(2, "haze.vpk"),
+            )
+            .expect("v2");
+        (s, v1, new)
+    }
+
+    #[test]
+    fn an_update_file_joins_the_mod_without_being_enabled() {
+        let f = Fixture::new("updatefile");
+        let (s, v1, new) = haze_v1_and_its_update(&f, "models/haze/body.vmdl_c");
+        assert_eq!(new.len(), 1);
+        let view = s.library();
+        assert_eq!(view.mods[0].files.len(), 2);
+        let group = &view.mods[0].variant_groups[0];
+        assert_eq!(
+            group.active.as_deref(),
+            Some(v1.as_str()),
+            "v1 stays active"
+        );
+    }
+
+    #[test]
+    fn the_update_is_paired_by_its_place_in_the_archive_and_applied() {
+        let f = Fixture::new("updateapply");
+        let (mut s, v1, new) = haze_v1_and_its_update(&f, "models/haze/body.vmdl_c");
+        let proposals = s.propose_update("gb-655209", 1, &new).expect("proposed");
+        assert_eq!(
+            proposals,
+            [UpdateProposal {
+                old: v1.clone(),
+                proposed: Proposed::Pair {
+                    new: new[0].clone()
+                },
+            }]
+        );
+        assert!(proposals.iter().all(UpdateProposal::is_settled));
+        s.apply_update(&ConfirmedUpdate {
+            mod_id: "gb-655209".to_owned(),
+            added: Vec::new(),
+            mappings: vec![Mapping {
+                old: v1.clone(),
+                new: Some(new[0].clone()),
+            }],
+            version: Some("2.0".to_owned()),
+        })
+        .expect("applied");
+        // 137: the new version is active where the old one was; the old one stays (22) and knows its successor.
+        let view = open(&f).library();
+        assert_eq!(
+            view.mods[0].variant_groups[0].active.as_deref(),
+            Some(new[0].as_str())
+        );
+        let old = view.mods[0]
+            .files
+            .iter()
+            .find(|x| x.id == v1)
+            .expect("kept");
+        assert_eq!(old.newer_in_library.as_deref(), Some(new[0].as_str()));
+    }
+
+    #[test]
+    fn an_update_that_changes_other_game_files_needs_the_user() {
+        let f = Fixture::new("updatenooverlap");
+        let (mut s, v1, new) = haze_v1_and_its_update(&f, "models/haze/legs.vmdl_c");
+        // Different archive layout: one file each still pairs by place; force overlap matching with two old files.
+        s.import_download(
+            &f.source("3.bin", &[("models/haze/hands.vmdl_c", 1)]),
+            &haze_download(1, "haze.vpk"),
+        )
+        .expect("a second file of v1's download");
+        let proposals = s.propose_update("gb-655209", 1, &new).expect("proposed");
+        assert!(proposals.iter().any(|p| p.old == v1));
+        assert!(
+            proposals
+                .iter()
+                .all(|p| matches!(p.proposed, Proposed::NoOverlap)),
+            "{proposals:?}"
+        );
+        assert!(!proposals.iter().any(UpdateProposal::is_settled));
     }
 
     #[test]

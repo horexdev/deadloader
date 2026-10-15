@@ -143,7 +143,8 @@ export type UiEvent =
   | { event: 'catalog'; data: CatalogEvent }
   | { event: 'download'; data: DownloadEvent }
   | { event: 'installed'; data: { task: TaskId; installed: Installed } }
-  | { event: 'updates'; data: UpdateReport };
+  | { event: 'updates'; data: UpdateReport }
+  | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } };
 
 /**
  * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.
@@ -486,7 +487,40 @@ export const updates = {
   check: () => callCatalog<UpdateReport>('updates_check'),
   /** "Hide" on "new files available" (168). */
   dismiss: (modId: string, fileIds: number[]) => call<null>('updates_dismiss', { modId, fileIds }),
+  /** "Update" in D5: per replaced GameBanana file, the listed file that replaces it, or `null` to keep the old one. */
+  install: (modId: string, picks: UpdatePick[]) => call<UpdateStarted>('update_install', { modId, picks }),
+  /** The user's mapping after a `needs_mapping` step; `new: null` keeps an old file as it is. */
+  map: (modId: string, mappings: { old: string; new: string | null }[], version: string | null) =>
+    call<Changed>('update_map', { modId, mappings, version }),
 };
+
+export interface UpdatePick {
+  replaced: number;
+  file: number | null;
+}
+
+/** Where an old library file goes (D5). */
+export type Proposed =
+  | { kind: 'pair'; new: string }
+  | { kind: 'overlap'; new: string; shared_paths: number; identical: number }
+  | { kind: 'tie'; candidates: string[]; shared_paths: number; identical: number }
+  | { kind: 'no_overlap' };
+
+export type UpdateStep =
+  | { kind: 'applied'; mod_id: string; changed: Changed }
+  | {
+      kind: 'needs_mapping';
+      mod_id: string;
+      replaced: number;
+      new_files: string[];
+      proposals: { old: string; proposed: Proposed }[];
+      version: string | null;
+    };
+
+export interface UpdateStarted {
+  tasks: TaskId[];
+  steps: UpdateStep[];
+}
 
 export function isUserMessage(value: unknown): value is UserMessage {
   return (

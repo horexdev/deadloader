@@ -113,6 +113,106 @@ pub fn check_all(manifest: &Manifest, remote: &dyn Remote, initiator: Initiator)
     }
 }
 
+/// The user's answer in D5 for one replaced GameBanana file: the listed file that replaces it, or `None` to keep the
+/// old one and stop reporting it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+pub struct UpdatePick {
+    pub replaced: u64,
+    pub file: Option<u64>,
+}
+
+/// What a pick takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PickPlan {
+    /// "Keep the old file": these library files get no successor and are not reported again.
+    Keep { old_files: Vec<String> },
+    /// The replacement is in the library already (downloaded before, decision 39's "download automatically").
+    Present {
+        replaced: u64,
+        new_files: Vec<String>,
+    },
+    /// The replacement has to be downloaded (169: only what the user picked).
+    Download { replaced: u64, file: u64 },
+}
+
+/// The library mod an update is for, with its GameBanana id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateTarget {
+    pub section: Section,
+    pub mod_id: u64,
+    pub name: String,
+    pub author: Option<String>,
+    pub plans: Vec<PickPlan>,
+}
+
+/// Turns the picks of D5 into what each needs, checking they belong to the mod.
+pub fn plan_picks(
+    manifest: &Manifest,
+    library_mod: &str,
+    picks: &[UpdatePick],
+) -> Result<UpdateTarget, deadloader_core::message::UserMessage> {
+    let mistake = |detail: String| {
+        deadloader_core::message::UserMessage::new(deadloader_core::message::MessageId::Internal)
+            .arg("detail", detail)
+    };
+    let m = manifest
+        .mods
+        .iter()
+        .find(|m| m.id == library_mod)
+        .ok_or_else(|| mistake(format!("no mod {library_mod}")))?;
+    let Source::GameBanana { section, mod_id } = m.source else {
+        return Err(mistake(format!("{library_mod} is not from GameBanana")));
+    };
+    let files_of = |remote: u64, current_only: bool| -> Vec<String> {
+        m.files
+            .iter()
+            .filter(|f| f.remote_file_id == Some(remote))
+            .filter(|f| {
+                !current_only
+                    || !matches!(
+                        f.successor,
+                        Some(deadloader_core::library::Successor::File(_))
+                    )
+            })
+            .map(|f| f.id.clone())
+            .collect()
+    };
+    let mut plans = Vec::new();
+    for pick in picks {
+        let old_files = files_of(pick.replaced, true);
+        if old_files.is_empty() {
+            return Err(mistake(format!(
+                "{library_mod} has no current file from GameBanana file {}",
+                pick.replaced
+            )));
+        }
+        plans.push(match pick.file {
+            None => PickPlan::Keep { old_files },
+            Some(file) => {
+                let present = files_of(file, false);
+                if present.is_empty() {
+                    PickPlan::Download {
+                        replaced: pick.replaced,
+                        file,
+                    }
+                } else {
+                    PickPlan::Present {
+                        replaced: pick.replaced,
+                        new_files: present,
+                    }
+                }
+            }
+        });
+    }
+    Ok(UpdateTarget {
+        section,
+        mod_id,
+        name: m.name.clone(),
+        author: m.author.clone(),
+        plans,
+    })
+}
+
 /// Errors that would repeat for every other mod.
 fn stops_the_check(e: &CatalogError) -> bool {
     matches!(
@@ -262,6 +362,78 @@ mod tests {
         assert_eq!(*table.asked.borrow(), ["files 1"]);
         assert!(report.checks.iter().all(|c| c.status == Status::NotChecked));
         assert_eq!(report.available, 0);
+    }
+
+    #[test]
+    fn picks_become_keep_present_or_download() {
+        let mut m = manifest();
+        // File 21 of mod 2 was downloaded already.
+        m.mods[1].files.push(lib_file("gb-2-2-0", 21, "b.zip"));
+        let target = plan_picks(
+            &m,
+            "gb-2",
+            &[UpdatePick {
+                replaced: 20,
+                file: Some(21),
+            }],
+        )
+        .expect("planned");
+        assert_eq!((target.section, target.mod_id), (Section::Mod, 2));
+        assert_eq!(
+            target.plans,
+            [PickPlan::Present {
+                replaced: 20,
+                new_files: vec!["gb-2-2-0".to_owned()]
+            }]
+        );
+        let target = plan_picks(
+            &m,
+            "gb-1",
+            &[UpdatePick {
+                replaced: 11,
+                file: Some(12),
+            }],
+        )
+        .expect("planned");
+        assert_eq!(
+            target.plans,
+            [PickPlan::Download {
+                replaced: 11,
+                file: 12
+            }]
+        );
+        let target = plan_picks(
+            &m,
+            "gb-3",
+            &[UpdatePick {
+                replaced: 30,
+                file: None,
+            }],
+        )
+        .expect("planned");
+        assert_eq!(
+            target.plans,
+            [PickPlan::Keep {
+                old_files: vec!["gb-3-1-0".to_owned()]
+            }]
+        );
+    }
+
+    #[test]
+    fn picks_that_are_not_the_mods_are_refused() {
+        let m = manifest();
+        assert!(plan_picks(&m, "gb-9", &[]).is_err());
+        assert!(
+            plan_picks(
+                &m,
+                "gb-1",
+                &[UpdatePick {
+                    replaced: 99,
+                    file: None
+                }]
+            )
+            .is_err()
+        );
     }
 
     #[test]
