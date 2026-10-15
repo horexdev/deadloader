@@ -110,6 +110,43 @@ export interface Missing {
 export interface ProfileImported {
   name: string;
   missing: Missing[];
+  /** How many mods the file lists. */
+  listed: number;
+  /** The file's name, when it came from a file. */
+  file: string | null;
+}
+
+/** A profile as the Profiles screen lists it (S5). */
+export interface ProfileOverview {
+  name: string;
+  /** Its game folder; `null` until one is chosen or applied (then the first installation is used). */
+  game_root: string | null;
+  /** Enabled mods. */
+  mods: number;
+  mod_names: string[];
+  /** Its files are in its game folder now (153). */
+  applied: boolean;
+  last_applied_unix_ms: number | null;
+}
+
+export interface ProfilesView {
+  selected: string;
+  /** Steam's installations, then the ones added by hand. */
+  installations: string[];
+  profiles: ProfileOverview[];
+}
+
+/** A missing mod of an imported profile to download (D9). */
+export interface MissingDownload {
+  section: Section;
+  mod_id: number;
+  name: string;
+  file_ids: number[];
+}
+
+export interface MissingStarted {
+  tasks: TaskId[];
+  failed: { name: string; message: UserMessage }[];
 }
 
 /** settings.json as the core writes it; sections are typed where screens use them. */
@@ -691,6 +728,11 @@ export const api = {
   confirmAge: () => call<Settings>('confirm_age'),
   /** D1's Open (31): the page in the user's browser; only https pages are opened. */
   openLink: (url: string) => call<null>('open_link', { url }),
+  profilesOverview: () => call<ProfilesView>('profiles_overview'),
+  setProfileInstallation: (name: string, root: string) =>
+    call<ProfilesView>('set_profile_installation', { name, root }),
+  /** "Download missing" in D9. */
+  downloadMissing: (mods: MissingDownload[]) => call<MissingStarted>('profile_download_missing', { mods }),
 };
 
 // ---- Activity: the logs (crates/core/src/log.rs, activity.rs; crates/app/src/commands/activity.rs)

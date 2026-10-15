@@ -89,3 +89,69 @@ pub async fn import_profile_dialog(
     })
     .await
 }
+
+/// The Profiles screen (S5): every profile with its game folder, enabled mods and when it was applied.
+#[tauri::command]
+pub async fn profiles_overview(backend: Shared<'_>) -> Reply<crate::backend::ProfilesView> {
+    blocking(backend, move |b| b.profiles_view()).await
+}
+
+/// "Change game installation" (153): the known game folder Apply and Play use for the profile.
+#[tauri::command]
+pub async fn set_profile_installation(
+    backend: Shared<'_>,
+    name: String,
+    root: String,
+) -> Reply<crate::backend::ProfilesView> {
+    blocking(backend, move |b| b.set_profile_installation(&name, &root)).await
+}
+
+/// What "Download missing" in D9 started, and the mods that couldn't be queued.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MissingStarted {
+    pub tasks: Vec<deadloader_downloads::TaskId>,
+    pub failed: Vec<crate::downloads::NotStarted>,
+}
+
+/// "Download missing" in D9 (37): the GameBanana files an imported profile names; the mod page is fetched first when
+/// it isn't saved. Each download joins the selected profile (the imported one) when it is installed (136).
+#[tauri::command]
+pub async fn profile_download_missing(
+    slot: Slot<'_>,
+    downloads: State<'_, Arc<deadloader_downloads::Downloads>>,
+    mods: Vec<crate::downloads::MissingMod>,
+) -> Reply<MissingStarted> {
+    let downloads = Arc::clone(downloads.inner());
+    on_catalog(slot, move |c| {
+        let catalog = c.wait()?;
+        let (tasks, mut failed) =
+            crate::downloads::tasks_for_missing(&mods, |section, mod_id, file_id| {
+                let section = match section {
+                    deadloader_core::library::Section::Mod => Section::Mod,
+                    deadloader_core::library::Section::Sound => Section::Sound,
+                };
+                if catalog.remote_file(section, mod_id, file_id).is_none() {
+                    catalog
+                        .details(section, mod_id, None, deadloader_catalog::Initiator::User)
+                        .map_err(|e| super::updates::catalog_message(&e))?;
+                }
+                Ok(catalog.remote_file(section, mod_id, file_id))
+            });
+        let mut started = Vec::new();
+        for task in tasks {
+            let name = task.meta.get("mod_name").cloned().unwrap_or_default();
+            match downloads.add(task) {
+                Ok(id) => started.push(id),
+                Err(e) => failed.push(crate::downloads::NotStarted {
+                    name,
+                    message: deadloader_core::message::ToUserMessage::user_message(&e),
+                }),
+            }
+        }
+        Ok(MissingStarted {
+            tasks: started,
+            failed,
+        })
+    })
+    .await
+}
