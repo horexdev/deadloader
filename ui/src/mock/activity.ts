@@ -454,3 +454,10 @@ export function addRequest(logs: MockLogs, now: Date): void {
   const name = (logs.next * 2654435761 >>> 0).toString(16).padStart(8, '0');
   request(b, [hop(b, req, 0, `https://images.gamebanana.com/img/ss/mods/220-90_${name}.jpg`, { purpose: 'thumbnail', bytes: 19_000, ms: 90 })]);
 }
+
+/** A line of the app log written now, e.g. a mistake of the UI (`log_ui_error`); returns its id. */
+export function addAppLine(logs: MockLogs, now: Date, lvl: AppLine['lvl'], msg: string, fields: Record<string, unknown>): string {
+  const b: Builder = { logs, at: now };
+  event(b, lvl, msg, fields);
+  return id(logs.next);
+}

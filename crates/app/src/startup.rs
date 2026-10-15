@@ -182,6 +182,7 @@ pub fn run() -> Result<(), StartError> {
             commands::activity::log_counts,
             commands::activity::log_summary,
             commands::activity::open_logs_folder,
+            commands::activity::log_ui_error,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;

@@ -12,10 +12,11 @@ class FakeResizeObserver {
 vi.stubGlobal('ResizeObserver', FakeResizeObserver);
 
 const { router } = await import('./lib/router.svelte');
+const { app } = await import('./lib/app.svelte');
 const { resetMock } = await import('./mock/core');
 const { t } = await import('./i18n');
 const { default: App } = await import('./App.svelte');
-const { one, render } = await import('./lib/test/render');
+const { all, click, one, render } = await import('./lib/test/render');
 
 /** Lets the start and the commands it sends finish. */
 async function settle(): Promise<void> {
@@ -72,5 +73,44 @@ describe('the app', () => {
     const { target } = render(App, {});
     await settle();
     expect(await shown(target, '.wz-window')).not.toBeNull();
+  });
+
+  it('opens the catalog without an error when the first-run wizard is finished with the catalog on', async () => {
+    history.replaceState(null, '', '/?scenario=wizard#/library');
+    resetMock();
+    router.go('library');
+    app.toasts = [];
+    const { target } = render(App, {});
+    await settle();
+    await shown(target, '.wz-window');
+    const button = (text: string): HTMLButtonElement => {
+      const found = all<HTMLButtonElement>(target, 'button').find((b) => b.textContent?.trim() === text);
+      if (!found) {
+        throw new Error(`no button "${text}"`);
+      }
+      return found;
+    };
+    click(button('Next'));
+    click(one(target, '.wz-consent input'));
+    click(button('Next'));
+    click(one(target, 'input[value="catalog"]'));
+    while (target.querySelector('input[role="switch"]') === null) {
+      click(button('Next'));
+      await settle();
+    }
+    // The update check on, as in the report.
+    click(one(target, 'input[role="switch"]'));
+    click(button('Next'));
+    await settle();
+    click(button('Finish setup'));
+    await settle();
+    await vi.waitFor(() => {
+      flushSync();
+      expect(target.querySelector('.wz-window')).toBeNull();
+    });
+
+    // Finishing replaced the wizard with the app: nothing read the wizard's mode once it was gone (TypeError).
+    expect(app.toasts.filter((toast) => toast.kind === 'error')).toEqual([]);
+    expect(router.current).toBe('catalog');
   });
 });

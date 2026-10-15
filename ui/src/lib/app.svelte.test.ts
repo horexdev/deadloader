@@ -7,6 +7,7 @@ vi.mock('@tauri-apps/api/core', () => import('../mock/core'));
 
 const { AppState } = await import('./app.svelte');
 const { devtools, invoke, resetMock } = await import('../mock/core');
+const { activity } = await import('./api');
 
 let app: InstanceType<typeof AppState>;
 
@@ -18,6 +19,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('the app state', () => {
@@ -144,6 +146,66 @@ describe('the app state', () => {
     app.showError(new Error('boom'));
     expect(app.error?.message).toEqual({ id: 'Internal', args: { detail: 'Error: boom' } });
     expect(app.error?.actions).toEqual([]);
+  });
+
+  describe('a mistake of the UI itself', () => {
+    it('shows its toast at once, then logs it with its stack and links D12 to the entry', async () => {
+      const thrown = new TypeError("Cannot read properties of undefined (reading 'kind')");
+      app.fail(thrown);
+      // The toast doesn't wait for the log.
+      const toast = app.toasts.at(-1);
+      expect(toast?.kind).toBe('error');
+
+      await vi.waitFor(() => {
+        toast?.action?.onclick();
+        expect(app.error?.message.args['log_id']).toEqual(expect.any(String));
+      });
+      const message = app.error?.message;
+      expect(message).toMatchObject({
+        id: 'Internal',
+        args: { detail: "TypeError: Cannot read properties of undefined (reading 'kind')" },
+      });
+      const entry = await activity.entry(String(message?.args['log_id']));
+      expect(entry?.kind).toBe('app');
+      if (entry?.kind !== 'app') {
+        throw new Error('an app entry');
+      }
+      expect(entry.record.lvl).toBe('error');
+      expect(entry.record.msg).toBe('ui error');
+      expect(entry.record.fields).toEqual({
+        error: "TypeError: Cannot read properties of undefined (reading 'kind')",
+        stack: thrown.stack,
+      });
+    });
+
+    it('names the entry in D12 when D12 is already open', async () => {
+      app.showError(new Error('boom'));
+      expect(app.error?.message.args['log_id']).toBeUndefined();
+      await vi.waitFor(() => expect(app.error?.message.args['log_id']).toEqual(expect.any(String)));
+      expect(app.error?.message.args['detail']).toBe('Error: boom');
+    });
+
+    it('logs something thrown that is not an Error as readable text, without a stack', async () => {
+      const log = vi.spyOn(activity, 'logUiError');
+      app.fail({ reason: 'odd' });
+      await vi.waitFor(() => expect(log).toHaveBeenCalledWith('{"reason":"odd"}', null));
+      expect(app.toasts.at(-1)?.kind).toBe('error');
+    });
+
+    it('keeps the error without a log entry when the log cannot be written', async () => {
+      const log = vi.spyOn(activity, 'logUiError').mockRejectedValue({ id: 'Internal', args: {} });
+      app.showError(new Error('boom'));
+      await vi.waitFor(() => expect(log).toHaveBeenCalled());
+      await Promise.resolve();
+      expect(app.error?.message).toEqual({ id: 'Internal', args: { detail: 'Error: boom' } });
+    });
+
+    it('never logs a core message again: the core logged it and named the entry', () => {
+      const log = vi.spyOn(activity, 'logUiError');
+      app.fail({ id: 'E13', args: { log_id: 'app-1' } });
+      app.showError({ id: 'E9', args: {} });
+      expect(log).not.toHaveBeenCalled();
+    });
   });
 
   describe('downloads finished this session', () => {

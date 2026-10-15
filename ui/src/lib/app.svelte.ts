@@ -7,6 +7,7 @@ import { router } from './router.svelte';
 import Undo2 from '@lucide/svelte/icons/undo-2';
 import { describe, t } from '../i18n';
 import {
+  activity,
   api,
   catalog,
   downloads,
@@ -87,8 +88,8 @@ export class AppState {
   playing = $state(false);
   confirm: PlayConfirmation | null = $state(null);
   toasts: ToastData[] = $state([]);
-  /** D12, shown by the shell. */
-  error: ShownError | null = $state(null);
+  /** D12, shown by the shell. Raw (replaced, never changed in place), so a shown message can be found again. */
+  error: ShownError | null = $state.raw(null);
   /** Downloads finished this session, newest first. */
   history: FinishedDownload[] = $state([]);
   /** Downloads waiting for a variant pick (D4). */
@@ -485,7 +486,9 @@ export class AppState {
   /** A core message as an error toast with what happened and what to do; its "Details" opens D12 (155), which links
    *  to the failure's log entry in Activity. */
   fail(error: unknown): void {
-    const message: UserMessage = isUserMessage(error) ? error : { id: 'Internal', args: { detail: String(error) } };
+    let message = this.#messageOf(error, (logged) => {
+      message = logged;
+    });
     const text = describe(message);
     this.toast({
       kind: 'error',
@@ -498,12 +501,52 @@ export class AppState {
   /** D12: the whole story of an error (what, why, what to do, Details) with its actions. Open it on the user's
    *  request, e.g. "Show details", never by itself while the user browses (155). */
   showError(error: unknown, actions: ErrorAction[] = []): void {
-    const message: UserMessage = isUserMessage(error) ? error : { id: 'Internal', args: { detail: String(error) } };
-    this.error = { message, actions };
+    this.error = { message: this.#messageOf(error), actions };
+  }
+
+  /**
+   * A core message as it is (the core logged it). Anything else is a mistake of the UI: an internal error at once,
+   * and in the background its text and stack go to the app log; when the entry is written, the message with its
+   * `log_id` replaces the one D12 shows and is handed to `logged`, so Details links to it like a core error's.
+   */
+  #messageOf(error: unknown, logged?: (message: UserMessage) => void): UserMessage {
+    if (isUserMessage(error)) {
+      return error;
+    }
+    const detail = thrownText(error);
+    const message: UserMessage = { id: 'Internal', args: { detail } };
+    const stack = error instanceof Error && typeof error.stack === 'string' ? error.stack : null;
+    activity
+      .logUiError(detail, stack)
+      .then((id) => {
+        if (id === null) {
+          return;
+        }
+        const named: UserMessage = { id: message.id, args: { ...message.args, log_id: id } };
+        logged?.(named);
+        if (this.error?.message === message) {
+          this.error = { ...this.error, message: named };
+        }
+      })
+      // Best effort: the error is shown either way.
+      .catch(() => undefined);
+    return message;
   }
 
   closeError(): void {
     this.error = null;
+  }
+}
+
+/** Something thrown, as text for D12's Details and the log: an Error's name and message, else what it holds. */
+function thrownText(error: unknown): string {
+  if (error instanceof Error || typeof error !== 'object' || error === null) {
+    return String(error);
+  }
+  try {
+    return JSON.stringify(error) ?? String(error);
+  } catch {
+    return String(error);
   }
 }
 

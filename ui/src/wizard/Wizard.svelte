@@ -163,13 +163,16 @@
   }
 
   async function finish(): Promise<void> {
-    if (mode.kind === 'review') {
+    // Saving the acknowledgement replaces the wizard with the app at once, and `mode` with it (the parent's view has
+    // none then): everything after the save works from this copy.
+    const current = mode;
+    if (current.kind === 'review') {
       ondone(null);
       return;
     }
     saving = true;
     try {
-      if (mode.kind === 'catalog') {
+      if (current.kind === 'catalog') {
         if (choice === 'catalog') {
           app.settings = await maintenance.chooseCatalog(true);
           ondone('catalog');
@@ -178,10 +181,11 @@
         }
         return;
       }
-      const catalog = choice ?? (mode.kind === 'changed' ? mode.previous.catalog : 'local_mode');
-      const checkUpdates = mode.kind === 'changed' ? app.settings?.general?.check_app_updates === true : updates;
+      const catalog = choice ?? (current.kind === 'changed' ? current.previous.catalog : 'local_mode');
+      const checkUpdates = current.kind === 'changed' ? app.settings?.general?.check_app_updates === true : updates;
+      const next = current.kind === 'first' ? (catalog === 'catalog' ? 'catalog' : 'library') : null;
       app.settings = await maintenance.acknowledgeNotice(NOTICE.version, language(), catalog, checkUpdates);
-      ondone(mode.kind === 'first' ? (catalog === 'catalog' ? 'catalog' : 'library') : null);
+      ondone(next);
     } catch (error) {
       app.fail(error);
     } finally {

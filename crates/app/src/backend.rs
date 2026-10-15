@@ -333,6 +333,24 @@ impl Backend {
         }
     }
 
+    /// A mistake of the UI itself (an exception, not a core message): the app log gets it as an error with its stack,
+    /// masked like every line, and the entry's id comes back for D12's Details; `None` before the log is known or when
+    /// the line could not be written. The UI's texts are cut to a sane size.
+    pub fn ui_error(&self, error: &str, stack: Option<&str>) -> Option<String> {
+        let log = self.error_log.get()?;
+        let mut fields = serde_json::Map::from_iter([(
+            "error".to_owned(),
+            serde_json::Value::String(cut(error, UI_ERROR_TEXT)),
+        )]);
+        if let Some(stack) = stack {
+            fields.insert(
+                "stack".to_owned(),
+                serde_json::Value::String(cut(stack, UI_ERROR_STACK)),
+            );
+        }
+        log.write(deadloader_core::log::Level::Error, "ui error", fields)
+    }
+
     /// What the start found, with N6 for foreign items in the game's mod folder; empty after the first call.
     pub fn take_notices(&self) -> Vec<Notice> {
         let foreign = if self.foreign_told.swap(true, Ordering::Relaxed) {
@@ -1335,6 +1353,18 @@ fn target(mod_id: &str, files: Option<Vec<String>>) -> Target {
     match files {
         Some(files) => Target::Files(files),
         None => Target::Mod(mod_id.to_owned()),
+    }
+}
+
+/// The most characters of a UI error's text and of its stack the app log keeps.
+const UI_ERROR_TEXT: usize = 2_000;
+const UI_ERROR_STACK: usize = 8_000;
+
+/// `text`, or its first `max` characters and an ellipsis.
+fn cut(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text.to_owned(),
     }
 }
 
@@ -2748,6 +2778,52 @@ pub(crate) mod tests {
             Level::Error,
             "an internal error is an error, a refusal a warning"
         );
+    }
+
+    #[test]
+    fn an_error_of_the_ui_is_logged_with_its_stack_and_named_by_its_entry() {
+        use deadloader_core::log::Level;
+        let f = Fixture::new("ui-error");
+        let backend = f.backend(&FakeGame::default());
+        // Before the log is known (start): nothing to name.
+        assert_eq!(backend.ui_error("TypeError: early", None), None);
+
+        let lines = Arc::new(Lines::default());
+        backend.log_errors_to(Arc::clone(&lines) as Arc<dyn deadloader_catalog::AppLog>);
+        let id = backend.ui_error(
+            "TypeError: Cannot read properties of undefined (reading 'kind')",
+            Some("TypeError: …\n    at finish (Wizard.svelte:362:48)"),
+        );
+        assert_eq!(id.as_deref(), Some("app-1"));
+        // Without a stack (something thrown that isn't an Error), and far too long texts are cut.
+        let long = "x".repeat(100_000);
+        assert_eq!(
+            backend.ui_error(&long, Some(&long)).as_deref(),
+            Some("app-2")
+        );
+
+        let got = lines.0.lock().expect("lines").clone();
+        assert_eq!((got[0].0, got[0].1.as_str()), (Level::Error, "ui error"));
+        assert_eq!(
+            got[0].2["error"],
+            "TypeError: Cannot read properties of undefined (reading 'kind')"
+        );
+        assert_eq!(
+            got[0].2["stack"],
+            "TypeError: …\n    at finish (Wizard.svelte:362:48)"
+        );
+        let cut = |field: &str| got[1].2[field].as_str().map(|s| s.chars().count());
+        assert_eq!(
+            cut("error"),
+            Some(UI_ERROR_TEXT + 1),
+            "cut, with an ellipsis"
+        );
+        assert_eq!(cut("stack"), Some(UI_ERROR_STACK + 1));
+        assert!(got[1].2["error"].as_str().is_some_and(|s| s.ends_with('…')));
+
+        backend.ui_error("thrown: 42", None);
+        let got = lines.0.lock().expect("lines").clone();
+        assert!(got[2].2.get("stack").is_none());
     }
 
     #[test]
