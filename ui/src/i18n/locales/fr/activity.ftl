@@ -190,6 +190,7 @@ activity-empty-text = deadloader inscrit ici chaque requête réseau, chaque mod
 activity-local-title = Mode local — aucune requête n’est faite
 activity-local-why = Le catalogue est désactivé, donc deadloader ne se connecte à rien — ni à GameBanana, ni ailleurs. Les modifications de fichiers et les événements de l’application restent journalisés dans les autres onglets.
 activity-local-do = Activez le catalogue dans les paramètres pour parcourir GameBanana. Chaque requête apparaîtra alors ici.
+activity-local-history = Les requêtes ci-dessous ont été faites avant l’activation du mode local.
 activity-enable-catalog = Activer le catalogue
 activity-details = Détails de l’entrée du journal
 activity-close-details = Fermer les détails

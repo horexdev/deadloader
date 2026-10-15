@@ -190,6 +190,7 @@ activity-empty-text = deadloader her ağ isteğini, oyun klasöründeki her dosy
 activity-local-title = Yerel mod — hiçbir istek yapılmıyor
 activity-local-why = Katalog kapalı, bu yüzden deadloader hiçbir yere bağlanmıyor — ne GameBanana’ya ne de başka bir yere. Dosya değişiklikleri ve uygulama olayları diğer sekmelerde kaydedilmeye devam eder.
 activity-local-do = GameBanana’ya göz atmak için katalogu ayarlardan açın. Her istek o zaman burada görünür.
+activity-local-history = Aşağıdaki istekler yerel mod açılmadan önce yapıldı.
 activity-enable-catalog = Katalogu aç
 activity-details = Günlük kaydının ayrıntıları
 activity-close-details = Ayrıntıları kapat

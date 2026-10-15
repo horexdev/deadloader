@@ -190,6 +190,7 @@ activity-empty-text = deadloader annota qui ogni richiesta di rete, ogni modific
 activity-local-title = Modalità locale — non viene fatta nessuna richiesta
 activity-local-why = Il catalogo è disattivato, quindi deadloader non si connette a niente: né a GameBanana né altrove. Le modifiche ai file e gli eventi dell’app vengono comunque registrati nelle altre schede.
 activity-local-do = Attiva il catalogo nelle impostazioni per sfogliare GameBanana. Ogni richiesta comparirà poi qui.
+activity-local-history = Le richieste qui sotto sono state fatte prima di attivare la modalità locale.
 activity-enable-catalog = Attiva catalogo
 activity-details = Dettagli della voce di log
 activity-close-details = Chiudi dettagli

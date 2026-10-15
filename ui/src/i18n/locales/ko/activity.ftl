@@ -133,6 +133,7 @@ activity-empty-text = deadloader는 모든 네트워크 요청, 게임 폴더의
 activity-local-title = 로컬 모드 — 요청을 보내지 않습니다
 activity-local-why = 카탈로그가 꺼져 있어 deadloader는 아무 곳에도 연결하지 않습니다. GameBanana에도, 다른 곳에도요. 파일 변경과 앱 이벤트는 다른 탭에 계속 기록됩니다.
 activity-local-do = GameBanana를 둘러보려면 설정에서 카탈로그를 켜세요. 그러면 모든 요청이 여기에 표시됩니다.
+activity-local-history = 아래 요청은 로컬 모드를 켜기 전에 보낸 것입니다.
 activity-enable-catalog = 카탈로그 켜기
 activity-details = 로그 항목 세부 정보
 activity-close-details = 세부 정보 닫기
