@@ -6,6 +6,8 @@
 mod backend;
 mod commands;
 mod events;
+#[cfg_attr(not(test), allow(dead_code))]
+mod network;
 mod paths;
 #[cfg(test)]
 mod policy;

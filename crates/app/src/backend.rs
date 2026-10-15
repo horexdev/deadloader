@@ -41,7 +41,11 @@ pub struct Backend {
     notices: Mutex<Vec<Notice>>,
     /// Edits made while the game ran since the last apply, for N12.
     edits_waiting: AtomicUsize,
+    /// Told about every saved settings change (the network client, the catalog).
+    settings_listeners: Mutex<Vec<SettingsListener>>,
 }
+
+pub type SettingsListener = Box<dyn Fn(&Settings) + Send + Sync>;
 
 /// The result of a change in the library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -78,6 +82,7 @@ impl Backend {
                 log,
                 notices: Mutex::new(opened.notices.iter().map(Notice::from).collect()),
                 edits_waiting: AtomicUsize::new(0),
+                settings_listeners: Mutex::new(Vec::new()),
             },
             Err(e) => Self {
                 session: Mutex::new(None),
@@ -86,6 +91,7 @@ impl Backend {
                 log,
                 notices: Mutex::new(Vec::new()),
                 edits_waiting: AtomicUsize::new(0),
+                settings_listeners: Mutex::new(Vec::new()),
             },
         }
     }
@@ -295,10 +301,25 @@ impl Backend {
     }
 
     pub fn update_settings(&self, settings: Settings) -> Result<Settings, UserMessage> {
-        self.with(|s| {
+        let saved = self.with(|s| {
             s.update_settings(settings)?;
             Ok(s.settings().clone())
-        })
+        })?;
+        for listener in self.lock_listeners().iter() {
+            listener(&saved);
+        }
+        Ok(saved)
+    }
+
+    /// `listener` hears every saved settings change from now on.
+    pub fn on_settings(&self, listener: SettingsListener) {
+        self.lock_listeners().push(listener);
+    }
+
+    fn lock_listeners(&self) -> std::sync::MutexGuard<'_, Vec<SettingsListener>> {
+        self.settings_listeners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Apply / Play: the selected profile goes into its game folder, or the first one Steam knows.
@@ -754,6 +775,24 @@ pub(crate) mod tests {
         backend.set_enabled(&ids[1], false).expect("off");
         game.running.store(false, Ordering::Relaxed);
         assert_eq!(backend.game_closed().expect("ok").expect("one").changes, 1);
+    }
+
+    #[test]
+    fn saved_settings_reach_every_listener() {
+        let f = Fixture::new("listeners");
+        let backend = f.backend(&FakeGame::default());
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let record = Arc::clone(&seen);
+        backend.on_settings(Box::new(move |s: &Settings| {
+            record.lock().expect("lock").push(s.network.retries);
+        }));
+        let mut settings = backend.settings().expect("settings");
+        settings.network.retries = 2;
+        backend.update_settings(settings.clone()).expect("saved");
+        // A refused change reaches nobody.
+        settings.network.retries = 9999;
+        assert!(backend.update_settings(settings).is_err());
+        assert_eq!(*seen.lock().expect("lock"), [2]);
     }
 
     #[test]

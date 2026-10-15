@@ -11,7 +11,7 @@ use crate::transport::{Body, HopRequest, Transport, TransportError, find_header}
 use crate::url::{Host, HttpsUrl, UrlError};
 use std::fmt;
 use std::io::{self, Read};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{PoisonError, RwLock};
 use std::time::Duration;
 
@@ -298,6 +298,8 @@ pub struct Client {
     allowlist: RwLock<Allowlist>,
     local_mode: AtomicBool,
     retry: RetryPolicy,
+    /// The retry count of `retry`, changeable while the client is shared (the settings' "retries").
+    max_retries: AtomicU32,
     next_id: AtomicU64,
 }
 
@@ -324,13 +326,20 @@ impl Client {
             allowlist: RwLock::new(allowlist),
             local_mode: AtomicBool::new(false),
             retry: RetryPolicy::default(),
+            max_retries: AtomicU32::new(RetryPolicy::default().max_retries),
             next_id: AtomicU64::new(1),
         }
     }
 
     pub fn with_retry_policy(mut self, retry: RetryPolicy) -> Self {
+        self.max_retries = AtomicU32::new(retry.max_retries);
         self.retry = retry;
         self
+    }
+
+    /// Retries per request after 429/5xx from now on; requests already waiting keep their count.
+    pub fn set_max_retries(&self, retries: u32) {
+        self.max_retries.store(retries, Ordering::SeqCst);
     }
 
     /// Local mode (decision 108): while on, every request fails with [`NetError::LocalMode`] before reaching the
@@ -460,7 +469,7 @@ impl Client {
 
             if is_retryable(status) {
                 let retry_after = response.header("retry-after").and_then(parse_retry_after);
-                let wait = if retries < self.retry.max_retries {
+                let wait = if retries < self.max_retries.load(Ordering::SeqCst) {
                     match retry_after {
                         Some(wait) if wait <= self.retry.max_delay => Some(wait),
                         Some(_) => None,
@@ -1487,6 +1496,25 @@ mod tests {
             "{err:?}"
         );
         assert_eq!(clock.slept(), [Duration::from_millis(250)]);
+    }
+
+    #[test]
+    fn the_retry_count_can_change_while_the_client_is_shared() {
+        let url = "https://gamebanana.com/apiv11/x";
+        let t = fake();
+        for _ in 0..10 {
+            t.on(url, 503, &[], b"");
+        }
+        let h = harness(t);
+        h.client.set_max_retries(1);
+        let err = h
+            .client
+            .get(&Request::new(Purpose::Catalog, Initiator::Auto, url))
+            .expect_err("still failing");
+        assert!(
+            matches!(err, NetError::Unavailable { attempts: 2, .. }),
+            "{err:?}"
+        );
     }
 
     #[test]

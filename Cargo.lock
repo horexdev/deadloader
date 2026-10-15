@@ -692,6 +692,7 @@ version = "0.1.0"
 dependencies = [
  "deadloader-catalog",
  "deadloader-core",
+ "deadloader-net",
  "deadloader-platform-windows",
  "rfd",
  "serde",
