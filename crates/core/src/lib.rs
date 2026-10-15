@@ -13,6 +13,7 @@ pub mod import;
 pub mod journal;
 pub mod library;
 pub mod log;
+pub mod message;
 pub mod overlap;
 pub mod place;
 pub mod profiles;
