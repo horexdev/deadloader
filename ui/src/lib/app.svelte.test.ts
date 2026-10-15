@@ -69,4 +69,21 @@ describe('the app state', () => {
     await app.play();
     expect(app.toasts.at(-1)?.kind).toBe('error');
   });
+
+  it('opens D12 for an error with its actions, and closes it', () => {
+    const retry = vi.fn();
+    app.showError({ id: 'E9', args: { reason: 'too_large', limit: '2147483648' } }, [
+      { label: 'Retry', place: 'primary', run: retry },
+    ]);
+    expect(app.error?.message.id).toBe('E9');
+    expect(app.error?.actions.map((a) => a.label)).toEqual(['Retry']);
+    app.closeError();
+    expect(app.error).toBeNull();
+  });
+
+  it('opens D12 for anything thrown, as an internal error', () => {
+    app.showError(new Error('boom'));
+    expect(app.error?.message).toEqual({ id: 'Internal', args: { detail: 'Error: boom' } });
+    expect(app.error?.actions).toEqual([]);
+  });
 });
