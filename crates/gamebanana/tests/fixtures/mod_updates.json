@@ -1,0 +1,251 @@
+{
+    "_aMetadata": {
+        "_nRecordCount": 9,
+        "_nPerpage": 10,
+        "_bIsComplete": true
+    },
+    "_aRecords": [
+        {
+            "_idRow": 464201,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "LAST BUGFIX PLEASE",
+            "_tsDateAdded": 1792007098,
+            "_sText": "<p>This mod has so many files for some reason so I gutted the novo,vo versions. If you want VO download the VO + any variant you want. If you don't want VO just download one of the variants</p>",
+            "_sVersion": "v5.3",
+            "_aChangeLog": [
+                {
+                    "text": "Fixed bodygroups (Captured Tachyon again)",
+                    "cat": "Bugfix"
+                },
+                {
+                    "text": "Pocket get new suitcase so I added that to the variants",
+                    "cat": "Addition"
+                }
+            ],
+            "_aFileRowIds": [
+                1848526,
+                1848520,
+                1848515,
+                1848521,
+                1848516,
+                1848523,
+                1848517,
+                1848522,
+                1848518
+            ]
+        },
+        {
+            "_idRow": 461463,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "Bugfix",
+            "_tsDateAdded": 1791209471,
+            "_sVersion": "v5.2",
+            "_aChangeLog": [
+                {
+                    "text": "Footstep sounds fixed",
+                    "cat": "Bugfix"
+                }
+            ],
+            "_aFileRowIds": [
+                1838412,
+                1838410,
+                1838413,
+                1838411,
+                1838417,
+                1838415,
+                1838418,
+                1838416
+            ]
+        },
+        {
+            "_idRow": 459775,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "I sleep but city dont",
+            "_tsDateAdded": 1790764088,
+            "_sVersion": "v5.1",
+            "_aChangeLog": [
+                {
+                    "text": "Fixed the hero select pose for all variants",
+                    "cat": "Bugfix"
+                }
+            ],
+            "_aFileRowIds": [
+                1831897,
+                1831901,
+                1831896,
+                1831898,
+                1831894,
+                1831900,
+                1831895,
+                1831899
+            ]
+        },
+        {
+            "_idRow": 435922,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "TEXTURE OVERHAUL",
+            "_tsDateAdded": 1783450561,
+            "_sVersion": "v5",
+            "_aChangeLog": [
+                {
+                    "text": "Fixed Variant 3 and 4 teammate outlines",
+                    "cat": "Bugfix"
+                },
+                {
+                    "text": "Changed EVERY VARIANTS textures.",
+                    "cat": "Overhaul"
+                },
+                {
+                    "text": "Variant 4s cloak is still invisible (??)",
+                    "cat": "Feature"
+                }
+            ],
+            "_aFileRowIds": [
+                1748171,
+                1748176,
+                1748170,
+                1748175,
+                1748169,
+                1748174,
+                1748168,
+                1748173
+            ]
+        },
+        {
+            "_idRow": 427347,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "New Variant",
+            "_tsDateAdded": 1780659049,
+            "_sVersion": "v4.1",
+            "_aChangeLog": [
+                {
+                    "text": "Added new variant (Wedding)",
+                    "cat": "Addition"
+                },
+                {
+                    "text": "I don't exactly know but cloak does not work with the new variant, it only works when nothing else is textured (only cloak is textured)",
+                    "cat": "Removal"
+                }
+            ],
+            "_aFileRowIds": [
+                1720561,
+                1720560
+            ]
+        },
+        {
+            "_idRow": 424920,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "Texture Update",
+            "_tsDateAdded": 1779888847,
+            "_sVersion": "v4",
+            "_aChangeLog": [
+                {
+                    "text": "Gun and briefcase textures (Using Pocket Texture Recovery mod with slight recolor)",
+                    "cat": "Addition"
+                },
+                {
+                    "text": "Gun model is fixed",
+                    "cat": "Tweak"
+                },
+                {
+                    "text": "Changed every texture to fix plastic feel, it should look better now",
+                    "cat": "Tweak"
+                },
+                {
+                    "text": "Fixed the transparent parts for Variant 3",
+                    "cat": "Bugfix"
+                }
+            ],
+            "_aFileRowIds": [
+                1712622,
+                1712624,
+                1712623,
+                1712626,
+                1712621,
+                1712625
+            ]
+        },
+        {
+            "_idRow": 404497,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "VO UPDATE",
+            "_tsDateAdded": 1773404268,
+            "_sVersion": "v3",
+            "_aChangeLog": [
+                {
+                    "text": "VO made by Yayozo added to the mod",
+                    "cat": "Addition"
+                },
+                {
+                    "text": "Changed hair and cloth physics for Variant 1 and 2",
+                    "cat": "Adjustment"
+                },
+                {
+                    "text": "Tail is more visible for every Variant",
+                    "cat": "Improvement"
+                }
+            ],
+            "_aFileRowIds": [
+                1646391,
+                1646392,
+                1646394,
+                1646396,
+                1646397,
+                1646398
+            ]
+        },
+        {
+            "_idRow": 395820,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "OLD GODS NEW BLOOD UPDATE followup",
+            "_tsDateAdded": 1770329830,
+            "_sVersion": "v2.1",
+            "_aChangeLog": [
+                {
+                    "text": "Just update to this version. If animations are broken in the future try downloading these versions first. If they do not fix your issue it is probably broken again.",
+                    "cat": "Adjustment"
+                }
+            ],
+            "_aFileRowIds": [
+                1618151,
+                1618153,
+                1618154
+            ]
+        },
+        {
+            "_idRow": 395702,
+            "_bIsTrashed": false,
+            "_bIsPrivate": false,
+            "_sName": "OLD GODS NEW BLOOD UPDATE",
+            "_tsDateAdded": 1770292844,
+            "_sVersion": "v2",
+            "_aChangeLog": [
+                {
+                    "text": "Added new icons for critical state and killstreak (For every variant)",
+                    "cat": "Addition"
+                },
+                {
+                    "text": "I accidentally reduced the vertice amount on variant 3 so it should perform better I think",
+                    "cat": "Optimization"
+                },
+                {
+                    "text": "I remade variant 3's skirt physics, I will probably remake all of them later",
+                    "cat": "Amendment"
+                }
+            ],
+            "_aFileRowIds": [
+                1617791,
+                1617792,
+                1617793
+            ]
+        }
+    ]
+}

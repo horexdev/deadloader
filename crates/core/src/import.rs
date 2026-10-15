@@ -146,6 +146,7 @@ fn fill(
             len: *len,
             sha256: *sha256,
             version: req.version.clone(),
+            successor: None,
         });
     }
 

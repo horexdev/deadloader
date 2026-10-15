@@ -9,9 +9,9 @@
 use crate::error::{ApiChange, ApiChangeReason, Error, FetchError};
 use crate::request::GAME_ID;
 use crate::types::{
-    AlternateSource, Antivirus, CatalogItem, CatalogPage, Category, CategoryRef, ContentRating,
-    Credit, CreditGroup, Image, ImageSize, ImageVariant, ModDetails, RemoteFile, Section,
-    Visibility,
+    AlternateSource, Antivirus, Availability, CatalogItem, CatalogPage, Category, CategoryRef,
+    ChangeEntry, ContentRating, Credit, CreditGroup, Image, ImageSize, ImageVariant, ModDetails,
+    ModFileList, RemoteFile, Section, UpdatePage, UpdatePost, Visibility,
 };
 use serde::Deserialize;
 use serde::de::{self, DeserializeOwned, Deserializer};
@@ -116,6 +116,55 @@ pub fn parse_details(section: Section, body: &[u8]) -> Result<ModDetails, Error>
             .collect(),
         files: raw.files.into_iter().map(remote_file).collect(),
         archived_files: raw.archived_files.into_iter().map(remote_file).collect(),
+        availability: availability(raw.flags),
+    })
+}
+
+/// A `section/{id}?_csvProperties=…` document with the properties of [`crate::request::file_list_url`].
+pub fn parse_file_list(section: Section, body: &[u8]) -> Result<ModFileList, Error> {
+    let raw: RawFileList = decode(file_list_endpoint(section), body)?;
+    Ok(ModFileList {
+        id: raw.id,
+        section,
+        name: raw.name,
+        version: non_empty(raw.version),
+        date_updated: raw.date_updated,
+        availability: availability(raw.flags),
+        files: raw.files.into_iter().map(remote_file).collect(),
+    })
+}
+
+/// A `section/{id}/Updates` page. Trashed and private posts are not shown on GameBanana and are left out here too.
+pub fn parse_updates(section: Section, body: &[u8]) -> Result<UpdatePage, Error> {
+    let raw: RawUpdatePage = decode(updates_endpoint(section), body)?;
+    let posts = raw
+        .records
+        .into_iter()
+        .filter(|r| !r.is_trashed && !r.is_private)
+        .map(|r| UpdatePost {
+            id: r.id,
+            title: r.name,
+            version: non_empty(r.version),
+            date_added: r.date_added,
+            changelog: r
+                .changelog
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|e| {
+                    Some(ChangeEntry {
+                        category: non_empty(e.category),
+                        text: non_empty(e.text)?,
+                    })
+                })
+                .collect(),
+            file_ids: r.file_ids.unwrap_or_default(),
+            text_html: r.text.unwrap_or_default(),
+        })
+        .collect();
+    Ok(UpdatePage {
+        posts,
+        total: raw.metadata.record_count,
+        is_complete: raw.metadata.is_complete,
     })
 }
 
@@ -144,6 +193,20 @@ pub(crate) fn categories_endpoint(section: Section) -> &'static str {
     match section {
         Section::Mod => "Mod/Categories",
         Section::Sound => "Sound/Categories",
+    }
+}
+
+pub(crate) fn file_list_endpoint(section: Section) -> &'static str {
+    match section {
+        Section::Mod => "Mod/Properties",
+        Section::Sound => "Sound/Properties",
+    }
+}
+
+pub(crate) fn updates_endpoint(section: Section) -> &'static str {
+    match section {
+        Section::Mod => "Mod/Updates",
+        Section::Sound => "Sound/Updates",
     }
 }
 
@@ -254,6 +317,19 @@ fn visibility(value: Option<&str>, rated: bool) -> Visibility {
         Some(_) => Visibility::Hide,
         None if rated => Visibility::Hide,
         None => Visibility::Show,
+    }
+}
+
+/// The most final state wins: trashed, then withheld, then private.
+fn availability(flags: RawFlags) -> Availability {
+    if flags.is_trashed {
+        Availability::Trashed
+    } else if flags.is_withheld {
+        Availability::Withheld
+    } else if flags.is_private {
+        Availability::Private
+    } else {
+        Availability::Public
     }
 }
 
@@ -544,6 +620,73 @@ struct RawProfile {
     archived_files: Vec<RawFile>,
     #[serde(rename = "_aGame", default, deserialize_with = "lenient")]
     game: Option<RawGame>,
+    #[serde(flatten)]
+    flags: RawFlags,
+}
+
+#[derive(Deserialize)]
+struct RawFlags {
+    #[serde(rename = "_bIsWithheld", default)]
+    is_withheld: bool,
+    #[serde(rename = "_bIsTrashed", default)]
+    is_trashed: bool,
+    #[serde(rename = "_bIsPrivate", default)]
+    is_private: bool,
+}
+
+#[derive(Deserialize)]
+struct RawFileList {
+    #[serde(rename = "_idRow")]
+    id: u64,
+    #[serde(rename = "_sName")]
+    name: String,
+    #[serde(rename = "_sVersion", default)]
+    version: Option<String>,
+    #[serde(rename = "_tsDateUpdated", default)]
+    date_updated: Option<i64>,
+    #[serde(rename = "_aFiles", default)]
+    files: Vec<RawFile>,
+    #[serde(flatten)]
+    flags: RawFlags,
+}
+
+#[derive(Deserialize)]
+struct RawUpdatePage {
+    #[serde(rename = "_aMetadata")]
+    metadata: RawMetadata,
+    #[serde(rename = "_aRecords")]
+    records: Vec<RawUpdate>,
+}
+
+#[derive(Deserialize)]
+struct RawUpdate {
+    #[serde(rename = "_idRow")]
+    id: u64,
+    #[serde(rename = "_sName")]
+    name: String,
+    #[serde(rename = "_sVersion", default)]
+    version: Option<String>,
+    #[serde(rename = "_tsDateAdded", default)]
+    date_added: Option<i64>,
+    /// `null` when the author wrote none.
+    #[serde(rename = "_aChangeLog", default)]
+    changelog: Option<Vec<RawChangeEntry>>,
+    #[serde(rename = "_aFileRowIds", default)]
+    file_ids: Option<Vec<u64>>,
+    #[serde(rename = "_sText", default)]
+    text: Option<String>,
+    #[serde(rename = "_bIsTrashed", default)]
+    is_trashed: bool,
+    #[serde(rename = "_bIsPrivate", default)]
+    is_private: bool,
+}
+
+#[derive(Deserialize)]
+struct RawChangeEntry {
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(rename = "cat", default)]
+    category: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1143,6 +1286,227 @@ mod tests {
         ] {
             assert_eq!(fetch_error("Mod/Index", error.clone()), Error::Fetch(error));
         }
+    }
+
+    #[test]
+    fn profile_availability() {
+        let d = parse_details(Section::Mod, fixture!("mod_profile.json")).expect("parses");
+        assert_eq!(d.availability, Availability::Public);
+        let cases: [(&[u8], Availability); 5] = [
+            (br#"{"_idRow": 5, "_sName": "x"}"#, Availability::Public),
+            (
+                br#"{"_idRow": 5, "_sName": "x", "_bIsWithheld": true}"#,
+                Availability::Withheld,
+            ),
+            (
+                br#"{"_idRow": 5, "_sName": "x", "_bIsPrivate": true}"#,
+                Availability::Private,
+            ),
+            (
+                br#"{"_idRow": 5, "_sName": "x", "_bIsTrashed": true, "_bIsWithheld": true}"#,
+                Availability::Trashed,
+            ),
+            (
+                br#"{"_idRow": 5, "_sName": "x", "_bIsWithheld": true, "_bIsPrivate": true}"#,
+                Availability::Withheld,
+            ),
+        ];
+        for (body, expected) in cases {
+            let d = parse_details(Section::Mod, body).expect("parses");
+            assert_eq!(d.availability, expected);
+        }
+    }
+
+    #[test]
+    fn file_list_of_a_mod() {
+        // Recorded from Manhattan Cafe (638388) after its v5.3 update, trimmed.
+        let list = parse_file_list(Section::Mod, fixture!("mod_files.json")).expect("parses");
+        assert_eq!(list.id, 638_388);
+        assert_eq!(list.section, Section::Mod);
+        assert_eq!(list.name, "Manhattan Cafe as Pocket (4 Variants)");
+        assert_eq!(list.version.as_deref(), Some("v5.3"));
+        assert_eq!(list.date_updated, Some(1_792_007_098));
+        assert_eq!(list.availability, Availability::Public);
+        assert_eq!(list.files.len(), 9);
+        let names: Vec<&str> = list.files.iter().map(|f| f.file_name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "cafevo_ea17d.zip",
+                "variant1.zip",
+                "variant1newsuitcase.zip",
+                "variant2.zip",
+                "variant2newsuitcase.zip",
+                "variant3.zip",
+                "variant3newsuitcase.zip",
+                "variant4.zip",
+                "variant4newsuitcase.zip",
+            ]
+        );
+        let vo = &list.files[0];
+        assert_eq!(vo.id, 1_848_526);
+        assert_eq!(vo.size_bytes, 5_291_176);
+        assert_eq!(vo.date_added, Some(1_792_006_837));
+        assert_eq!(vo.version.as_deref(), Some("v1"));
+        assert_eq!(
+            vo.description.as_deref(),
+            Some("Just VO (DOWNLOAD THIS IF YOU WANT VO)")
+        );
+        assert_eq!(vo.md5.as_deref(), Some("78e7e652780169abeab12cbba5c59892"));
+        assert_eq!(vo.antivirus, Antivirus::Clean);
+        // File versions are free text and differ inside one mod.
+        assert_eq!(list.files[7].version.as_deref(), Some("v2.3"));
+    }
+
+    #[test]
+    fn file_list_of_a_hidden_mod() {
+        let body = br#"{"_idRow": 9, "_sName": "Gone", "_bIsTrashed": true, "_aFiles": []}"#;
+        let list = parse_file_list(Section::Sound, body).expect("parses");
+        assert_eq!(list.availability, Availability::Trashed);
+        assert_eq!(list.section, Section::Sound);
+        assert!(list.files.is_empty());
+        assert_eq!(list.version, None);
+        // A submission without files may leave the list out entirely.
+        let bare =
+            parse_file_list(Section::Mod, br#"{"_idRow": 9, "_sName": "Bare"}"#).expect("parses");
+        assert!(bare.files.is_empty());
+    }
+
+    #[test]
+    fn file_list_errors_name_their_endpoint() {
+        assert_eq!(
+            parse_file_list(Section::Mod, fixture!("error_not_found.json")),
+            Err(Error::NotFound)
+        );
+        let change = changed(parse_file_list(Section::Mod, b"{}").expect_err("error"));
+        assert_eq!(change.endpoint, "Mod/Properties");
+        assert_eq!(
+            change.reason,
+            ApiChangeReason::MissingField("_idRow".into())
+        );
+        let change = changed(
+            parse_file_list(Section::Sound, fixture!("error_input.json")).expect_err("error"),
+        );
+        assert_eq!(change.endpoint, "Sound/Properties");
+    }
+
+    #[test]
+    fn update_posts_of_a_mod() {
+        // Recorded from Manhattan Cafe (638388): nine posts, newest first, trimmed.
+        let page = parse_updates(Section::Mod, fixture!("mod_updates.json")).expect("parses");
+        assert_eq!(page.total, 9);
+        assert!(page.is_complete);
+        let versions: Vec<Option<&str>> = page.posts.iter().map(|p| p.version.as_deref()).collect();
+        assert_eq!(
+            versions,
+            [
+                Some("v5.3"),
+                Some("v5.2"),
+                Some("v5.1"),
+                Some("v5"),
+                Some("v4.1"),
+                Some("v4"),
+                Some("v3"),
+                Some("v2.1"),
+                Some("v2"),
+            ]
+        );
+        let newest = &page.posts[0];
+        assert_eq!(newest.id, 464_201);
+        assert_eq!(newest.title, "LAST BUGFIX PLEASE");
+        assert_eq!(newest.date_added, Some(1_792_007_098));
+        assert_eq!(
+            newest.changelog,
+            vec![
+                ChangeEntry {
+                    category: Some("Bugfix".into()),
+                    text: "Fixed bodygroups (Captured Tachyon again)".into(),
+                },
+                ChangeEntry {
+                    category: Some("Addition".into()),
+                    text: "Pocket get new suitcase so I added that to the variants".into(),
+                },
+            ]
+        );
+        assert_eq!(
+            newest.file_ids,
+            [
+                1_848_526, 1_848_520, 1_848_515, 1_848_521, 1_848_516, 1_848_523, 1_848_517,
+                1_848_522, 1_848_518
+            ]
+        );
+        assert!(
+            newest
+                .text_html
+                .starts_with("<p>This mod has so many files")
+        );
+        // The new variant arrived as a post of its own with just its files.
+        let variant = &page.posts[4];
+        assert_eq!(variant.title, "New Variant");
+        assert_eq!(variant.file_ids, [1_720_561, 1_720_560]);
+        assert_eq!(page.posts[1].text_html, "");
+    }
+
+    #[test]
+    fn update_posts_without_a_changelog() {
+        // Recorded from Sabrina (633086): every file re-uploaded under a new name and id in 2.0.
+        let page =
+            parse_updates(Section::Mod, fixture!("mod_updates_reupload.json")).expect("parses");
+        assert_eq!(page.posts.len(), 3);
+        assert_eq!(page.posts[0].version.as_deref(), Some("2.0"));
+        assert_eq!(page.posts[0].file_ids.len(), 20);
+        assert!(page.posts[0].changelog.is_empty(), "null change log");
+        assert_eq!(page.posts[1].file_ids, [1_559_864, 1_559_865, 1_559_866]);
+        assert_eq!(page.posts[2].changelog.len(), 1);
+    }
+
+    #[test]
+    fn a_mod_without_update_posts() {
+        let page = parse_updates(Section::Mod, fixture!("mod_updates_none.json")).expect("parses");
+        assert!(page.posts.is_empty());
+        assert_eq!(page.total, 0);
+        assert!(page.is_complete);
+    }
+
+    #[test]
+    fn hidden_update_posts_are_left_out() {
+        let body = br#"{"_aMetadata": {"_nRecordCount": 3, "_bIsComplete": true}, "_aRecords": [
+            {"_idRow": 3, "_sName": "Shown", "_sVersion": " ", "_aChangeLog": [{"text": "x"}, {"text": " "}]},
+            {"_idRow": 2, "_sName": "Trashed", "_bIsTrashed": true},
+            {"_idRow": 1, "_sName": "Private", "_bIsPrivate": true}]}"#;
+        let page = parse_updates(Section::Mod, body).expect("parses");
+        assert_eq!(page.posts.len(), 1);
+        let post = &page.posts[0];
+        assert_eq!(post.version, None, "blank version");
+        assert_eq!(post.date_added, None);
+        assert!(post.file_ids.is_empty());
+        assert_eq!(
+            post.changelog,
+            vec![ChangeEntry {
+                category: None,
+                text: "x".into()
+            }],
+            "blank entries are dropped"
+        );
+    }
+
+    #[test]
+    fn update_errors_name_their_endpoint() {
+        assert_eq!(
+            parse_updates(Section::Mod, fixture!("error_not_found.json")),
+            Err(Error::NotFound)
+        );
+        let change =
+            changed(parse_updates(Section::Sound, br#"{"_aRecords": []}"#).expect_err("e"));
+        assert_eq!(change.endpoint, "Sound/Updates");
+        assert_eq!(
+            change.reason,
+            ApiChangeReason::MissingField("_aMetadata".into())
+        );
+        let no_id = br#"{"_aMetadata": {"_nRecordCount": 1, "_bIsComplete": true},
+            "_aRecords": [{"_sName": "x"}]}"#;
+        let change = changed(parse_updates(Section::Mod, no_id).expect_err("e"));
+        assert_eq!(change.endpoint, "Mod/Updates");
     }
 
     #[test]

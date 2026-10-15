@@ -1,0 +1,119 @@
+{
+    "_idRow": 638388,
+    "_bIsPrivate": false,
+    "_tsDateUpdated": 1792007098,
+    "_bIsWithheld": false,
+    "_sName": "Manhattan Cafe as Pocket (4 Variants)",
+    "_sVersion": "v5.3",
+    "_bIsTrashed": false,
+    "_aFiles": [
+        {
+            "_idRow": 1848526,
+            "_sFile": "cafevo_ea17d.zip",
+            "_nFilesize": 5291176,
+            "_tsDateAdded": 1792006837,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848526",
+            "_sMd5Checksum": "78e7e652780169abeab12cbba5c59892",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v1",
+            "_sDescription": "Just VO (DOWNLOAD THIS IF YOU WANT VO)"
+        },
+        {
+            "_idRow": 1848520,
+            "_sFile": "variant1.zip",
+            "_nFilesize": 50928191,
+            "_tsDateAdded": 1792006690,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848520",
+            "_sMd5Checksum": "d7f18a3e9b01a9c7cdbac00f1de706ba",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v5.3",
+            "_sDescription": "Variant 1 Creeping Black"
+        },
+        {
+            "_idRow": 1848515,
+            "_sFile": "variant1newsuitcase.zip",
+            "_nFilesize": 34878448,
+            "_tsDateAdded": 1792006663,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848515",
+            "_sMd5Checksum": "62c6db0dfad130b69c3bfee23f880053",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v5.3",
+            "_sDescription": "Variant 1 Creeping Black new suitcase"
+        },
+        {
+            "_idRow": 1848521,
+            "_sFile": "variant2.zip",
+            "_nFilesize": 51477367,
+            "_tsDateAdded": 1792006693,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848521",
+            "_sMd5Checksum": "a48afcb0bff0427ac25a42f722aededb",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v5.3",
+            "_sDescription": "Variant 2 Casual"
+        },
+        {
+            "_idRow": 1848516,
+            "_sFile": "variant2newsuitcase.zip",
+            "_nFilesize": 35427906,
+            "_tsDateAdded": 1792006664,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848516",
+            "_sMd5Checksum": "62734d1c19f4a8e6c3e44805029ce694",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v5.3",
+            "_sDescription": "Variant 2 Casual new suitcase"
+        },
+        {
+            "_idRow": 1848523,
+            "_sFile": "variant3.zip",
+            "_nFilesize": 51395405,
+            "_tsDateAdded": 1792006693,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848523",
+            "_sMd5Checksum": "59d585b5167e38668f330e72dbdf33a1",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v5.3",
+            "_sDescription": "Variant 3 Willow Green"
+        },
+        {
+            "_idRow": 1848517,
+            "_sFile": "variant3newsuitcase.zip",
+            "_nFilesize": 35346253,
+            "_tsDateAdded": 1792006664,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848517",
+            "_sMd5Checksum": "d7c4b1efee48b5db7ed226a9dba967c1",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v5.3",
+            "_sDescription": "Variant 3 Willow Green new suitcase"
+        },
+        {
+            "_idRow": 1848522,
+            "_sFile": "variant4.zip",
+            "_nFilesize": 52431449,
+            "_tsDateAdded": 1792006693,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848522",
+            "_sMd5Checksum": "d47989a94549dfb33d973df6fd30bbd6",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v2.3",
+            "_sDescription": "Variant 4 Wedding"
+        },
+        {
+            "_idRow": 1848518,
+            "_sFile": "variant4newsuitcase.zip",
+            "_nFilesize": 36383344,
+            "_tsDateAdded": 1792006666,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1848518",
+            "_sMd5Checksum": "c1892f51b2a55048d77f8b02471a819b",
+            "_sAvState": "done",
+            "_sAvResult": "clean",
+            "_sVersion": "v2.3",
+            "_sDescription": "Variant 4 Wedding new suitcase"
+        }
+    ]
+}

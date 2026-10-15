@@ -13,6 +13,7 @@ use crate::place::PlaceError;
 use crate::profiles::ProfileError;
 use crate::remove::RemoveError;
 use crate::settings::SettingsError;
+use crate::updates::UpdateError;
 use deadloader_archive::{ArchiveError, LimitExceeded};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -207,6 +208,13 @@ impl ToUserMessage for RemoveError {
     }
 }
 
+impl ToUserMessage for UpdateError {
+    fn user_message(&self) -> UserMessage {
+        // D5 builds the mapping from the mod's own files; an invalid one is a mistake of deadloader.
+        internal(self)
+    }
+}
+
 impl ToUserMessage for ProfileError {
     fn user_message(&self) -> UserMessage {
         match self {
@@ -288,6 +296,7 @@ mod tests {
     use crate::profiles::ProfileError;
     use crate::remove::RemoveError;
     use crate::settings::SettingsError;
+    use crate::updates::UpdateError;
     use crate::vpk::VpkError;
     use deadloader_archive::{ArchiveError, LimitExceeded};
     use std::io;
@@ -530,5 +539,10 @@ mod tests {
                 .id,
             MessageId::Internal
         );
+        // D5 only offers files of the mod; a mapping it can't apply is a bug of the dialog, not the user's.
+        let wrong = UpdateError::NotInMod("x".into());
+        let m = wrong.user_message();
+        assert_eq!(m.id, MessageId::Internal);
+        assert_eq!(arg(&m, "detail"), Some(wrong.to_string().as_str()));
     }
 }

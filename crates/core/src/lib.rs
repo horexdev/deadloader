@@ -25,5 +25,6 @@ pub mod settings;
 pub mod steam;
 #[cfg(test)]
 pub(crate) mod testing;
+pub mod updates;
 pub mod vdf;
 pub mod vpk;

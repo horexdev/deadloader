@@ -306,6 +306,7 @@ mod tests {
             len: id.len() as u64,
             sha256: sha256(id.as_bytes()),
             version: None,
+            successor: None,
         }
     }
 

@@ -762,6 +762,7 @@ mod tests {
             len: 1,
             sha256: sha,
             version: Some("1.2".into()),
+            successor: None,
         }
     }
 
