@@ -111,3 +111,11 @@ library-d5-confirm-map = Bu dosyaları kullan
 library-update-downloading = { $name } güncellemesi indiriliyor — geldiğinde yüklenecek.
 library-updated = { $name } güncellendi.
 library-updated-text = Eski sürümü kullanan her profilde etkin. Eski sürüm saklanıyor — mod ayrıntılarından ona dönebilirsiniz.
+
+## N12: the changes applied when Deadlock was closed, each in a few words
+library-n12-on = { $name } açık
+library-n12-off = { $name } kapalı
+library-n12-above = { $name }, { $other } üstüne taşındı
+library-n12-below = { $name }, { $other } altına taşındı
+library-n12-switched = { $name }: { $to } seçildi
+library-n12-files = { $name }: dosyalar değişti

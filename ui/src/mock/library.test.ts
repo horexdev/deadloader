@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Changed, ForeignReport, GameinfoStatus, LibraryView, Pending } from '../lib/api';
+import type { Changed, ForeignReport, GameinfoStatus, LibraryView, Pending, UiEvent } from '../lib/api';
 import { devtools, invoke, resetMock } from './core';
 import { LibraryMock, libraryMods } from './library';
 
@@ -54,12 +54,19 @@ describe('the library mock', () => {
   });
 
   it('sets up the applied board: the game closed after the UI subscribed, and the four changes went in with Undo', () => {
-    const pushed: string[] = [];
-    const mock = new LibraryMock({ ...host(), push: (event) => pushed.push(event.event) });
+    const pushed: UiEvent[] = [];
+    const mock = new LibraryMock({ ...host(), push: (event) => pushed.push(event) });
     mock.scenario('library-applied');
     expect(mock.changes()).toHaveLength(4);
     mock.subscribed();
-    expect(pushed).toContain('applied_after_game');
+    const applied = pushed.find((e) => e.event === 'applied_after_game');
+    // N12 names the four changes.
+    expect(applied?.event === 'applied_after_game' && applied.data.items.map((c) => c.kind).sort()).toEqual([
+      'disable',
+      'enable',
+      'order',
+      'variant',
+    ]);
     expect(mock.changes()).toEqual([]);
     expect(mock.auto?.changes).toHaveLength(4);
   });

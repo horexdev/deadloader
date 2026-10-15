@@ -21,9 +21,11 @@ pub enum UiEvent {
     /// Whether Deadlock runs: the N4 banner while it does.
     Game { running: bool },
     /// Deadlock was closed and the changes made while it ran went into its folder (N12, decision 143). `changes` counts
-    /// the edits made while it ran; 0 when they were made before deadloader started.
+    /// the edits made while it ran; 0 when they were made before deadloader started. `items` names what went in, one
+    /// per mod and aspect, as S9 lists them (the toast words them).
     AppliedAfterGame {
         changes: usize,
+        items: Vec<deadloader_core::pending::PendingChange>,
         library: LibraryView,
     },
     /// Deadlock was closed, but its changes could not be applied.
