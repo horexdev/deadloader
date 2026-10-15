@@ -1,6 +1,7 @@
 <!-- D1 External link (decision 31; design: ModPage, board DialogD1): the full address with its host highlighted,
      Open / Cancel, and "always open links immediately". -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import Button from '../components/Button.svelte';
   import Checkbox from '../components/Checkbox.svelte';
@@ -21,7 +22,7 @@
 </script>
 
 <Dialog title={t('catalog-link-title')} icon={ExternalLink} oncancel={() => onanswer({ open: false, always: false })}>
-  <p>{t('catalog-link-body')}</p>
+  <p><Text value={t('catalog-link-body')} /></p>
   <div class="dl-url">{parts.before}<b>{parts.host}</b>{parts.after}</div>
   <Checkbox label={t('catalog-link-always')} bind:checked={always} />
   {#snippet footer()}

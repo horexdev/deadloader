@@ -1,6 +1,7 @@
 <!-- Activity's entry details (design: ActivityDetails, ActivityBlocked): what happened and why for a failure, the hops
      of a request, the full record, the note that the user name is hidden, Copy and "open logs folder". -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import Check from '@lucide/svelte/icons/check';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -215,9 +216,9 @@
   <div class="act-aside__body">
     {#if text}
       <div class={['act-err', warnOnly && 'act-err--warn']} role="alert">
-        <h3>{text.what}</h3>
-        {#if text.why}<p><b>{t('activity-why')}</b> {text.why}</p>{/if}
-        {#if text.todo}<p><b>{t('activity-todo')}</b> {text.todo}</p>{/if}
+        <h3><Text value={text.what} /></h3>
+        {#if text.why}<p><b>{t('activity-why')}</b> <Text value={text.why} /></p>{/if}
+        {#if text.todo}<p><b>{t('activity-todo')}</b> <Text value={text.todo} /></p>{/if}
         {#if settingsFix}
           <button type="button" class="dl-btn dl-btn--sm" onclick={onsettings}>{t('activity-open-advanced')}</button>
         {/if}

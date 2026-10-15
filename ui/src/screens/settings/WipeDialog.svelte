@@ -1,6 +1,7 @@
 <!-- D8 Delete all deadloader data (F11): what goes, with sizes; roll back first (recommended); typing the word unlocks
      the button. The app closes and its data folder is deleted when it has exited. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import Check from '@lucide/svelte/icons/check';
   import Minus from '@lucide/svelte/icons/minus';
   import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -81,7 +82,7 @@
 
 <Dialog title={t('settings-d8-title')} kind="danger" size="lg" icon={Trash2} closeOnEscape={!deleting} {oncancel}>
   <div class="st-meta st-pathline st-pathline--wrap">
-    {t('settings-d8-from')}
+    <Text value={t('settings-d8-from')} />
     {#if folder}<PathTooltip path={folder} />{/if}
     <span>{t('settings-d8-from-2')}</span>
   </div>
@@ -93,7 +94,7 @@
     </div>
     {#each rows as row (row.what)}
       <div class="st-tr" role="row">
-        <span role="cell" class="st-mono-ink">{row.what}</span>
+        <span role="cell" class="st-mono-ink"><Text value={row.what} /></span>
         <span role="cell">{row.has}</span>
         <span role="cell" class="st-num-cell">{formatSize(row.bytes)}</span>
       </div>
@@ -109,8 +110,8 @@
     <input class="dl-check__input" type="checkbox" bind:checked={rollback} disabled={deleting} />
     <span class="dl-check__box"><Check class="dl-icon dl-check__tick" /><Minus class="dl-icon dl-check__dash" /></span>
     <span class="st-step">
-      <span class="st-mono-ink">{t('settings-d8-rollback')}</span>
-      <span class="st-meta">{rollback ? t('settings-d8-rollback-why') : t('settings-d8-rollback-off')}</span>
+      <span class="st-mono-ink"><Text value={t('settings-d8-rollback')} /></span>
+      <span class="st-meta"><Text value={rollback ? t('settings-d8-rollback-why') : t('settings-d8-rollback-off')} /></span>
     </span>
   </label>
   <div class="dl-field">

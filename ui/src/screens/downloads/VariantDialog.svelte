@@ -2,6 +2,7 @@
      group is turned on. Names come from the folders inside the archive; GameBanana's file description is shown when
      the mod page is at hand. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import CircleDot from '@lucide/svelte/icons/circle-dot';
   import Download from '@lucide/svelte/icons/download';
@@ -90,7 +91,7 @@
       {/each}
     </div>
   {/each}
-  <p class="hint">{t('downloads-d4-hint', { count, profile })}</p>
+  <p class="hint"><Text value={t('downloads-d4-hint', { count, profile })} /></p>
   {#snippet footer()}
     <Button label={t('downloads-cancel')} onclick={oncancel} />
     <Button variant="primary" icon={Download} label={t('downloads-d4-install')} data-autofocus="" onclick={install} />

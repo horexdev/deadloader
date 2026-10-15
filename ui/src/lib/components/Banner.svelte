@@ -1,6 +1,7 @@
 <!-- Banner (design: Banner.md): a condition that lasts until it is resolved, at the top of the area it affects.
      One per area; no dismiss button. -->
 <script lang="ts">
+  import Text from './Text.svelte';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import CircleX from '@lucide/svelte/icons/circle-x';
   import Info from '@lucide/svelte/icons/info';
@@ -37,7 +38,7 @@
 <div class={['dl-banner', kind !== 'info' && `dl-banner--${kind}`]} role={kind === 'error' ? 'alert' : 'status'}>
   <Icon class="dl-icon dl-icon--md dl-banner__icon" />
   <span class="dl-banner__text"
-    ><strong>{title}</strong> {#if text}<span class="dl-banner__why">{text}</span>{/if}</span
+    ><strong><Text value={title} /></strong> {#if text}<span class="dl-banner__why"><Text value={text} /></span>{/if}</span
   >
   {#if actions}<div class="dl-banner__actions">{@render actions()}</div>{/if}
 </div>

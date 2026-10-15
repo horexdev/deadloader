@@ -2,6 +2,7 @@
      the expected and the found SearchPaths block (collapsed), "What is this file?", and Verify game files in Steam;
      then deadloader checks again, on its own when the window gets focus or with Check again. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import File from '@lucide/svelte/icons/file';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
@@ -52,10 +53,10 @@
 <Dialog title={t('library-d10-title')} size="lg" role="alertdialog" icon={TriangleAlert} {oncancel}>
   {#if waiting}
     <p class="ink">{t('library-d10-wait-title')}</p>
-    <p>{t('library-d10-wait-text')}</p>
+    <p><Text value={t('library-d10-wait-text')} /></p>
   {:else}
-    <p class="ink">{t('library-d10-what')}</p>
-    <p>{t('library-d10-do')}</p>
+    <p class="ink"><Text value={t('library-d10-what')} /></p>
+    <p><Text value={t('library-d10-do')} /></p>
     <div class="diff">
       <button
         type="button"
@@ -72,18 +73,18 @@
         <div id="d10diff" class="columns">
           {#each [{ head: t('library-d10-expected'), lines: status.diff.expected, kind: 'ours' }, { head: t('library-d10-found'), lines: status.diff.found, kind: 'theirs' }] as column (column.kind)}
             <div class={['column', column.kind === 'ours' && 'divider']}>
-              <span class="head">{column.head}</span>
+              <span class="head"><Text value={column.head} /></span>
               <pre class="dl-mono">{#each column.lines as line, i (i)}<span class={['line', line.marked && column.kind]}>{dedent(column.lines)[i]}</span>{/each}</pre>
             </div>
           {/each}
         </div>
-        <p class="note">{t('library-d10-diff-note')}</p>
+        <p class="note"><Text value={t('library-d10-diff-note')} /></p>
       {/if}
     </div>
     <button type="button" class="dl-link help" aria-expanded={help ? 'true' : 'false'} onclick={() => (help = !help)}>
       {t('library-d10-help')}
     </button>
-    {#if help}<p class="help-text">{t('library-d10-help-text')}</p>{/if}
+    {#if help}<p class="help-text"><Text value={t('library-d10-help-text')} /></p>{/if}
   {/if}
   {#snippet footerStart()}
     {#if !waiting}

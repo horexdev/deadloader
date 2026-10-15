@@ -1,6 +1,7 @@
 <!-- Settings → About: version and build commit (158), licence, how to verify this download (91), the window engine and
      what is switched off (ADR 0001), the data folder, and the first-run notice to read again (111). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import Copy from '@lucide/svelte/icons/copy';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
@@ -167,7 +168,7 @@
       <div class="st-row__label">
         Microsoft Edge WebView2 <span class="dl-mono st-about-version">{about?.webview2 ?? t('settings-webview-unknown')}</span>
       </div>
-      <p class="st-row__help">{t('settings-webview-help')}</p>
+      <p class="st-row__help"><Text value={t('settings-webview-help')} /></p>
       <ul class="st-offlist">
         {#each [1, 2, 3, 4, 5, 6] as n (n)}<li>{t(`settings-webview-off-${n}`)}</li>{/each}
       </ul>

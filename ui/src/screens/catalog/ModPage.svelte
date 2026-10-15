@@ -2,6 +2,7 @@
      meta and counts, the files with their install state (136, 144), the description, credits, ratings, licence and
      alternate sources; favourite and "Open on GameBanana" (D1). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import Check from '@lucide/svelte/icons/check';
@@ -341,7 +342,7 @@
       <div class="dl-empty dl-empty--error narrow">
         <div class="dl-empty__glyph"><CircleX class="dl-icon dl-icon--lg" /></div>
         <h2 class="dl-empty__title">{t('catalog-removed-title')}</h2>
-        <p class="dl-empty__text">{t('catalog-removed-why')}</p>
+        <p class="dl-empty__text"><Text value={t('catalog-removed-why')} /></p>
         {#if mod}
           <p class="dl-empty__text">
             {t('catalog-removed-keep', { copy: [installedVersion(mod), mod.name].filter(Boolean).join(' · ') })}

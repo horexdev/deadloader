@@ -1,6 +1,7 @@
 <!-- One setting (design: .st-row): label, help, "Default: … · Restore default" while changed, the control on the
      right and an optional full-width part below. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import type { Snippet } from 'svelte';
   import { t } from '../../i18n';
 
@@ -24,11 +25,11 @@
 
 <div class="st-row">
   <div class="st-row__text">
-    <div class="st-row__label" id={labelId}>{label}</div>
+    <div class="st-row__label" id={labelId}><Text value={label} /></div>
     {#if helpContent}
       <p class="st-row__help">{@render helpContent()}</p>
     {:else if help}
-      <p class="st-row__help">{help}</p>
+      <p class="st-row__help"><Text value={help} /></p>
     {/if}
     {#if changed && defaultText !== undefined && onrestore}
       <p class="st-row__default">

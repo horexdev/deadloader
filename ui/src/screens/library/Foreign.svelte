@@ -2,6 +2,7 @@
      there, what it seems to be, and per item Take under management (D11) / Leave as is / Open folder. Hidden when
      there is nothing. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import File from '@lucide/svelte/icons/file';
@@ -63,7 +64,7 @@
     />
     <h2 id="foreign-title">{t('library-foreign-title')}</h2>
     <Count value={formatNumber(items.length)} muted />
-    <span class="note">{t('library-foreign-note')}</span>
+    <span class="note"><Text value={t('library-foreign-note')} /></span>
   </div>
   {#if open}
     <div id="foreign-list" class="items">
@@ -75,7 +76,7 @@
           </span>
           <div class="text">
             <span class="dl-mono name">{item.kind === 'folder' ? `${item.name}\\` : item.name}</span>
-            <span class="what">{what(item)} <span class="meta">· {meta(item)}</span></span>
+            <span class="what"><Text value={what(item)} /> <span class="meta">· {meta(item)}</span></span>
           </div>
           <div class="actions">
             {#if item.takeable}

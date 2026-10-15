@@ -30,6 +30,7 @@
 </script>
 
 <script lang="ts">
+  import Text from './Text.svelte';
   import CircleX from '@lucide/svelte/icons/circle-x';
   import Copy from '@lucide/svelte/icons/copy';
   import { onDestroy, type Snippet } from 'svelte';
@@ -122,9 +123,9 @@
   {footer}
   footerStart={start.length > 0 ? footerStart : undefined}
 >
-  <p>{why}</p>
+  <p><Text value={why} /></p>
   {@render children?.()}
-  <p class="todo">{todo}</p>
+  <p class="todo"><Text value={todo} /></p>
   {#if copyText || activityHref}
     <div class="dl-dialog__details details">
       {#if copyText}

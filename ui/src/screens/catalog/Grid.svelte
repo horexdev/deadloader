@@ -1,6 +1,7 @@
 <!-- S2 Catalog (design: Main, CatalogLoading, CatalogEmpty, CatalogOffline, CatalogStates): section, search, sort,
      category and hero, the filters, and the virtualized grid with infinite scroll; every state of the boards. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import { notice } from '../../lib/notice.svelte';
   import Check from '@lucide/svelte/icons/check';
@@ -366,8 +367,8 @@
       <div class="dl-empty narrow">
         <div class="dl-empty__glyph"><WifiOff class="dl-icon dl-icon--lg" /></div>
         <h2 class="dl-empty__title">{t('catalog-local-title')}</h2>
-        <p class="dl-empty__text">{t('catalog-local-why')}</p>
-        <p class="dl-empty__text">{t('catalog-local-do')}</p>
+        <p class="dl-empty__text"><Text value={t('catalog-local-why')} /></p>
+        <p class="dl-empty__text"><Text value={t('catalog-local-do')} /></p>
         <div class="dl-empty__actions">
           <Button label={t('catalog-local-enable')} variant="primary" onclick={enableCatalog} />
           <a class="dl-btn dl-btn--ghost" href="#/library">{t('catalog-local-library')}</a>
@@ -379,9 +380,9 @@
     <div class="state">
       <div class="dl-empty dl-empty--error narrow" role="alert">
         <div class="dl-empty__glyph"><CircleX class="dl-icon dl-icon--lg" /></div>
-        <h2 class="dl-empty__title">{text.what}</h2>
-        <p class="dl-empty__text">{text.why}</p>
-        <p class="dl-empty__text">{text.todo}</p>
+        <h2 class="dl-empty__title"><Text value={text.what} /></h2>
+        <p class="dl-empty__text"><Text value={text.why} /></p>
+        <p class="dl-empty__text"><Text value={text.todo} /></p>
         <div class="dl-empty__actions">
           <Button label={t('catalog-try-again')} variant="primary" icon={RefreshCw} onclick={() => void retry()} />
           <Button label={t('catalog-check-update')} icon={CircleArrowUp} onclick={() => router.open('settings', 'about')} />

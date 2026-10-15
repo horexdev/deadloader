@@ -1,5 +1,6 @@
 <!-- Settings → Game: installations (21/69), the gameinfo.gi auto-fix (18), Rollback (D7) and Delete all data (D8). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import FolderPlus from '@lucide/svelte/icons/folder-plus';
@@ -159,16 +160,16 @@
         <div class="st-meta">{meta(install)}</div>
         <div class="st-meta st-meta-row">
           <span class="st-stat st-stat--ok">
-            <CircleCheck class="dl-icon" />{install.source === 'steam'
+            <CircleCheck class="dl-icon" /><Text value={install.source === 'steam'
               ? t('settings-install-steam')
               : install.source === 'manual'
                 ? t('settings-install-manual')
-                : t('settings-install-known')}
+                : t('settings-install-known')} />
           </span>
           <span class={['st-stat', gi.ok && 'st-stat--ok']}>
             {#if gi.ok}<CircleCheck class="dl-icon" />{:else if gi.warn}<TriangleAlert class="dl-icon" />{:else}<Info
                 class="dl-icon"
-              />{/if}{gi.text}
+              />{/if}<Text value={gi.text} />
           </span>
         </div>
       </div>

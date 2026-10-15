@@ -22,6 +22,7 @@ export { default as Select } from './Select.svelte';
 export { default as Sidebar } from './Sidebar.svelte';
 export { default as Skeleton } from './Skeleton.svelte';
 export { default as Tabs } from './Tabs.svelte';
+export { default as Text } from './Text.svelte';
 export { default as TextInput } from './TextInput.svelte';
 export { default as Toast } from './Toast.svelte';
 export { default as ToastStack } from './ToastStack.svelte';

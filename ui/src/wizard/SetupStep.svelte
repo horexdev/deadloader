@@ -1,6 +1,7 @@
 <!-- S1 step 6, Setup: what deadloader found, each with its action (design: Wizard.dc.html, boards WizardStep6 and
      WizardSetupIssues). Nothing here changes the game; choosing a folder sets the selected profile's game folder. -->
 <script lang="ts">
+  import Text from '../lib/components/Text.svelte';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import CircleQuestionMark from '@lucide/svelte/icons/circle-question-mark';
@@ -129,18 +130,18 @@
     <div class="wz-row" role="listitem">
       {#if exeWarn}<TriangleAlert class="dl-icon wz-warn" />{:else}<CircleCheck class="dl-icon wz-ok" />{/if}
       <div class="wz-text">
-        <div class="wz-row__topic">{t('wizard-topic-exe')}</div>
+        <div class="wz-row__topic"><Text value={t('wizard-topic-exe')} /></div>
         <div class="wz-row__title">
-          {check.exe_location === 'downloads'
+          <Text value={check.exe_location === 'downloads'
             ? t('wizard-exe-downloads')
             : check.exe_location === 'desktop'
               ? t('wizard-exe-desktop')
-              : t('wizard-exe-ok')}
+              : t('wizard-exe-ok')} />
         </div>
         <div class="wz-row__path"><PathTooltip path={masked(check.exe_folder)} /></div>
         {#if exeWarn}
           <div class="wz-row__text">
-            {t('wizard-exe-warn-a')} <span class="wz-code">D:\Games\deadloader</span>{t('wizard-exe-warn-b')}
+            <Text value={t('wizard-exe-warn-a')} /> <span class="wz-code">D:\Games\deadloader</span>{t('wizard-exe-warn-b')}
           </div>
           {#if exeOpened}<div class="wz-ack wz-mt4" role="status"><Check class="dl-icon" />{t('wizard-opened')}</div>{/if}
         {/if}
@@ -157,11 +158,11 @@
           <div class="wz-row__topic">{t('wizard-topic-disk')}</div>
           {#if check.same_volume}
             <div class="wz-row__title">{t('wizard-linked')}</div>
-            <div class="wz-row__text">{t('wizard-linked-text', { drive: check.game_volume ?? '' })}</div>
+            <div class="wz-row__text"><Text value={t('wizard-linked-text', { drive: check.game_volume ?? '' })} /></div>
           {:else}
             <div class="wz-row__title">{t('wizard-copied')}</div>
             <div class="wz-row__text">
-              {t('wizard-copied-text', { data: check.data_volume ?? '', game: check.game_volume ?? '' })}
+              <Text value={t('wizard-copied-text', { data: check.data_volume ?? '', game: check.game_volume ?? '' })} />
             </div>
           {/if}
         </div>
@@ -173,7 +174,7 @@
           {/if}
         </div>
         {#if !check.same_volume && drives}
-          <div class="wz-row__more">{t('wizard-drives-more', { game: check.game_volume ?? '' })}</div>
+          <div class="wz-row__more"><Text value={t('wizard-drives-more', { game: check.game_volume ?? '' })} /></div>
         {/if}
       </div>
     {/if}
@@ -185,10 +186,10 @@
           <div class="wz-row__topic">{t('wizard-topic-foreign')}</div>
           {#if check.foreign.length > 0}
             <div class="wz-row__title">{t('wizard-foreign-some', { count: check.foreign.length })}</div>
-            <div class="wz-row__text">{t('wizard-foreign-some-text')}</div>
+            <div class="wz-row__text"><Text value={t('wizard-foreign-some-text')} /></div>
           {:else}
             <div class="wz-row__title">{t('wizard-foreign-none')}</div>
-            <div class="wz-row__text">{t('wizard-foreign-none-text')}</div>
+            <div class="wz-row__text"><Text value={t('wizard-foreign-none-text')} /></div>
           {/if}
         </div>
         <div class="wz-row__actions">
@@ -224,14 +225,14 @@
           <div class="wz-row__topic">{t('wizard-topic-gameinfo')}</div>
           {#if check.gameinfo === 'foreign'}
             <div class="wz-row__title">{t('wizard-gi-foreign')}</div>
-            <div class="wz-row__text">{t('wizard-gi-foreign-text')}</div>
+            <div class="wz-row__text"><Text value={t('wizard-gi-foreign-text')} /></div>
           {:else if check.gameinfo === 'ours'}
             <div class="wz-row__title">{t('wizard-gi-ours')}</div>
-            <div class="wz-row__text">{t('wizard-gi-ours-text')}</div>
+            <div class="wz-row__text"><Text value={t('wizard-gi-ours-text')} /></div>
           {:else}
             <div class="wz-row__title">{t('wizard-gi-setup')}</div>
             <div class="wz-row__text">
-              {t('wizard-gi-setup-a')} <span class="wz-code">gameinfo.gi</span>
+              <Text value={t('wizard-gi-setup-a')} /> <span class="wz-code">gameinfo.gi</span>
               {t('wizard-gi-setup-b')}
             </div>
           {/if}
@@ -248,7 +249,7 @@
           {/if}
         </div>
         {#if check.gameinfo === 'foreign' && gameinfo}
-          <div class="wz-row__more"><span class="wz-code">gameinfo.gi</span> {t('wizard-gi-more')}</div>
+          <div class="wz-row__more"><span class="wz-code">gameinfo.gi</span> <Text value={t('wizard-gi-more')} /></div>
         {/if}
       </div>
     {/if}

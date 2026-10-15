@@ -1,6 +1,7 @@
 <!-- Delete the applied profile (board ProfilesDelete): its mods leave the game folder, they stay in the library;
      another profile becomes selected; "Export first" keeps a copy. -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import FileOutput from '@lucide/svelte/icons/file-output';
   import Trash from '@lucide/svelte/icons/trash';
   import Button from '../../lib/components/Button.svelte';
@@ -23,12 +24,12 @@
 
 <Dialog title={t('profiles-delete-title', { name: profile.name })} kind="danger" icon={Trash} {oncancel}>
   {#if profile.mods > 0}
-    <p>{t('profiles-delete-applied', { name: profile.name, count: profile.mods })}</p>
+    <p><Text value={t('profiles-delete-applied', { name: profile.name, count: profile.mods })} /></p>
     {#if root}<div class="dl-url">{`${root}\\game\\citadel\\addons`}</div>{/if}
   {:else}
     <p>{t('profiles-delete-applied-empty', { name: profile.name })}</p>
   {/if}
-  <p>{t('profiles-delete-stay')}</p>
+  <p><Text value={t('profiles-delete-stay')} /></p>
   {#if next}<p class="next">{t('profiles-delete-next', { name: next })}</p>{/if}
   <p>{t('profiles-delete-undoable')}</p>
   {#snippet footerStart()}

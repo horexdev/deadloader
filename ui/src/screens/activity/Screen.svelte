@@ -2,6 +2,7 @@
      files and app logs as virtualized tables with filters, search and a live view, and the details of an entry. The
      address can name an entry: `#/activity/<id>` opens it (error messages point at their log entry this way). -->
 <script lang="ts">
+  import Text from '../../lib/components/Text.svelte';
   import { tooltip } from '../../lib/components/tooltip';
   import { notice } from '../../lib/notice.svelte';
   import ActivityIcon from '@lucide/svelte/icons/activity';
@@ -273,7 +274,7 @@
     <div class="act-headline">
       <div class="act-headline__text">
         <h1 class="act-title">{t('activity-title')}</h1>
-        {#if innerHeight >= 700}<p class="act-sub">{t('activity-sub', { days: retention })}</p>{/if}
+        {#if innerHeight >= 700}<p class="act-sub"><Text value={t('activity-sub', { days: retention })} /></p>{/if}
       </div>
       <button type="button" class="dl-btn dl-btn--ghost" onclick={() => void openLogs()}
         ><FolderOpen class="dl-icon" />{t('activity-open-logs')}</button
@@ -414,7 +415,7 @@
         <div class="dl-empty">
           <div class="dl-empty__glyph"><Unplug class="dl-icon dl-icon--lg" /></div>
           <h2 class="dl-empty__title">{t('activity-local-title')}</h2>
-          <p class="dl-empty__text">{t('activity-local-why')}</p>
+          <p class="dl-empty__text"><Text value={t('activity-local-why')} /></p>
           <p class="dl-empty__text">{t('activity-local-do')}</p>
           <div class="dl-empty__actions">
             <button type="button" class="dl-btn dl-btn--primary" onclick={enableCatalog}
