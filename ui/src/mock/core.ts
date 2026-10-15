@@ -270,7 +270,9 @@ function push(event: UiEvent): void {
 /** Saves the settings; the catalog's status is pushed when they change it, as the core's `apply_settings` does. */
 function saveSettings(settings: Settings): void {
   const before = catalogStatus();
-  state.settings = structuredClone(settings);
+  // A JSON copy, as the real core receives them: settings built from `app.settings` hold reactive proxies, which
+  // structuredClone refuses.
+  state.settings = JSON.parse(JSON.stringify(settings)) as Settings;
   const after = catalogStatus();
   if (JSON.stringify(after) !== JSON.stringify(before)) {
     push({ event: 'catalog', data: { event: 'status', data: after } });

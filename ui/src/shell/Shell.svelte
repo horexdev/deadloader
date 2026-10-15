@@ -1,7 +1,7 @@
 <!-- The window: title bar, sidebar (expanded, rail, or the rail with the overlay, decisions 139/141), the current
      screen, D13 and the toasts. Screens live in src/screens/<route>/Screen.svelte and are found by their folder. -->
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { flushSync, type Snippet } from 'svelte';
   import Sidebar, { type SidebarMode, type SidebarRoute } from '../lib/components/Sidebar.svelte';
   import ToastStack from '../lib/components/ToastStack.svelte';
   import { api } from '../lib/api';
@@ -31,6 +31,9 @@
   let overlayOpen = $state(false);
   /** The profile button the switcher is open from. */
   let switcher: HTMLElement | null = $state(null);
+  let content: HTMLElement | undefined = $state();
+  /** While the content slides to its place after a collapse or expand: how far it starts from it (px). */
+  let slideFrom: number | null = $state(null);
 
   const narrow = $derived(width < SIDEBAR_AUTO_COLLAPSE_PX);
   const collapsed = $derived(app.settings?.ui?.sidebar_collapsed === true);
@@ -100,6 +103,29 @@
     router.go(route);
   }
 
+  /** Applies `change` to the layout at once and slides the content from where it was: one layout, then only a
+   *  transform (design: Motion). Under reduced motion the animation takes 0 ms. */
+  function slideContent(change: () => void): void {
+    const before = content?.getBoundingClientRect().left;
+    change();
+    flushSync();
+    const after = content?.getBoundingClientRect().left;
+    if (before === undefined || after === undefined || before === after) {
+      return;
+    }
+    // A slide still running starts again from here: the attribute has to go for one style pass.
+    slideFrom = null;
+    flushSync();
+    content?.getBoundingClientRect();
+    slideFrom = before - after;
+  }
+
+  function slideEnded(event: AnimationEvent): void {
+    if (event.target === event.currentTarget) {
+      slideFrom = null;
+    }
+  }
+
   async function toggle(): Promise<void> {
     if (narrow) {
       overlayOpen = true;
@@ -111,7 +137,9 @@
       return;
     }
     const next = { ...settings, ui: { ...settings.ui, sidebar_collapsed: !collapsed } };
-    app.settings = next;
+    slideContent(() => {
+      app.settings = next;
+    });
     try {
       app.settings = await api.updateSettings(next);
     } catch (error) {
@@ -154,12 +182,18 @@
 
 <div class="window dl-root">
   <TitleBar />
-  <div class="body">
+  <div class="body" data-sliding={slideFrom === null ? undefined : ''}>
     <Sidebar mode={mode} {...common} ontoggle={() => void toggle()} />
     {#if narrow && overlayOpen}
       <Sidebar mode="overlay" {...common} onclose={() => (overlayOpen = false)} />
     {/if}
-    <main class="content">
+    <main
+      class="content"
+      bind:this={content}
+      data-sliding={slideFrom === null ? undefined : ''}
+      style:--slide-from={slideFrom === null ? undefined : `${slideFrom}px`}
+      onanimationend={slideEnded}
+    >
       {@render children()}
     </main>
   </div>
@@ -205,5 +239,22 @@
     min-width: 0;
     overflow: auto;
     background: var(--bg-app);
+  }
+
+  /* Collapse or expand: the content covers the sidebar or uncovers it on its way to its new place; the gap it leaves
+     behind has the sidebar's colour, and nothing sticks out of the window meanwhile. */
+  .body[data-sliding] {
+    overflow: clip;
+    background: var(--bg-chrome);
+  }
+
+  .content[data-sliding] {
+    animation: content-slide var(--duration-slow) var(--ease-standard);
+  }
+
+  @keyframes content-slide {
+    from {
+      transform: translateX(var(--slide-from));
+    }
   }
 </style>

@@ -148,4 +148,46 @@ describe('the app', () => {
     prompts.answerLink({ open: false, always: false });
     flushSync();
   });
+
+  it('slides the content from where it was when the sidebar collapses or expands', async () => {
+    const viewport = (window as unknown as { happyDOM: { setViewport(size: { width: number; height: number }): void } })
+      .happyDOM;
+    // A wide window: the user's choice, not the automatic rail.
+    viewport.setViewport({ width: 1280, height: 800 });
+    try {
+      history.replaceState(null, '', '/#/profiles');
+      resetMock();
+      router.go('profiles');
+      const { target } = render(App, {});
+      await settle();
+      await shown(target, '.dl-sidebar');
+      const content = one(target, 'main.content');
+      // happy-dom has no layout: the content starts where the sidebar ends.
+      vi.spyOn(content, 'getBoundingClientRect').mockImplementation(
+        () => ({ left: target.querySelector('.dl-sidebar--rail') ? 56 : 240 }) as DOMRect,
+      );
+
+      click(one(target, `button[aria-label="${t('sidebar-collapse')}"]`));
+      await settle();
+      expect(one(target, '.dl-sidebar').classList).toContain('dl-sidebar--rail');
+      expect(content.hasAttribute('data-sliding')).toBe(true);
+      expect(content.style.getPropertyValue('--slide-from')).toBe('184px');
+
+      // Something inside finishing its own animation doesn't end the slide.
+      const inner = content.appendChild(document.createElement('div'));
+      inner.dispatchEvent(new Event('animationend', { bubbles: true }));
+      flushSync();
+      expect(content.hasAttribute('data-sliding')).toBe(true);
+      content.dispatchEvent(new Event('animationend'));
+      flushSync();
+      expect(content.hasAttribute('data-sliding')).toBe(false);
+
+      click(one(target, `button[aria-label="${t('sidebar-expand')}"]`));
+      await settle();
+      expect(content.hasAttribute('data-sliding')).toBe(true);
+      expect(content.style.getPropertyValue('--slide-from')).toBe('-184px');
+    } finally {
+      viewport.setViewport({ width: 1024, height: 768 });
+    }
+  });
 });
