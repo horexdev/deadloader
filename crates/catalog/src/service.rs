@@ -18,6 +18,7 @@ use deadloader_core::library;
 use deadloader_core::log::{Clock, Level, LogDir, Logger};
 use deadloader_core::message::{MessageId, UserMessage};
 use deadloader_core::settings::{DescriptionImages, NsfwMode, Settings};
+use deadloader_core::updates::{self, RemoteMod, RemovedReason};
 use deadloader_gamebanana::{
     self as gamebanana, CatalogItem, CatalogPage, Category, FetchError, Image, ListQuery,
     ModDetails, RemoteFile, SearchQuery, Section, Sort, Visibility,
@@ -529,6 +530,56 @@ where
             .into_iter()
             .chain(card.value.archived_files)
             .find(|f| f.id == file_id)
+    }
+
+    // ---- update checks (decision 164)
+
+    /// What an update check needs about one mod: its listed files, or why it is gone. Asked every time (a check is
+    /// about now), through the same allowlist, log, back-off and local mode as the catalog.
+    pub fn remote_mod(
+        &self,
+        section: Section,
+        id: u64,
+        initiator: Initiator,
+    ) -> Result<RemoteMod, CatalogError> {
+        if !self.config().enabled {
+            return Err(CatalogError::LocalMode);
+        }
+        self.check_back_off()?;
+        let _pass = self.inner.api_gate.enter();
+        let fetch = NetFetch::new(&self.inner.net, initiator);
+        match gamebanana::Client::new(&fetch).file_list(section, id) {
+            Ok(list) => {
+                self.reached();
+                Ok(remote_mod_of(list))
+            }
+            Err(e) => match self.failed(e, fetch.take_failure(), Asked::Details) {
+                CatalogError::NotFound { .. } => Ok(RemoteMod::Removed(RemovedReason::Deleted)),
+                other => Err(other),
+            },
+        }
+    }
+
+    /// The newest update posts of a mod (one page), for the changelog in D5.
+    pub fn update_posts(
+        &self,
+        section: Section,
+        id: u64,
+        initiator: Initiator,
+    ) -> Result<Vec<updates::UpdatePost>, CatalogError> {
+        if !self.config().enabled {
+            return Err(CatalogError::LocalMode);
+        }
+        self.check_back_off()?;
+        let _pass = self.inner.api_gate.enter();
+        let fetch = NetFetch::new(&self.inner.net, initiator);
+        match gamebanana::Client::new(&fetch).updates(section, id, 1) {
+            Ok(page) => {
+                self.reached();
+                Ok(page.posts.into_iter().map(update_post).collect())
+            }
+            Err(e) => Err(self.failed(e, fetch.take_failure(), Asked::Details)),
+        }
     }
 
     // ---- pictures
@@ -1430,6 +1481,58 @@ fn is_generic_binary(content_type: &str) -> bool {
     ["application/octet-stream", "binary/octet-stream"]
         .iter()
         .any(|generic| essence.eq_ignore_ascii_case(generic))
+}
+
+/// GameBanana's file list in the core's own terms; a mod GameBanana hides counts as removed.
+fn remote_mod_of(list: gamebanana::ModFileList) -> RemoteMod {
+    let reason = match list.availability {
+        gamebanana::Availability::Public => None,
+        gamebanana::Availability::Withheld => Some(RemovedReason::Withheld),
+        gamebanana::Availability::Trashed => Some(RemovedReason::Trashed),
+        gamebanana::Availability::Private => Some(RemovedReason::Private),
+    };
+    if let Some(reason) = reason {
+        return RemoteMod::Removed(reason);
+    }
+    if list.files.is_empty() {
+        return RemoteMod::Removed(RemovedReason::NoFiles);
+    }
+    RemoteMod::Listed(updates::ListedMod {
+        version: list.version,
+        date_updated: list.date_updated,
+        files: list
+            .files
+            .into_iter()
+            .map(|f| updates::RemoteFile {
+                id: f.id,
+                file_name: f.file_name,
+                size_bytes: f.size_bytes,
+                date_added: f.date_added,
+                version: f.version,
+                description: f.description,
+            })
+            .collect(),
+        posts: Vec::new(),
+    })
+}
+
+fn update_post(post: gamebanana::UpdatePost) -> updates::UpdatePost {
+    updates::UpdatePost {
+        id: post.id,
+        title: post.title,
+        version: post.version,
+        date_added: post.date_added,
+        changelog: post
+            .changelog
+            .into_iter()
+            .map(|c| updates::ChangeEntry {
+                category: c.category,
+                text: c.text,
+            })
+            .collect(),
+        file_ids: post.file_ids,
+        text_html: post.text_html,
+    }
 }
 
 fn file_view(f: &RemoteFile) -> FileView {
