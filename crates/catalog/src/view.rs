@@ -6,10 +6,11 @@ use crate::id::ImageId;
 use deadloader_gamebanana::{
     AlternateSource, Antivirus, Category, CategoryRef, ContentRating, CreditGroup, Section, Sort,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-/// What a listing shows: a section's catalog in some order and category, or a text search.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+/// What a listing shows: a section's catalog in some order and category, or a text search. The UI sends it back as
+/// it got it (`Event::PageUpdated`) or builds it itself.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Query {
     pub section: Section,
     pub filter: Filter,
@@ -17,7 +18,7 @@ pub struct Query {
     pub page: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Filter {
     /// `category` is a root category, or a hero under Skins (decision 131).

@@ -16,8 +16,8 @@ use deadloader_core::cache::{
 };
 use deadloader_core::library;
 use deadloader_core::log::{Clock, Level, LogDir, Logger};
-use deadloader_core::message::{MessageId, ToUserMessage, UserMessage};
-use deadloader_core::settings::{DescriptionImages, NsfwMode, Settings, SettingsError};
+use deadloader_core::message::{MessageId, UserMessage};
+use deadloader_core::settings::{DescriptionImages, NsfwMode, Settings};
 use deadloader_gamebanana::{
     self as gamebanana, CatalogItem, CatalogPage, Category, FetchError, Image, ListQuery,
     ModDetails, RemoteFile, SearchQuery, Section, Sort, Visibility,
@@ -104,8 +104,8 @@ where
 pub trait SettingsSink: Send + Sync {
     /// Adds `host` to `catalog.allowed_image_hosts` and saves the settings. The app's own copy of the settings must
     /// contain the host afterwards: [`Catalog::apply_settings`] replaces the allowed image hosts with the settings'
-    /// list.
-    fn allow_image_host(&self, host: &str) -> Result<(), SettingsError>;
+    /// list. A failure is the message the user sees (usually E1 or E23).
+    fn allow_image_host(&self, host: &str) -> Result<(), UserMessage>;
 }
 
 /// Everything the catalog is made of.
@@ -1158,11 +1158,12 @@ where
     fn allow_host_always(&self, host: &str) -> Result<(), ConsentError> {
         let parsed = Host::parse(host).map_err(|_| ConsentError::NotADescriptionImage)?;
         if let Err(e) = self.inner.sink.allow_image_host(host) {
+            let detail = e.args.get("detail").cloned().unwrap_or_default();
             let message = self.report(
                 Level::Error,
                 "allowed image host could not be saved",
-                &e.to_string(),
-                e.user_message(),
+                &detail,
+                e,
             );
             return Err(ConsentError::Save { message });
         }

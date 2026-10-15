@@ -6,6 +6,7 @@
 use deadloader_catalog::{AppLog, Catalog, Event, Parts, SettingsSink, Spawn};
 use deadloader_core::cache::{self, Cache, CacheFs, Entry, FileLog};
 use deadloader_core::log::{Clock, FileEvent, Level};
+use deadloader_core::message::{ToUserMessage, UserMessage};
 use deadloader_core::settings::{DescriptionImages, NsfwMode, Settings, SettingsError};
 use deadloader_gamebanana::request;
 use deadloader_gamebanana::{ListQuery, Section, Sort};
@@ -414,9 +415,9 @@ pub struct Saved {
 pub struct SharedSaved(pub Arc<Saved>);
 
 impl SettingsSink for SharedSaved {
-    fn allow_image_host(&self, host: &str) -> Result<(), SettingsError> {
+    fn allow_image_host(&self, host: &str) -> Result<(), UserMessage> {
         if self.0.fail.load(Ordering::SeqCst) {
-            return Err(SettingsError::Io("access denied".to_owned()));
+            return Err(SettingsError::Io("access denied".to_owned()).user_message());
         }
         lock(&self.0.hosts).push(host.to_owned());
         Ok(())

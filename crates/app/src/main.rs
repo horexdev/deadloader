@@ -4,9 +4,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod backend;
+mod catalog;
 mod commands;
 mod events;
-#[cfg_attr(not(test), allow(dead_code))]
 mod network;
 mod paths;
 #[cfg(test)]

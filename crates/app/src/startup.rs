@@ -1,6 +1,7 @@
 //! Start-up: the data folder, single instance, the log, and the main window with our WebView2 settings.
 
 use crate::backend::Backend;
+use crate::catalog::{self, CatalogSlot};
 use crate::commands;
 use crate::events::{Outbox, UiEvent};
 use crate::network::{Network, NetworkLog};
@@ -99,6 +100,16 @@ pub fn run() -> Result<(), StartError> {
             commands::add_from_disk,
             commands::export_profile_dialog,
             commands::import_profile_dialog,
+            commands::catalog_list,
+            commands::catalog_refresh,
+            commands::catalog_prefetch,
+            commands::catalog_categories,
+            commands::catalog_details,
+            commands::catalog_status,
+            commands::catalog_retry_now,
+            commands::catalog_activate,
+            commands::catalog_consent_prompt,
+            commands::catalog_grant,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
@@ -120,6 +131,14 @@ pub fn run() -> Result<(), StartError> {
     ));
     let follow = Arc::clone(&network);
     backend.on_settings(Box::new(move |settings| follow.apply(settings)));
+    let slot = Arc::new(CatalogSlot::new());
+    app.manage(Arc::clone(&slot));
+    let catalog_parts = CatalogParts {
+        client: Arc::clone(network.client()),
+        backend: Arc::clone(&backend),
+        outbox: Arc::clone(&outbox),
+        cache_dir: layout.root().join("cache"),
+    };
     app.manage(network);
     app.manage(Arc::clone(&backend));
     app.manage(Arc::clone(&outbox));
@@ -134,8 +153,64 @@ pub fn run() -> Result<(), StartError> {
         );
         return Err(StartError::Window(e));
     }
+    open_catalog(app.handle().clone(), slot, catalog_parts, Arc::clone(&log));
     app.run(|_, _| {});
     Ok(())
+}
+
+/// What the catalog is opened with.
+struct CatalogParts {
+    client: Arc<deadloader_net::Client>,
+    backend: Arc<Backend>,
+    outbox: Arc<Outbox>,
+    cache_dir: PathBuf,
+}
+
+/// Opens the cache and the catalog after the window, on their own thread: listing the image folders must not delay the
+/// first frame. Commands wait for it; pictures answer 503 until then.
+fn open_catalog(app: AppHandle, slot: Arc<CatalogSlot>, parts: CatalogParts, log: Log) {
+    let thread_log = Arc::clone(&log);
+    let spawned = std::thread::Builder::new()
+        .name("catalog-open".to_owned())
+        .spawn(move || {
+            let log = thread_log;
+            let backend = parts.backend;
+            let opened = catalog::open(
+                &parts.cache_dir,
+                &backend.settings().unwrap_or_default(),
+                parts.client,
+                Arc::clone(&log) as deadloader_core::session::SharedLog,
+                Arc::clone(&log) as Arc<dyn deadloader_catalog::AppLog>,
+                &backend,
+                parts.outbox,
+            );
+            match &opened {
+                Ok(catalog) => {
+                    let follow = catalog.clone();
+                    backend.on_settings(Box::new(move |settings| follow.apply_settings(settings)));
+                    // A change saved while the catalog was opening.
+                    if let Ok(settings) = backend.settings() {
+                        catalog.apply_settings(&settings);
+                    }
+                    app.manage(crate::protocol::Images(Arc::new(catalog.clone())));
+                }
+                Err(message) => write(
+                    &log,
+                    Level::Error,
+                    "the catalog could not be opened",
+                    [("message", serde_json::to_value(message).unwrap_or_default())],
+                ),
+            }
+            slot.set(opened);
+        });
+    if let Err(e) = spawned {
+        write(
+            &log,
+            Level::Error,
+            "the catalog could not be opened",
+            [("error", e.to_string().into())],
+        );
+    }
 }
 
 /// Decision 143's watcher: looks for the game every [`push::GAME_POLL`] on its own thread, for the life of the process.
