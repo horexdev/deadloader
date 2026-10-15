@@ -1,6 +1,7 @@
 <!-- Activity's entry details (design: ActivityDetails, ActivityBlocked): what happened and why for a failure, the hops
      of a request, the full record, the note that the user name is hidden, Copy and "open logs folder". -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import Check from '@lucide/svelte/icons/check';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import CircleX from '@lucide/svelte/icons/circle-x';
@@ -207,7 +208,7 @@
       type="button"
       class="dl-btn dl-btn--ghost dl-btn--icon dl-btn--sm"
       aria-label={t('activity-close-details')}
-      title={t('activity-close-esc')}
+      {@attach tooltip({ text: t('activity-close-esc') ?? '' })}
       onclick={onclose}><X class="dl-icon" /></button
     >
   </div>

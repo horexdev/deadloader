@@ -2,6 +2,7 @@
      group is turned on. Names come from the folders inside the archive; GameBanana's file description is shown when
      the mod page is at hand. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import CircleDot from '@lucide/svelte/icons/circle-dot';
   import Download from '@lucide/svelte/icons/download';
   import { onMount } from 'svelte';
@@ -83,7 +84,7 @@
             checked={picked[g] === file.id}
             onchange={() => (picked[g] = file.id)}
           /><span class="dl-variant__dot"></span><span class="names"
-            ><span class="name">{variantName(file.inner_path)}</span><span class="dl-mono vpk" title={file.inner_path}>{fileName(file.inner_path)}</span></span
+            ><span class="name">{variantName(file.inner_path)}</span><span class="dl-mono vpk" {@attach tooltip({ text: file.inner_path ?? '' })}>{fileName(file.inner_path)}</span></span
           ><span class="dl-variant__size">{formatSize(file.len)}</span><span></span>
         </label>
       {/each}

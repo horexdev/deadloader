@@ -2,6 +2,7 @@
      files and app logs as virtualized tables with filters, search and a live view, and the details of an entry. The
      address can name an entry: `#/activity/<id>` opens it (error messages point at their log entry this way). -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import { notice } from '../../lib/notice.svelte';
   import ActivityIcon from '@lucide/svelte/icons/activity';
   import Archive from '@lucide/svelte/icons/archive';
@@ -510,7 +511,7 @@
               ? t('activity-hop-retry', { n: line.hop + 1, try: line.attempt ?? 1 })
               : t('activity-hop-redirect', { n: row.index + 1 })}</span
         >
-        <span class="act-url" title={line.url}
+        <span class="act-url" {@attach tooltip({ text: line.url ?? '' })}
           ><span class="act-url__m">{line.method}</span><span class="act-url__x"><b>{parts.host}</b>{parts.path}</span></span
         >
         <span class="act-c"
@@ -552,7 +553,7 @@
               tabindex="-1"
               aria-expanded={open ? 'true' : 'false'}
               aria-label={open ? t('activity-hide-redirects') : t('activity-show-redirects')}
-              title={open ? t('activity-hide-redirects') : t('activity-show-redirects')}
+              {@attach tooltip({ text: (open ? t('activity-hide-redirects') : t('activity-show-redirects')) ?? '' })}
               onclick={(event) => {
                 event.stopPropagation();
                 view.toggleHops(e.req);
@@ -560,9 +561,9 @@
               >{#if open}<ChevronDown class="dl-icon" />{:else}<ChevronRight class="dl-icon" />{/if}</button
             >{/if}</span
         >
-        <span class="act-c act-t" title={`${instant(ts)} · ${id}`}>{clock(ts)}</span>
+        <span class="act-c act-t" {@attach tooltip({ text: `${instant(ts)} · ${id}` })}>{clock(ts)}</span>
         <span class="act-c act-strong">{first ? purposeLabel(first.purpose) : ''}</span>
-        <span class="act-url" title={first?.url}
+        <span class="act-url" {@attach tooltip({ text: first?.url ?? '' })}
           ><span class="act-url__m">{first?.method}</span><span class="act-url__x"><b>{parts.host}</b>{parts.path}</span
           >{#if hasHops(e)}{@const counts = hopCounts(e)}<span class="act-url__hops"
               ><CornerDownRight class="dl-icon" />{[
@@ -586,7 +587,7 @@
       {:else if e.kind === 'files'}
         {@const r = e.record}
         {@const Icon = OP_ICONS[r.op]}
-        <span class="act-c act-t" title={`${instant(ts)} · ${id}`}>{clock(ts)}</span>
+        <span class="act-c act-t" {@attach tooltip({ text: `${instant(ts)} · ${id}` })}>{clock(ts)}</span>
         <span class="act-c"><span class="act-op"><Icon class="dl-icon" />{opLabel(r.op)}</span></span>
         <span class="act-ft"
           >{#if r.src}<PathTooltip path={r.src} />{/if}{#if r.src && r.dst}<ArrowRight
@@ -605,11 +606,11 @@
         >
         {#if fcols.change}{@const change = changeText(r)}<span
             class={['act-c', !r.change && 'act-t']}
-            title={r.txn === undefined ? undefined : `${change} · ${r.txn}`}>{change ?? '—'}</span
+            {@attach tooltip({ text: (r.txn === undefined ? undefined : `${change} · ${r.txn}`) ?? '' })}>{change ?? '—'}</span
           >{/if}
       {:else}
         {@const r = e.record}
-        <span class="act-c act-t" title={`${instant(ts)} · ${id}`}>{clock(ts)}</span>
+        <span class="act-c act-t" {@attach tooltip({ text: `${instant(ts)} · ${id}` })}>{clock(ts)}</span>
         <span class="act-c"
           ><span class={['act-st', `act-lv--${r.lvl}`]}
             >{#if r.lvl === 'error'}<CircleX class="dl-icon" />{:else if r.lvl === 'warn'}<TriangleAlert
@@ -617,7 +618,7 @@
               />{:else}<Info class="dl-icon" />{/if}{levelLabel(r.lvl)}</span
           ></span
         >
-        <span class="act-c act-strong" title={r.msg}>{r.msg}</span>
+        <span class="act-c act-strong" {@attach tooltip({ text: r.msg ?? '' })}>{r.msg}</span>
       {/if}
     </div>
   {/if}

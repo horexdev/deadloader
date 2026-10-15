@@ -2,6 +2,7 @@
      the installed ones (picked by name and size before anything is downloaded), Install / Later. When an update
      arrived without a clear partner for every old file, the same dialog asks the user to map them. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
   import Download from '@lucide/svelte/icons/download';
   import type { ModView, Proposed, RemoteModFile, UpdatePick, UpdateStatus, UpdateStep } from '../../lib/api';
@@ -97,7 +98,7 @@
       </div>
       {#each status.replaced as r (r.remote_file_id)}
         <div class="row" role="row">
-          <span role="cell" class="dl-mono old" title={r.archive_name}>{r.archive_name}</span>
+          <span role="cell" class="dl-mono old" {@attach tooltip({ text: r.archive_name ?? '' })}>{r.archive_name}</span>
           <span aria-hidden="true" class="arrow">→</span>
           <span role="cell" class="cell">
             <Select
@@ -122,7 +123,7 @@
           <span role="cell" class="dl-mono none">—</span>
           <span aria-hidden="true" class="arrow">→</span>
           <span role="cell" class="cell">
-            <span class="dl-mono new-file" title={f.file_name}>{f.file_name}</span>
+            <span class="dl-mono new-file" {@attach tooltip({ text: f.file_name ?? '' })}>{f.file_name}</span>
             <span class="dl-badge dl-badge--info tag">{t('library-d5-tag-new')}</span>
           </span>
         </div>
@@ -138,7 +139,7 @@
       {#each step.proposals as p (p.old)}
         {@const options = p.proposed.kind === 'tie' ? p.proposed.candidates : step.new_files}
         <div class="row" role="row">
-          <span role="cell" class="dl-mono old" title={fileLabel(mod, p.old)}>{fileLabel(mod, p.old)}</span>
+          <span role="cell" class="dl-mono old" {@attach tooltip({ text: fileLabel(mod, p.old) ?? '' })}>{fileLabel(mod, p.old)}</span>
           <span aria-hidden="true" class="arrow">→</span>
           <span role="cell" class="cell">
             <Select

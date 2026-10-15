@@ -2,6 +2,7 @@
      GameBanana has; download those (catalog on) or import without them. Either way the profile is selected, not
      applied (F14). -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import Download from '@lucide/svelte/icons/download';
   import HardDrive from '@lucide/svelte/icons/hard-drive';
   import Package from '@lucide/svelte/icons/package';
@@ -60,7 +61,7 @@
           {#if gamebanana}<Package class="dl-icon" />{:else}<HardDrive class="dl-icon" />{/if}
         </span>
         <div class="text">
-          <span class={['pf-miss__name', !gamebanana && 'dl-mono local-name']} title={m.name}>{m.name}</span>
+          <span class={['pf-miss__name', !gamebanana && 'dl-mono local-name']} {@attach tooltip({ text: m.name ?? '' })}>{m.name}</span>
           <span class="pf-miss__sub">
             {#if gamebanana}
               <span>{[t('profiles-gamebanana'), version].filter(Boolean).join(' · ')}</span>

@@ -2,6 +2,7 @@
      meta and counts, the files with their install state (136, 144), the description, credits, ratings, licence and
      alternate sources; favourite and "Open on GameBanana" (D1). -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import Check from '@lucide/svelte/icons/check';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
@@ -384,10 +385,10 @@
           <span>{t('catalog-views', { count: current.views })}</span>
           <span>{t('catalog-downloads', { count: current.downloads })}</span>
           {#if current.date_added}
-            <span title={exactTime(current.date_added)}>{t('catalog-added', { when: relativeTime(current.date_added) })}</span>
+            <span {@attach tooltip({ text: exactTime(current.date_added) ?? '' })}>{t('catalog-added', { when: relativeTime(current.date_added) })}</span>
           {/if}
           {#if current.date_updated}
-            <span title={exactTime(current.date_updated)}>{t('catalog-updated', { when: relativeTime(current.date_updated) })}</span>
+            <span {@attach tooltip({ text: exactTime(current.date_updated) ?? '' })}>{t('catalog-updated', { when: relativeTime(current.date_updated) })}</span>
           {/if}
         </div>
       </div>
@@ -444,7 +445,7 @@
                   type="button"
                   class="chip"
                   aria-label={t('catalog-gallery-previous')}
-                  title={t('catalog-gallery-previous')}
+                  {@attach tooltip({ text: t('catalog-gallery-previous') ?? '' })}
                   onclick={() => {
                     picture = (picture - 1 + current.gallery.length) % current.gallery.length;
                     original = false;
@@ -457,7 +458,7 @@
                   type="button"
                   class="chip"
                   aria-label={t('catalog-gallery-next')}
-                  title={t('catalog-gallery-next')}
+                  {@attach tooltip({ text: t('catalog-gallery-next') ?? '' })}
                   onclick={() => {
                     picture = (picture + 1) % current.gallery.length;
                     original = false;
@@ -546,7 +547,7 @@
             <div class="links">
               <strong>{t('catalog-sources')}</strong>
               {#each current.alternate_sources as source (source.url)}
-                <button type="button" class="dl-link linkbtn" title={source.url} onclick={() => void openLink(source.url)}
+                <button type="button" class="dl-link linkbtn" {@attach tooltip({ text: source.url ?? '' })} onclick={() => void openLink(source.url)}
                   >{source.description ?? source.url}<ExternalLink class="dl-icon" aria-label={t('catalog-opens-browser')} /></button
                 >
               {/each}
@@ -556,7 +557,7 @@
             <div class="links">
               <strong>{t('catalog-videos')}</strong>
               {#each current.embedded_media as url (url)}
-                <button type="button" class="dl-link linkbtn" title={url} onclick={() => void openLink(url)}
+                <button type="button" class="dl-link linkbtn" {@attach tooltip({ text: url ?? '' })} onclick={() => void openLink(url)}
                   >{url}<ExternalLink class="dl-icon" aria-label={t('catalog-opens-browser')} /></button
                 >
               {/each}
@@ -579,11 +580,11 @@
         : ''}
   <div class={['file', action.kind === 'installed' && 'file--active']}>
     <div class="file-text">
-      <span class="dl-mono file-name" title={file.file_name}>{file.file_name}</span>
+      <span class="dl-mono file-name" {@attach tooltip({ text: file.file_name ?? '' })}>{file.file_name}</span>
       <span class="file-meta"
         >{[file.description, formatSize(file.size_bytes), t('catalog-file-downloads', { count: file.download_count })]
           .filter(Boolean)
-          .join(' · ')}{state ? ` · ${state}` : ''}<span title={av.title}><Badge icon={av.icon} label={av.label} variant={av.variant} /></span></span
+          .join(' · ')}{state ? ` · ${state}` : ''}<span {@attach tooltip({ text: av.title ?? '' })}><Badge icon={av.icon} label={av.label} variant={av.variant} /></span></span
       >
     </div>
     {#if action.kind === 'installed'}

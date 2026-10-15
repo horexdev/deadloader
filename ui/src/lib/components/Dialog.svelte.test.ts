@@ -1,7 +1,7 @@
 import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 import { createRawSnippet } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
-import { destroy, keydown, one, render } from '../test/render';
+import { destroy, hoverTooltip, keydown, one, render } from '../test/render';
 import Dialog from './Dialog.svelte';
 
 const body = createRawSnippet(() => ({ render: () => '<p>2 versions · 18.4 MB. Used in 2 profiles.</p>' }));
@@ -109,7 +109,8 @@ describe('Dialog', () => {
     const { target } = render(Dialog, { title: 'x', children: body, footer, oncancel, closeLabel: 'Close (Esc)' });
     const close = one<HTMLButtonElement>(target, '.dl-dialog__head button');
     expect(close.getAttribute('aria-label')).toBe('Close (Esc)');
-    expect(close.title).toBe('Close (Esc)');
+    expect(close.hasAttribute('title')).toBe(false);
+    expect(hoverTooltip(close)).toBe('Close (Esc)');
     close.click();
     expect(oncancel).toHaveBeenCalledOnce();
   });

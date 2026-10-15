@@ -1,6 +1,7 @@
 <!-- Toggle (design: Toggle.md): a switch that takes effect at once. A native checkbox with role="switch", so Space
      flips it. It never asks "Are you sure?". -->
 <script lang="ts">
+  import { tooltip } from './tooltip';
   import FieldError from './FieldError.svelte';
   import Spinner from './Spinner.svelte';
 
@@ -43,7 +44,7 @@
   }
 </script>
 
-<label class={['dl-switch', error && 'is-error']} aria-busy={busy ? 'true' : undefined} {title}>
+<label class={['dl-switch', error && 'is-error']} aria-busy={busy ? 'true' : undefined} {@attach tooltip({ text: title ?? '' })}>
   <input
     class="dl-switch__input"
     type="checkbox"

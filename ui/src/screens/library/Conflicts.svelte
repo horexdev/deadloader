@@ -2,6 +2,7 @@
      files, who wins, the files by folder, and actions in place. After an action the pair stays with "Done — … · Undo"
      and no reverse swap. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -87,7 +88,7 @@
         {#each [{ m: winner, wins: true }, { m: loser, wins: false }] as side (side.wins)}
           <div class="side">
             <span class="dl-badge dl-badge--outline">#{side.m ? position(side.m.id) : '?'}</span>
-            <span class="name" title={side.m?.name}>{side.m?.name}</span>
+            <span class="name" {@attach tooltip({ text: side.m?.name ?? '' })}>{side.m?.name}</span>
             {#if off}
               <span class="dl-badge {side.wins ? 'dl-badge--outline' : 'dl-badge--success'}">
                 {side.wins ? t('library-off') : t('library-in-use')}

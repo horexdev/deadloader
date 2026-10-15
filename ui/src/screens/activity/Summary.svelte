@@ -2,6 +2,7 @@
      each, what was blocked, and today's changes in the game folder. Two columns when there is room, one line each in
      the compact form (narrow windows, low heights). -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import Folder from '@lucide/svelte/icons/folder';
   import Globe from '@lucide/svelte/icons/globe';
@@ -85,7 +86,7 @@
     {#if hasHosts}<div class="act-mono act-sum__hosts">{hostsLine}</div>{/if}
     <div class="act-sum__head">
       <Folder class="dl-icon" />
-      <strong>{t('activity-game-today')}</strong><span title={gameBreak}>{gameLine}</span>
+      <strong>{t('activity-game-today')}</strong><span {@attach tooltip({ text: gameBreak ?? '' })}>{gameLine}</span>
       {#if game.changes > 0}
         <button type="button" class="act-linkbtn" onclick={onfiles}>{t('activity-show-in-files')}</button>
       {/if}
@@ -105,7 +106,7 @@
               type="button"
               class="act-chip"
               aria-pressed={host === h.host ? 'true' : 'false'}
-              title={t('activity-host-title', { count: h.requests, source: sourceLong(h.source) })}
+              {@attach tooltip({ text: (t('activity-host-title', { count: h.requests, source: sourceLong(h.source) })) ?? '' })}
               onclick={() => onhost(h.host)}>{h.host}<span class="act-chip__n">{formatNumber(h.requests)}</span></button
             >
           {/each}

@@ -1,6 +1,7 @@
 <!-- One row of the queue (board Downloads): the mod, its stage, the progress bar and the lines under it, an inline
      error for a failed task (155), and the row's actions. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
   import CircleDot from '@lucide/svelte/icons/circle-dot';
   import CirclePlay from '@lucide/svelte/icons/circle-play';
@@ -133,7 +134,7 @@
     <div class="dl-progress__meta top">
       <span class="title">
         {#if href}
-          <a class="name" {href} title={t('downloads-open-mod', { name })}>{name}</a>
+          <a class="name" {href} {@attach tooltip({ text: t('downloads-open-mod', { name }) ?? '' })}>{name}</a>
         {:else}
           <span class="name">{name}</span>
         {/if}
@@ -154,8 +155,8 @@
     {/if}
     <div class="dl-progress__meta bottom">
       <span class="left">
-        <span class="dl-mono file" title={file}>{file}</span>
-        {#if meta.left}<span class="amounts" title={meta.left}>· {meta.left}</span>{/if}
+        <span class="dl-mono file" {@attach tooltip({ text: file ?? '' })}>{file}</span>
+        {#if meta.left}<span class="amounts" {@attach tooltip({ text: meta.left ?? '' })}>· {meta.left}</span>{/if}
       </span>
       {#if meta.right}<span class="right">{meta.right}</span>{/if}
     </div>
