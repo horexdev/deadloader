@@ -72,6 +72,14 @@ const EYE_OFF = [
   'm2 2 20 20',
 ];
 
+/** The design's spinner (`Spinner.svelte`): it turns only while it is in the DOM. */
+function spinner(): SVGSVGElement {
+  const svg = icon(['M21 12a9 9 0 1 1-6.219-8.56']);
+  svg.setAttribute('class', 'dl-spinner');
+  svg.setAttribute('stroke-width', '2.25');
+  return svg;
+}
+
 function index(element: Element, attribute: string): number {
   return Number(element.getAttribute(attribute));
 }
@@ -126,10 +134,24 @@ export function enhanceDescription(
     host.className = 'dl-mono';
     host.textContent = image.host;
     caption.append(host);
+    // A skeleton and a spinner under the picture until it has loaded; they leave the DOM then, so nothing turns.
+    const frame = document.createElement('span');
+    frame.className = 'dl-image__frame';
+    frame.setAttribute('aria-busy', 'true');
+    const skeleton = document.createElement('span');
+    skeleton.className = 'dl-skel';
+    skeleton.setAttribute('aria-hidden', 'true');
+    const busy = spinner();
+    img.addEventListener('load', () => {
+      skeleton.remove();
+      busy.remove();
+      frame.removeAttribute('aria-busy');
+    });
     img.addEventListener('error', () => {
       holder.replaceChildren(placeholder(image, texts.imageFailed));
     });
-    figure.append(img, caption);
+    frame.append(skeleton, busy, img);
+    figure.append(frame, caption);
     holder.replaceChildren(figure);
   };
   const placeholder = (image: DescriptionImage, state: string): HTMLButtonElement => {

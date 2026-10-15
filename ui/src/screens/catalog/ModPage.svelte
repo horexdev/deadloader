@@ -61,6 +61,9 @@
   let busyFile = $state<number | null>(null);
   /** The gallery's width in CSS pixels (0 until measured). */
   let galleryWidth = $state(0);
+  /** The gallery picture in view (loaded), and the last one that could not be loaded. */
+  let shownSrc = $state<string | null>(null);
+  let failedSrc = $state<string | null>(null);
 
   const mod = $derived(libraryModOf(app.library, section, id));
   const offline = $derived(app.network.kind === 'offline');
@@ -97,6 +100,8 @@
     picture = 0;
     original = false;
     revealed = false;
+    shownSrc = null;
+    failedSrc = null;
     void load();
   });
 
@@ -107,6 +112,16 @@
       void load(true);
     }
   });
+
+  function pictureLoaded(event: Event): void {
+    shownSrc = (event.currentTarget as HTMLImageElement).getAttribute('src');
+  }
+
+  /** A picture that can't be loaded: the one in view stays; a failed original brings "View original" back. */
+  function pictureFailed(event: Event): void {
+    failedSrc = (event.currentTarget as HTMLImageElement).getAttribute('src');
+    original = false;
+  }
 
   function back(): void {
     router.go('catalog');
@@ -395,12 +410,29 @@
     <div class="columns">
       <div class="column">
         {#if image && !current.nsfw_hidden}
-          <figure class="gallery" bind:clientWidth={galleryWidth}>
-            <img
-              src={imageUrl(original ? image.original : galleryPicture(image, galleryWidth, window.devicePixelRatio))}
-              alt={image.caption ?? t('catalog-gallery-alt', { name: current.name, index: picture + 1 })}
-              class={[blurred && 'blurred']}
-            />
+          {@const wanted = imageUrl(original ? image.original : galleryPicture(image, galleryWidth, window.devicePixelRatio))}
+          {@const pending = wanted !== shownSrc && wanted !== failedSrc}
+          <figure class="gallery" bind:clientWidth={galleryWidth} aria-busy={pending ? 'true' : undefined}>
+            {#if shownSrc === null && pending}
+              <span class="dl-skel cover" aria-hidden="true"></span>
+            {:else if shownSrc === null}
+              <span class="cover missing" aria-hidden="true"><ImageIcon class="dl-icon dl-icon--lg" /></span>
+            {/if}
+            <!-- The picture in view stays until the next one has loaded, under a spinner. Keyed by address, so the one
+                 in view keeps its element (and its decoded pixels) while the next one loads beside it. -->
+            {#each [shownSrc, wanted].filter((src, i, all) => src !== null && src !== failedSrc && all.indexOf(src) === i) as src (src)}
+              <img
+                {src}
+                alt={src === wanted ? (image.caption ?? t('catalog-gallery-alt', { name: current.name, index: picture + 1 })) : ''}
+                aria-hidden={src === wanted ? undefined : 'true'}
+                class={[blurred && 'blurred', src === wanted && pending && 'pending']}
+                onload={pictureLoaded}
+                onerror={pictureFailed}
+              />
+            {/each}
+            {#if pending}
+              <span class="busy"><Spinner /></span>
+            {/if}
             {#if blurred}
               <button type="button" class="reveal" onclick={() => (revealed = true)}
                 ><span><EyeOff class="dl-icon" /> {t('catalog-sensitive')}</span><small>{t('catalog-click-show')}</small></button
@@ -713,6 +745,40 @@
     height: 100%;
     object-fit: cover;
     object-position: 50% 30%;
+  }
+
+  /* Loading: the skeleton (first picture) or the picture in view stays under the spinner; the next one shows once
+     it has loaded. The spinner sits on the gallery chips' scrim so it reads on any picture. */
+  .gallery > :is(img, .cover) {
+    position: absolute;
+    inset: 0;
+  }
+
+  .gallery img.pending {
+    opacity: 0;
+  }
+
+  .cover {
+    border-radius: 0;
+  }
+
+  .missing {
+    display: grid;
+    place-items: center;
+    color: var(--ink-subtle);
+  }
+
+  .busy {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    padding: 6px;
+    color: var(--ink);
+    background: var(--scrim);
+    border-radius: 4px;
+    transform: translate(-50%, -50%);
   }
 
   .gallery img.blurred {

@@ -244,6 +244,54 @@ describe('the mod page (S3)', () => {
     expect(await shown(2)).toMatch(new RegExp(`/img/${image?.full}$`));
   });
 
+  it('shows a spinner while a gallery picture loads, over the picture shown until then', async () => {
+    const { modPage } = await import('../../mock/fixtures');
+    const gallery = modPage(0).gallery;
+    const { target } = await open('#/catalog/mod/700000');
+    const figure = target.querySelector('figure.gallery') as HTMLElement;
+    const imgs = () => [...figure.querySelectorAll<HTMLImageElement>('img')];
+    const srcOf = (img: HTMLImageElement | undefined) => img?.getAttribute('src')?.split('/img/')[1];
+    // First picture: a skeleton and a spinner until it has loaded.
+    expect(figure.getAttribute('aria-busy')).toBe('true');
+    expect(figure.querySelector('.dl-skel')).not.toBeNull();
+    expect(figure.querySelector('.dl-spinner')).not.toBeNull();
+    imgs()[0]?.dispatchEvent(new Event('load'));
+    flushSync();
+    expect(figure.hasAttribute('aria-busy')).toBe(false);
+    expect(figure.querySelector('.dl-skel, .dl-spinner')).toBeNull();
+    // The next picture: the current one stays in view under the spinner until the next one is in.
+    const inView = imgs()[0];
+    r.click(target.querySelector('[aria-label="Next image"]') as HTMLElement);
+    await settle();
+    expect(imgs().map(srcOf)).toEqual([gallery[0]?.preview, gallery[1]?.preview]);
+    expect(imgs()[0]).toBe(inView);
+    expect(inView?.getAttribute('aria-hidden')).toBe('true');
+    expect(figure.querySelector('.dl-spinner')).not.toBeNull();
+    expect(figure.querySelector('.dl-skel')).toBeNull();
+    imgs()[1]?.dispatchEvent(new Event('load'));
+    flushSync();
+    expect(imgs().map(srcOf)).toEqual([gallery[1]?.preview]);
+    expect(figure.querySelector('.dl-spinner')).toBeNull();
+    // "View original" fails: the picture in view stays and the button comes back.
+    r.click(button(target, 'View original'));
+    await settle();
+    expect(figure.querySelector('.dl-spinner')).not.toBeNull();
+    imgs()[1]?.dispatchEvent(new Event('error'));
+    flushSync();
+    expect(imgs().map(srcOf)).toEqual([gallery[1]?.preview]);
+    expect(figure.querySelector('.dl-spinner')).toBeNull();
+    expect(button(target, 'View original')).toBeTruthy();
+  });
+
+  it('keeps the missing-picture placeholder when a gallery picture can’t be loaded', async () => {
+    const { target } = await open('#/catalog/mod/700000');
+    const figure = target.querySelector('figure.gallery') as HTMLElement;
+    figure.querySelector('img')?.dispatchEvent(new Event('error'));
+    flushSync();
+    expect(figure.querySelector('img, .dl-spinner')).toBeNull();
+    expect(figure.querySelector('.missing svg')).not.toBeNull();
+  });
+
   it('opens GameBanana through D1', async () => {
     const { target } = await open('#/catalog/mod/700000');
     const { prompts } = await import('../../lib/prompts.svelte');

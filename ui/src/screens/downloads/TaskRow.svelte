@@ -81,6 +81,7 @@
   // The mod's picture (the catalog's id from the saved mod page); the placeholder without one or when it fails.
   const thumbnail = $derived(row.kind === 'task' ? (row.task.meta.thumbnail ?? null) : null);
   let failedPicture: string | null = $state(null);
+  let loadedPicture: string | null = $state(null);
   // E11 keeps the downloaded file: "Open folder" shows it, and says so for a moment (the design's "Opened").
   const keepsArchive = $derived(row.kind === 'task' && row.task.state.state === 'failed' && row.task.state.message.id === 'E11');
   let opened = $state(false);
@@ -102,7 +103,22 @@
 
 <div role="listitem" aria-label={`${name} — ${word}`} class={['row', `row--${row.stage}`]}>
   {#if thumbnail && failedPicture !== thumbnail}
-    <img class="thumb picture" src={imageUrl(thumbnail)} alt="" onerror={() => (failedPicture = thumbnail)} />
+    {@const loading = loadedPicture !== thumbnail}
+    <!-- A skeleton and a spinner under the picture until it has loaded; the picture covers them as it arrives. -->
+    <span class="frame" aria-busy={loading ? 'true' : undefined}>
+      {#if loading}
+        <span class="dl-skel cover" aria-hidden="true"></span>
+        <Spinner class="cover-spinner" />
+      {/if}
+      <img
+        class={['thumb picture', loading && 'pending']}
+        src={imageUrl(thumbnail)}
+        alt=""
+        decoding="async"
+        onload={() => (loadedPicture = thumbnail)}
+        onerror={() => (failedPicture = thumbnail)}
+      />
+    </span>
   {:else}
     <span class="thumb" aria-hidden="true"></span>
   {/if}
@@ -246,6 +262,33 @@
     object-fit: cover;
     object-position: 50% 30%;
     border: 0;
+  }
+
+  .frame {
+    display: grid;
+    align-self: start;
+  }
+
+  .frame > :global(*) {
+    grid-area: 1 / 1;
+  }
+
+  .cover {
+    width: 64px;
+    height: 36px;
+    margin-top: 2px;
+    border-radius: 4px;
+  }
+
+  .frame > :global(.cover-spinner) {
+    place-self: center;
+    margin-top: 2px;
+    color: var(--ink-subtle);
+  }
+
+  /* Until it has pixels the picture's own box stays clear, so the skeleton under it shows. */
+  .picture.pending {
+    background: none;
   }
 
   .dl-progress {

@@ -3,25 +3,20 @@ import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { firstLoadBudget } from './build/budget.ts';
+import { mockPicture } from './build/mock-pictures.ts';
 
-/**
- * `pnpm dev:mock` only: catalog pictures as coloured placeholders, so screens can be previewed in a browser without
- * the core's image protocol.
- */
+/** `pnpm dev:mock` only: catalog pictures as coloured placeholders (`build/mock-pictures.ts`). */
 function mockPictures(): Plugin {
   return {
     name: 'deadloader-mock-pictures',
     configureServer(server) {
       server.middlewares.use('/__mock/img', (req, res) => {
-        const id = (req.url ?? '').replace(/^\//, '');
-        const hue = parseInt(id.slice(0, 6) || '0', 16) % 360;
-        res.setHeader('Content-Type', 'image/svg+xml');
-        res.end(
-          `<svg xmlns="http://www.w3.org/2000/svg" width="530" height="298" viewBox="0 0 530 298">` +
-            `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
-            `<stop offset="0" stop-color="hsl(${hue} 45% 38%)"/><stop offset="1" stop-color="hsl(${(hue + 60) % 360} 45% 22%)"/>` +
-            `</linearGradient></defs><rect width="530" height="298" fill="url(#g)"/></svg>`,
-        );
+        const reply = mockPicture(req.url ?? '', req.headers.referer);
+        setTimeout(() => {
+          res.statusCode = reply.status;
+          res.setHeader('Content-Type', 'image/svg+xml');
+          res.end(reply.body);
+        }, reply.delayMs);
       });
     },
   };

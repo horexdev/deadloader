@@ -86,6 +86,22 @@ describe('a mod description (S3)', () => {
     expect(root.querySelector('[data-dl-image="0"] figcaption')?.textContent).toBe('i.imgur.com');
     img?.dispatchEvent(new Event('error'));
     expect(root.querySelector('[data-dl-image="0"]')?.textContent).toContain('couldn’t be loaded');
+    expect(root.querySelector('[data-dl-image="0"] .dl-spinner')).toBeNull();
+  });
+
+  it('shows a skeleton and a spinner where a picture loads, until it has loaded', () => {
+    const { root } = setup();
+    const holder = root.querySelector('[data-dl-image="2"]') as HTMLElement;
+    const frame = holder.querySelector('.dl-image__frame') as HTMLElement;
+    expect(frame.getAttribute('aria-busy')).toBe('true');
+    expect(frame.querySelector('.dl-skel')).not.toBeNull();
+    expect(frame.querySelector('svg.dl-spinner')?.getAttribute('aria-hidden')).toBe('true');
+    // Under the picture, which covers them as it arrives.
+    expect(frame.lastElementChild?.tagName).toBe('IMG');
+    frame.querySelector('img')?.dispatchEvent(new Event('load'));
+    expect(frame.hasAttribute('aria-busy')).toBe(false);
+    expect(frame.querySelector('.dl-skel, .dl-spinner')).toBeNull();
+    expect(frame.querySelector('img')).not.toBeNull();
   });
 
   it('turns a YouTube embed into a card that opens the video in the browser', () => {

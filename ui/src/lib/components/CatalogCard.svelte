@@ -11,6 +11,7 @@
   import WifiOff from '@lucide/svelte/icons/wifi-off';
   import Badge, { type BadgeVariant } from './Badge.svelte';
   import Button from './Button.svelte';
+  import Spinner from './Spinner.svelte';
   import type { IconComponent } from './types';
 
   export interface CardBadge {
@@ -101,8 +102,12 @@
   }: Props = $props();
 
   let failedSrc: string | null = $state(null);
+  let loadedSrc: string | null = $state(null);
   const src = $derived(nsfw ? nsfw.blurredThumb : thumb);
   const missing = $derived(src === null || src === failedSrc);
+  // The thumbnail's skeleton and spinner sit under the picture until it has loaded; then they leave the DOM, so
+  // nothing turns while idle.
+  const loading = $derived(!missing && src !== loadedSrc);
 
   function handleLinkClick(event: MouseEvent) {
     if (offline) {
@@ -121,14 +126,25 @@
 <!-- aria-disabled on the card is the design stylesheet's hook for the dimmed image; the link carries it for AT. -->
 <!-- svelte-ignore a11y_role_supports_aria_props_implicit -->
 <article class={['dl-card', error && 'is-error']} aria-disabled={offline ? 'true' : undefined}>
-  <div class={['dl-card__thumb', nsfw && 'dl-card__thumb--blurred']}>
+  <div class={['dl-card__thumb', nsfw && 'dl-card__thumb--blurred']} aria-busy={loading ? 'true' : undefined}>
     {#if missing}
       <div class="dl-card__thumb-missing"><ImageIcon class="dl-icon dl-icon--lg" /></div>
     {:else}
-      <img src={src ?? undefined} alt="" loading="lazy" onerror={() => {
-          failedSrc = src;
+      {#if loading}
+        <span class="dl-skel dl-skel--thumb placeholder" aria-hidden="true"></span>
+        <Spinner class="placeholder-spinner" />
+      {/if}
+      <img
+        src={src ?? undefined}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        onload={(event) => (loadedSrc = event.currentTarget.getAttribute('src'))}
+        onerror={(event) => {
+          failedSrc = event.currentTarget.getAttribute('src');
           onthumberror?.();
-        }} />
+        }}
+      />
     {/if}
     {#if nsfw}
       <div class="dl-card__nsfw"><span><EyeOff class="dl-icon" /> {nsfw.label}</span><small>{nsfw.hint}</small></div>
@@ -191,3 +207,24 @@
     </div>
   </div>
 </article>
+
+<style>
+  /* Loading (design: Skeleton.md, the card's `--thumb` block): the skeleton fills the 16:9 box with the spinner in
+     its middle, and the picture is drawn over both as soon as it has pixels. */
+  .placeholder {
+    position: absolute;
+    inset: 0;
+    min-width: 0;
+  }
+
+  .dl-card__thumb :global(.placeholder-spinner) {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    color: var(--ink-subtle);
+  }
+
+  .dl-card__thumb img {
+    position: relative;
+  }
+</style>

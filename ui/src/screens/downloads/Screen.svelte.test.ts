@@ -78,6 +78,12 @@ describe('the Downloads screen (S6)', () => {
     expect(img.getAttribute('src')).toBe(`https://dl.localhost/img/${task?.meta.thumbnail}`);
     expect(img.getAttribute('alt')).toBe('');
     expect(row.querySelector('span.thumb')).toBeNull();
+    // A skeleton and a spinner under the picture until it has loaded.
+    expect(one(row, '[aria-busy="true"] .dl-skel')).toBeTruthy();
+    expect(one(row, '[aria-busy="true"] .dl-spinner')).toBeTruthy();
+    img.dispatchEvent(new Event('load'));
+    flushSync();
+    expect(row.querySelector('[aria-busy="true"], .dl-skel, .dl-spinner')).toBeNull();
     const plainRow = rowNamed(target, 'Always Show Item Icons');
     expect(plainRow.querySelector('img')).toBeNull();
     expect(plainRow.querySelector('span.thumb')).not.toBeNull();
@@ -85,6 +91,7 @@ describe('the Downloads screen (S6)', () => {
     flushSync();
     expect(row.querySelector('img')).toBeNull();
     expect(row.querySelector('span.thumb')).not.toBeNull();
+    expect(row.querySelector('.dl-spinner')).toBeNull();
   });
 
   it('pauses, resumes and cancels a download', async () => {
