@@ -10,7 +10,7 @@ type Pattern = NonNullable<Message['value']>;
 type Expression = Exclude<Extract<Pattern, unknown[]>[number], string>;
 type Select = Extract<Expression, { type: 'select' }>;
 
-const sources = import.meta.glob<string>('./locales/*.ftl', { query: '?raw', import: 'default', eager: true });
+const sources = import.meta.glob<string>('./locales/*/*.ftl', { query: '?raw', import: 'default', eager: true });
 const crates = import.meta.glob<string>('../../../crates/*/src/**/*.rs', {
   query: '?raw',
   import: 'default',
@@ -41,12 +41,22 @@ function reasonsSent(rust: string): [string, string][] {
   return pairs;
 }
 
-function source(lang: Lang): string {
-  const text = sources[`./locales/${lang}.ftl`];
+/** A file of a language: `messages.ftl` (spec 04-messages) or a screen area's texts. */
+function source(lang: Lang, file = 'messages.ftl'): string {
+  const text = sources[`./locales/${lang}/${file}`];
   if (text === undefined) {
-    throw new Error(`locales/${lang}.ftl is missing`);
+    throw new Error(`locales/${lang}/${file} is missing`);
   }
   return text;
+}
+
+/** The files of a language folder, by name. */
+function filesOf(lang: Lang): string[] {
+  const prefix = `./locales/${lang}/`;
+  return Object.keys(sources)
+    .filter((path) => path.startsWith(prefix))
+    .map((path) => path.slice(prefix.length))
+    .sort();
 }
 
 function messages(lang: Lang): Map<string, Message> {
@@ -112,15 +122,65 @@ function pluralCategories(lang: Lang): { integers: Set<string>; all: Set<string>
   return { integers, all: new Set(rules.resolvedOptions().pluralCategories) };
 }
 
+const areas = filesOf('en').filter((file) => file !== 'messages.ftl');
+
+function declaredIn(text: string): string[] {
+  return [...text.matchAll(/^(-?[a-zA-Z][\w-]*)\s*=/gm)].map((m) => m[1] ?? '');
+}
+
 describe('locale files', () => {
   it('exist for exactly the sixteen languages', () => {
-    expect(Object.keys(sources).sort()).toEqual(LANGS.map((lang) => `./locales/${lang}.ftl`).sort());
+    const folders = new Set(Object.keys(sources).map((path) => path.split('/')[2]));
+    expect([...folders].sort()).toEqual([...LANGS].sort());
   });
 
-  it.each(LANGS)('%s parses completely: every entry in the file is understood', (lang) => {
-    // Fluent skips what it can't parse; an entry that went missing this way shows up here.
-    const declared = [...source(lang).matchAll(/^(-?[a-zA-Z][\w-]*)\s*=/gm)].map((m) => m[1]);
-    expect(new FluentResource(source(lang)).body.map((entry) => entry.id)).toEqual(declared);
+  it.each(others)('%s has the same files as English', (lang) => {
+    expect(filesOf(lang)).toEqual(filesOf('en'));
+  });
+
+  it.each(LANGS)('%s parses completely: every entry in every file is understood', (lang) => {
+    for (const file of filesOf(lang)) {
+      // Fluent skips what it can't parse; an entry that went missing this way shows up here.
+      const text = source(lang, file);
+      expect(new FluentResource(text).body.map((entry) => entry.id), file).toEqual(declaredIn(text));
+    }
+  });
+
+  it.each(LANGS)('%s defines every text once, across its files', (lang) => {
+    const all = filesOf(lang).flatMap((file) => declaredIn(source(lang, file)));
+    expect(all.filter((id, i) => all.indexOf(id) !== i)).toEqual([]);
+  });
+});
+
+describe.runIf(areas.length > 0)('the texts of the screens', () => {
+  const entries = (lang: Lang, file: string) =>
+    new Map(
+      new FluentResource(source(lang, file)).body
+        .filter((entry) => !entry.id.startsWith('-'))
+        .map((entry) => [entry.id, entry as Message]),
+    );
+
+  it.each(others)('%s translates exactly the English texts, with the same variables', (lang) => {
+    for (const file of areas) {
+      const en = entries('en', file);
+      const translated = entries(lang, file);
+      expect([...translated.keys()].sort(), file).toEqual([...en.keys()].sort());
+      for (const [id, message] of en) {
+        const theirs = translated.get(id);
+        if (!theirs) {
+          continue;
+        }
+        const ours = patterns(message);
+        const mine = patterns(theirs);
+        expect([...mine.keys()].sort(), `${file} ${id}`).toEqual([...ours.keys()].sort());
+        for (const [attr, pattern] of ours) {
+          const other = mine.get(attr);
+          if (other !== undefined) {
+            expect([...variables(other)].sort(), `${file} ${id}.${attr}`).toEqual([...variables(pattern)].sort());
+          }
+        }
+      }
+    }
   });
 });
 
