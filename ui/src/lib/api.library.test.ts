@@ -29,6 +29,7 @@ describe('library api', () => {
     await library.verifyGameFiles();
     await library.show({ kind: 'foreign', name: 'pak01_dir.vpk' }, false);
     await library.show({ kind: 'mod_files', mod_id: 'gb-1' }, false);
+    await library.remove('gb-1', null, 'recycle_bin');
     expect(invoke.mock.calls).toEqual([
       ['pending', {}],
       ['pending_revert', { modId: 'gb-1', aspect: 'order' }],
@@ -41,6 +42,7 @@ describe('library api', () => {
       ['verify_game_files', {}],
       ['show_place', { place: { kind: 'foreign', name: 'pak01_dir.vpk' }, asFile: false }],
       ['show_place', { place: { kind: 'mod_files', mod_id: 'gb-1' }, asFile: false }],
+      ['remove', { modId: 'gb-1', files: null, deletion: 'recycle_bin' }],
     ]);
   });
 

@@ -750,6 +750,9 @@ export const library = {
   /** D10; `fix` ("Check again") adds our line to an original file. */
   gameinfo: (fix: boolean) => call<GameinfoStatus>('gameinfo_status', { fix }),
   verifyGameFiles: () => call<null>('verify_game_files'),
+  /** D6: delete a mod (no `files`) or some of its files, permanently or to the recycle bin for this deletion only. */
+  remove: (modId: string, files: string[] | null, deletion: 'permanent' | 'recycle_bin') =>
+    call<Removed>('remove', { modId, files, deletion }),
   /** Notepad (`asFile`) or File Explorer with the item selected. */
   show: (place: Place, asFile: boolean) => call<null>('show_place', { place, asFile }),
 };
