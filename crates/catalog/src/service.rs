@@ -948,6 +948,20 @@ where
                 self.reached();
                 CatalogError::NotFound { other_game: None }
             }
+            // An error page, not GameBanana's error document: a refusal (often temporary), not an API change (181).
+            gamebanana::Error::Fetch(FetchError::Status { status, .. })
+                if (400..500).contains(&status) =>
+            {
+                self.reached();
+                CatalogError::Refused {
+                    message: self.report(
+                        Level::Warn,
+                        "GameBanana refused the request",
+                        &detail,
+                        UserMessage::new(MessageId::E25).arg("status", status),
+                    ),
+                }
+            }
             gamebanana::Error::ApiChanged(_)
             | gamebanana::Error::Fetch(FetchError::Status { .. }) => self.api_changed(&detail),
             gamebanana::Error::Fetch(FetchError::Transport(_)) => match failure {

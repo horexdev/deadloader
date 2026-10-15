@@ -203,6 +203,12 @@ e23 = deadloader 자체 파일을 읽을 수 없습니다: { $file }
             [manifest] manifest.json.bak을 복원하거나 deadloader를 업데이트하세요.
            *[other] 백업에서 파일을 복원하거나 deadloader를 업데이트하세요.
         }
+e24 = 이 파일은 더 이상 GameBanana에 없습니다.
+    .why = 작성자가 파일을 삭제하거나 교체했습니다(HTTP { $status }).
+    .todo = 모드 페이지를 열어 다른 파일을 선택하거나 모드 업데이트가 있는지 확인하세요.
+e25 = GameBanana가 요청을 거부했습니다.
+    .why = 서버 응답 코드: { $status }. 보통 일시적인 문제입니다.
+    .todo = 나중에 다시 시도하세요. 계속 발생하면 deadloader의 GitHub 페이지에 알려 주세요.
 internal = deadloader 내부에서 문제가 발생했습니다.
     .why = 사용자의 잘못이 아니라 deadloader의 오류입니다.
     .todo = 다시 시도하세요. 문제가 반복되면 세부 정보에 있는 로그 항목과 함께 신고해 주세요.

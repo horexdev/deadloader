@@ -282,6 +282,28 @@ fn retry_now_tells_the_ui_that_the_wait_is_over() {
 }
 
 #[test]
+fn a_refusal_without_an_api_answer_is_e25_not_an_api_change() {
+    let h = online();
+    // A firewall's or a CDN's error page instead of GameBanana's JSON (here: an empty one).
+    h.on(&newest_url(2), Reply::status(403));
+    let err = h
+        .catalog
+        .list(&newest(2), Initiator::User)
+        .expect_err("refused");
+    let CatalogError::Refused { message } = &err else {
+        panic!("{err:?}");
+    };
+    assert_eq!(message.id, MessageId::E25);
+    assert_eq!(message.args["status"], "403");
+    assert!(message.args.contains_key("log_id"), "{message:?}");
+    assert_eq!(
+        h.catalog.status(),
+        Status::Online,
+        "not \"the API changed\""
+    );
+}
+
+#[test]
 fn a_changed_api_maps_to_e4_and_clears_on_success() {
     let h = online();
     h.on(&newest_url(2), Reply::ok(b"<html>maintenance</html>"));

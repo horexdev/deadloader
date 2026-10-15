@@ -838,7 +838,8 @@ fn a_missing_file_fails_with_its_status() {
     let message = message_of(h.events.last_state(id));
     assert_eq!(
         (message.id, arg(&message, "status")),
-        (MessageId::E6, Some("404"))
+        (MessageId::E24, Some("404")),
+        "gone from GameBanana, not \"it will resume\" (173)"
     );
 }
 

@@ -235,6 +235,12 @@ e23 = deadloader no puede leer su archivo { $file }.
             [manifest] Restaura manifest.json.bak o actualiza deadloader.
            *[other] Restaura el archivo desde una copia de seguridad o actualiza deadloader.
         }
+e24 = El archivo ya no está en GameBanana.
+    .why = El autor lo eliminó o lo reemplazó (HTTP { $status }).
+    .todo = Abre la página del mod para elegir otro archivo, o busca actualizaciones del mod.
+e25 = GameBanana rechazó la solicitud.
+    .why = El servidor respondió con el código { $status }. Suele ser algo temporal.
+    .todo = Vuelve a intentarlo más tarde. Si sigue pasando, repórtalo en la página de GitHub de deadloader.
 internal = Algo falló dentro de deadloader.
     .why = Es un error de deadloader, no algo que hiciste tú.
     .todo = Vuelve a intentarlo. Si vuelve a ocurrir, repórtalo junto con la entrada del registro de Detalles.

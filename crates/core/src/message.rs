@@ -49,6 +49,10 @@ pub enum MessageId {
     E22,
     /// One of deadloader's own files (settings, manifest) can't be read.
     E23,
+    /// A download's file is no longer on GameBanana (404/403/410): removed or replaced by the author (173).
+    E24,
+    /// GameBanana refused a request with a final 4xx that is not an API answer (181).
+    E25,
     Internal,
 }
 

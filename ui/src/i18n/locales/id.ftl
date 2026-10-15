@@ -203,6 +203,12 @@ e23 = deadloader tidak dapat membaca file miliknya, { $file }.
             [manifest] Pulihkan manifest.json.bak, atau perbarui deadloader.
            *[other] Pulihkan file dari cadangan, atau perbarui deadloader.
         }
+e24 = File ini sudah tidak ada di GameBanana.
+    .why = Pembuatnya telah menghapus atau menggantinya (HTTP { $status }).
+    .todo = Buka halaman mod untuk memilih file lain, atau periksa apakah ada pembaruan mod.
+e25 = GameBanana menolak permintaan.
+    .why = Server menjawab dengan kode { $status }. Biasanya ini hanya sementara.
+    .todo = Coba lagi nanti. Jika terus terjadi, laporkan di halaman GitHub deadloader.
 internal = Terjadi kesalahan di dalam deadloader.
     .why = Ini kesalahan deadloader, bukan kesalahan Anda.
     .todo = Coba lagi. Jika terjadi lagi, laporkan beserta entri log dari Detail.

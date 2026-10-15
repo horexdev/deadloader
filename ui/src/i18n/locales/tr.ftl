@@ -235,6 +235,12 @@ e23 = deadloader kendi dosyasını okuyamıyor: { $file }.
             [manifest] manifest.json.bak dosyasını geri yükleyin veya deadloader’ı güncelleyin.
            *[other] Dosyayı bir yedekten geri yükleyin veya deadloader’ı güncelleyin.
         }
+e24 = Dosya artık GameBanana’da yok.
+    .why = Yazarı dosyayı kaldırdı veya değiştirdi (HTTP { $status }).
+    .todo = Başka bir dosya seçmek için mod sayfasını açın veya modun güncellemesi olup olmadığını kontrol edin.
+e25 = GameBanana isteği reddetti.
+    .why = Sunucu { $status } koduyla yanıt verdi. Bu genellikle geçicidir.
+    .todo = Daha sonra yeniden deneyin. Sorun devam ederse deadloader’ın GitHub sayfasında bildirin.
 internal = deadloader’ın içinde bir şeyler ters gitti.
     .why = Bu sizin değil, deadloader’ın hatası.
     .todo = Yeniden deneyin. Tekrar olursa Ayrıntılar’daki günlük kaydıyla birlikte bildirin.

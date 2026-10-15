@@ -203,6 +203,12 @@ e23 = deadloader 无法读取其文件 { $file }。
             [manifest] 请恢复 manifest.json.bak，或更新 deadloader。
            *[other] 请从备份中恢复该文件，或更新 deadloader。
         }
+e24 = 该文件已不在 GameBanana 上。
+    .why = 作者已将其删除或替换（HTTP { $status }）。
+    .todo = 请打开模组页面选择其他文件，或检查该模组是否有更新。
+e25 = GameBanana 拒绝了请求。
+    .why = 服务器返回了代码 { $status }。这通常是暂时的。
+    .todo = 请稍后重试。如果问题持续出现，请在 deadloader 的 GitHub 页面上报告。
 internal = deadloader 内部出现了问题。
     .why = 这是 deadloader 的错误，并非你的操作导致。
     .todo = 请重试。如果问题再次出现，请附上“详细信息”中的日志条目进行报告。
