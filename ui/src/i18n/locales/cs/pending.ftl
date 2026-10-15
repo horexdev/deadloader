@@ -111,3 +111,19 @@ library-d5-confirm-map = Použít tyto soubory
 library-update-downloading = Aktualizace { $name } se stahuje — nainstaluje se, jakmile dorazí.
 library-updated = { $name } aktualizován.
 library-updated-text = Aktivní v každém profilu, který používal starou verzi. Stará verze zůstává — můžete se k ní vrátit v podrobnostech modu.
+
+## N12: the changes applied when Deadlock was closed, each in a few words
+library-n12-on = { $name }: zapnuto
+library-n12-off = { $name }: vypnuto
+library-n12-above = { $name }: přesunut nad { $other }
+library-n12-below = { $name }: přesunut pod { $other }
+library-n12-switched = { $name }: přepnuto na { $to }
+library-n12-files = { $name }: soubory změněny
+
+## S9: the file list of a pending apply
+library-show-file-list = Zobrazit seznam souborů
+library-hide-file-list = Skrýt seznam souborů
+library-file-list = Soubory ve složce hry
+library-files-added = Přidané · { $count }
+library-files-removed = Odebrané · { $count }
+library-files-renumbered = Přečíslované · { $count }

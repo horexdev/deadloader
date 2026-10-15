@@ -34,6 +34,24 @@ library-switch-why-first = Apply { $name } now, or press Play — deadloader app
 library-review-switch = Review switch
 library-applying-what = Applying profile { $name }…
 library-applying-why = You can keep browsing; Play is back when this finishes.
+library-applying-step = Step { $done } of { $total }
+library-applying-linked =
+    { $count ->
+        [one] { $count } file linked
+       *[other] { $count } files linked
+    }
+library-applying-copied =
+    { $count ->
+        [one] { $count } file copied
+       *[other] { $count } files copied
+    }
+library-applying-both =
+    { $linked ->
+        [one] { $linked } file linked
+       *[other] { $linked } files linked
+    }, { $copied } copied
+library-applying-left-seconds = About { $seconds } s left
+library-applying-left-minutes = About { $minutes } min { $seconds } s left
 library-show = Show
 library-tab-all = All
 library-tab-enabled = Enabled

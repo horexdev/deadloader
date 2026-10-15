@@ -38,6 +38,7 @@ impl GameWatch {
         match backend.game_closed() {
             Ok(Some(after)) => outbox.send(UiEvent::AppliedAfterGame {
                 changes: after.changes,
+                items: after.items,
                 library: after.library,
             }),
             Ok(None) => {}
@@ -128,10 +129,20 @@ mod tests {
         watch.tick(&backend, &outbox);
         let events = ui.take();
         assert_eq!(events[0], UiEvent::Game { running: false });
-        let UiEvent::AppliedAfterGame { changes, library } = &events[1] else {
+        let UiEvent::AppliedAfterGame {
+            changes,
+            items,
+            library,
+        } = &events[1]
+        else {
             panic!("{events:?}");
         };
         assert_eq!(*changes, 1);
+        // N12 names what went in, as data the UI words.
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].mod_id, id);
+        assert_eq!(items[0].name, library.mods[0].name);
+        assert_eq!(items[0].change, deadloader_core::pending::Change::Disable);
         assert!(!library.pending);
         assert!(!f.addons().join("pak01_dir.vpk").exists());
     }

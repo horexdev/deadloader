@@ -111,3 +111,19 @@ library-d5-confirm-map = Использовать эти файлы
 library-update-downloading = Обновление { $name } скачивается — оно будет установлено, когда загрузится.
 library-updated = { $name } обновлён.
 library-updated-text = Активен во всех профилях, где была старая версия. Старая версия сохранена — вернуться можно в сведениях о моде.
+
+## N12: the changes applied when Deadlock was closed, each in a few words
+library-n12-on = { $name }: включён
+library-n12-off = { $name }: выключен
+library-n12-above = { $name }: перемещён над { $other }
+library-n12-below = { $name }: перемещён под { $other }
+library-n12-switched = { $name }: переключён на { $to }
+library-n12-files = { $name }: файлы изменены
+
+## S9: the file list of a pending apply
+library-show-file-list = Показать список файлов
+library-hide-file-list = Скрыть список файлов
+library-file-list = Файлы в папке игры
+library-files-added = Добавятся · { $count }
+library-files-removed = Удалятся · { $count }
+library-files-renumbered = Сменят номер · { $count }

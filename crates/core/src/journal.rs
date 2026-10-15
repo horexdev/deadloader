@@ -7,7 +7,7 @@
 //! checked against the real files, since a step may have run without its `done` record — and back otherwise.
 
 use crate::fs::FileOps;
-use crate::place::{PlaceError, place};
+use crate::place::{PlaceError, Placement, place_with};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::io::{self, Write};
@@ -119,6 +119,18 @@ impl std::fmt::Display for TxError {
 
 impl std::error::Error for TxError {}
 
+/// What a running transaction reports, for progress in the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepEvent {
+    /// A copy wrote this many more bytes.
+    Bytes(u64),
+    /// Step `index` is done; a placed file says whether it was linked or copied.
+    Done {
+        index: usize,
+        placement: Option<Placement>,
+    },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Recovery {
     /// No interrupted transaction.
@@ -150,6 +162,19 @@ pub fn run_with(
     meta: serde_json::Value,
     on_commit: impl FnOnce() -> io::Result<()>,
 ) -> Result<(), TxError> {
+    run_reporting(fs, store, tx, steps, meta, on_commit, &mut |_| {})
+}
+
+/// [`run_with`], telling `report` about each step as it is done and about the bytes of copies as they are written.
+pub fn run_reporting(
+    fs: &impl FileOps,
+    store: &impl JournalStore,
+    tx: u64,
+    steps: &[Step],
+    meta: serde_json::Value,
+    on_commit: impl FnOnce() -> io::Result<()>,
+    report: &mut dyn FnMut(StepEvent),
+) -> Result<(), TxError> {
     let split = deletions_start(steps).ok_or(TxError::Invalid)?;
     append(
         store,
@@ -161,14 +186,18 @@ pub fn run_with(
     )
     .map_err(TxError::Journal)?;
     for (index, step) in steps[..split].iter().enumerate() {
-        if let Err(error) = execute(fs, step) {
-            abort(fs, store, &steps[..=index]);
-            return Err(TxError::Step { index, error });
-        }
+        let placement = match execute_with(fs, step, &mut |n| report(StepEvent::Bytes(n))) {
+            Ok(placement) => placement,
+            Err(error) => {
+                abort(fs, store, &steps[..=index]);
+                return Err(TxError::Step { index, error });
+            }
+        };
         if let Err(e) = append(store, &Record::Done { tx, step: index }) {
             abort(fs, store, &steps[..=index]);
             return Err(TxError::Journal(e));
         }
+        report(StepEvent::Done { index, placement });
     }
     if let Err(e) = append(store, &Record::Commit { tx }) {
         abort(fs, store, &steps[..split]);
@@ -176,6 +205,12 @@ pub fn run_with(
     }
     on_commit().map_err(TxError::Cleanup)?;
     cleanup(fs, &steps[split..]).map_err(TxError::Cleanup)?;
+    for index in split..steps.len() {
+        report(StepEvent::Done {
+            index,
+            placement: None,
+        });
+    }
     store.clear().map_err(TxError::Cleanup)
 }
 
@@ -290,14 +325,25 @@ fn append(store: &impl JournalStore, record: &Record) -> io::Result<()> {
 }
 
 fn execute(fs: &impl FileOps, step: &Step) -> Result<(), PlaceError> {
+    execute_with(fs, step, &mut |_| {}).map(|_| ())
+}
+
+/// Runs one step; a placed file says how it was placed, and a copy tells `on_bytes` as it goes.
+fn execute_with(
+    fs: &impl FileOps,
+    step: &Step,
+    on_bytes: &mut dyn FnMut(u64),
+) -> Result<Option<Placement>, PlaceError> {
     match step {
         Step::Place {
             source,
             dest,
             sha256,
-        } => place(fs, source, dest, sha256).map(|_| ()),
-        Step::Rename { from, to } => fs.rename(from, to).map_err(PlaceError::Io),
-        Step::Delete { path } => remove_if_present(fs, path).map_err(PlaceError::Io),
+        } => place_with(fs, source, dest, sha256, on_bytes).map(Some),
+        Step::Rename { from, to } => fs.rename(from, to).map(|()| None).map_err(PlaceError::Io),
+        Step::Delete { path } => remove_if_present(fs, path)
+            .map(|()| None)
+            .map_err(PlaceError::Io),
     }
 }
 
@@ -507,6 +553,60 @@ mod tests {
         run(&fs, &store, 1, &steps).expect("applied");
         assert_eq!(fs.snapshot(), after_state());
         assert!(store.read_all().expect("read").is_empty());
+    }
+
+    #[test]
+    fn a_transaction_reports_each_step_and_the_bytes_of_copies() {
+        let (fs, store, mut steps) = scenario();
+        // B comes from another drive, so it is copied.
+        let fs = fs.volume("E:", true).with(r"E:\lib\b.vpk", b"mod B");
+        steps[1] = Step::Place {
+            source: p(r"E:\lib\b.vpk"),
+            dest: p(r"D:\addons\~dl-2.tmp"),
+            sha256: sha256(b"mod B"),
+        };
+        let mut events = Vec::new();
+        run_reporting(
+            &fs,
+            &store,
+            1,
+            &steps,
+            serde_json::Value::Null,
+            || Ok(()),
+            &mut |e| events.push(e),
+        )
+        .expect("applied");
+        assert_eq!(
+            events,
+            [
+                StepEvent::Done {
+                    index: 0,
+                    placement: None
+                },
+                StepEvent::Bytes(5),
+                StepEvent::Done {
+                    index: 1,
+                    placement: Some(Placement::Copied { bytes: 5 })
+                },
+                StepEvent::Done {
+                    index: 2,
+                    placement: None
+                },
+                StepEvent::Done {
+                    index: 3,
+                    placement: None
+                },
+                StepEvent::Done {
+                    index: 4,
+                    placement: None
+                },
+                // The deletions after the commit.
+                StepEvent::Done {
+                    index: 5,
+                    placement: None
+                },
+            ]
+        );
     }
 
     #[test]

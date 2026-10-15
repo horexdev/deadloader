@@ -161,6 +161,19 @@ describe('ProgressBar', () => {
     expect(one(target, '.dl-progress').getAttribute('aria-valuetext')).toBe('62 %');
   });
 
+  it('starts the bottom line with a bold lead when given one', () => {
+    const { target } = render(ProgressBar, {
+      value: 0.75,
+      label: 'Applying',
+      lead: 'Step 4 of 4',
+      detail: '9 files linked, 1 copied',
+      rate: 'About 5 s left',
+    });
+    const meta = one(target, '.dl-progress__meta');
+    expect(one(meta, 'strong').textContent).toBe('Step 4 of 4');
+    expect(meta.textContent).toBe('Step 4 of 4 · 9 files linked, 1 copiedAbout 5 s left');
+  });
+
   it('has no value while indeterminate', () => {
     const { target } = render(ProgressBar, { value: 0, label: 'Verifying', state: 'indeterminate' });
     const bar = one(target, '.dl-progress');

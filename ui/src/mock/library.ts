@@ -2,13 +2,16 @@
 // changes while the game runs, foreign files, gameinfo.gi and mod updates. Invented data only: no GameBanana names,
 // authors or pictures. Scenarios (`?scenario=library-…`) set up each state of the Library boards: `empty`, `local`,
 // `game-missing`, `running` (four pending changes), `applied` (the game closes once the UI listens: N12 and S9's
-// result), `applying` and `checking` (slow answers), `foreign`, `gameinfo-foreign` (D10), `updates` (D5 with a file
-// mapping). The shared `switched` scenario shows the profile switch.
+// result), `applying` (an apply reports its progress once the UI listens; Apply is slow and reports too) and `checking`
+// (slow answers), `foreign`, `gameinfo-foreign` (D10), `updates` (D5 with a file mapping), `switch` (Evening applied,
+// Weekend selected: S9's switch with its file list). The shared `switched` scenario shows the profile switch.
 
 import type {
+  Applying,
   Changed,
   ConflictView,
   FileView,
+  FolderFile,
   ForeignReport,
   GameinfoStatus,
   LibraryView,
@@ -254,6 +257,33 @@ function snapshotOf(mods: ModView[]): Snapshot {
   return { order: on.map((m) => m.id), files: Object.fromEntries(on.map((m) => [m.id, activeFiles(m)])) };
 }
 
+/** The core's file list of an apply (S9): each file added, removed or moved to another slot, slots numbered in order. */
+function folderFiles(game: Snapshot, mods: ModView[]): FolderFile[] {
+  const slots = (snap: Snapshot) =>
+    new Map(
+      snap.order
+        .flatMap((id) => (snap.files[id] ?? []).map((file) => ({ id, file })))
+        .map((f, i) => [f.file, { ...f, slot: i + 1 }] as const),
+    );
+  const now = slots(game);
+  const then = slots(snapshotOf(mods));
+  const entry = (kind: FolderFile['kind'], file: string, id: string, from: number | null, to: number | null): FolderFile => ({
+    kind,
+    file,
+    mod_id: id,
+    name: mods.find((m) => m.id === id)?.name ?? null,
+    from_slot: from,
+    to_slot: to,
+  });
+  const added = [...then.values()].filter((f) => !now.has(f.file)).map((f) => entry('added', f.file, f.id, null, f.slot));
+  const removed = [...now.values()].filter((f) => !then.has(f.file)).map((f) => entry('removed', f.file, f.id, f.slot, null));
+  const renumbered = [...then.values()].flatMap((f) => {
+    const before = now.get(f.file);
+    return before && before.slot !== f.slot ? [entry('renumbered', f.file, f.id, before.slot, f.slot)] : [];
+  });
+  return [...added, ...removed, ...renumbered];
+}
+
 /** Indexes of one longest increasing run of `values` (the mods whose relative order is unchanged). */
 function longestIncreasing(values: number[]): Set<number> {
   const len = values.map(() => 1);
@@ -324,6 +354,8 @@ export class LibraryMock {
   undoing: number | null = null;
   /** The game closes when the UI subscribes (`library-applied`). */
   closeOnSubscribe = false;
+  /** An apply runs when the UI subscribes (`library-applying`), as after the game closed. */
+  applyOnSubscribe = false;
 
   /** Pairs of mods that change the same files; who wins follows the order, like the core's overlap check. */
   private readonly overlaps: ConflictView[];
@@ -344,8 +376,43 @@ export class LibraryMock {
       this.host.push({ event: 'game', data: { running: false } });
       this.gameClosed();
     }
+    if (this.applyOnSubscribe) {
+      this.applyOnSubscribe = false;
+      this.reportApply();
+    }
     if (this.host.catalogEnabled() && this.host.library.mods.length > 0) {
       this.host.push({ event: 'updates', data: structuredClone(this.updates) });
+    }
+  }
+
+  /** A slow apply's progress (as `wait` takes): 9 files linked at once, then two copies of 200 MB, the renames, the end. */
+  reportApply(): void {
+    const frames = 20;
+    const every = 8000 / frames;
+    const copy = 200 * MB;
+    const report = (k: number): Applying => {
+      const linked = Math.min(9, k * 3);
+      const copying = Math.max(0, k - 3);
+      const bytesCopied = Math.min(2 * copy, Math.round((copying * 2 * copy) / 14));
+      const copied = Math.floor(bytesCopied / copy);
+      const rate = copying * every >= 1000 ? bytesCopied / (copying * every) : 0;
+      return {
+        done: Math.min(13, linked + copied + (k >= 18 ? 2 : 0)),
+        total: 13,
+        linked,
+        copied,
+        bytes_done: linked * 20 * MB + bytesCopied,
+        bytes_total: 9 * 20 * MB + 2 * copy,
+        bytes_copied: bytesCopied,
+        left_ms: rate > 0 ? Math.round((2 * copy - bytesCopied) / rate) : null,
+        finished: false,
+      };
+    };
+    for (let k = 1; k <= frames; k += 1) {
+      setTimeout(() => {
+        const data = report(k);
+        this.host.push({ event: 'applying', data: k === frames ? { ...data, left_ms: null, finished: true } : data });
+      }, k * every);
     }
   }
 
@@ -380,7 +447,23 @@ export class LibraryMock {
         lib.mods = [mods[0] as ModView, porcelain, ...mods.slice(1).filter((m) => m !== porcelain)];
         break;
       }
+      case 'library-switch': {
+        // The board PendingProfileSwitch: Evening is in the game; Weekend turns one mod on and three off.
+        lib.applied_profile = 'Evening';
+        lib.selected_profile = 'Weekend';
+        for (const m of lib.mods) {
+          if (m.id === 'gb-710008') {
+            m.enabled = true;
+          } else if (['gb-710006', 'gb-710007', 'gb-710010'].includes(m.id)) {
+            m.enabled = false;
+          }
+        }
+        break;
+      }
       case 'library-applying':
+        this.slow = true;
+        this.applyOnSubscribe = true;
+        break;
       case 'library-checking':
         this.slow = true;
         break;
@@ -463,7 +546,7 @@ export class LibraryMock {
     this.auto = { changes, at: Date.now(), restore };
     this.undoing = null;
     this.refresh();
-    this.host.push({ event: 'applied_after_game', data: { changes: changes.length, library: structuredClone(this.host.library) } });
+    this.host.push({ event: 'applied_after_game', data: { changes: changes.length, items: changes, library: structuredClone(this.host.library) } });
   }
 
   private mod(id: unknown): ModView {
@@ -513,6 +596,9 @@ export class LibraryMock {
         this.game = snapshotOf(lib().mods);
         this.undoing = null;
         this.refresh();
+        if (this.slow) {
+          this.reportApply();
+        }
         return this.wait({ library: structuredClone(lib()), changed: true, gameinfo_foreign: this.gameinfo.state === 'foreign' });
       },
       pending: (): Pending => {
@@ -522,14 +608,17 @@ export class LibraryMock {
         const changes = switched ? [] : this.changes();
         const on = this.changes().filter((c) => c.kind === 'enable').length;
         const off = this.changes().filter((c) => c.kind === 'disable').length;
+        const files = folderFiles(this.game, l.mods);
+        const count = (kind: FolderFile['kind']) => files.filter((f) => f.kind === kind).length;
         return {
           switch: switched ? { from: l.applied_profile, to: l.selected_profile, turned_on: on, turned_off: off } : null,
           changes,
           folder: {
-            added: on,
-            removed: off,
-            renumbered: changes.filter((c) => c.kind === 'order').length + (switched ? 4 : 0),
+            added: count('added'),
+            removed: count('removed'),
+            renumbered: count('renumbered'),
             addons: this.host.gameRoot ? `${this.host.gameRoot}\\game\\citadel\\addons` : null,
+            files,
           },
           applied_after_game: this.auto ? { changes: this.auto.changes, at_unix_ms: this.auto.at } : null,
           undoing: this.undoing,

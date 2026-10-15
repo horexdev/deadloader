@@ -21,9 +21,11 @@ pub enum UiEvent {
     /// Whether Deadlock runs: the N4 banner while it does.
     Game { running: bool },
     /// Deadlock was closed and the changes made while it ran went into its folder (N12, decision 143). `changes` counts
-    /// the edits made while it ran; 0 when they were made before deadloader started.
+    /// the edits made while it ran; 0 when they were made before deadloader started. `items` names what went in, one
+    /// per mod and aspect, as S9 lists them (the toast words them).
     AppliedAfterGame {
         changes: usize,
+        items: Vec<deadloader_core::pending::PendingChange>,
         library: LibraryView,
     },
     /// Deadlock was closed, but its changes could not be applied.
@@ -61,6 +63,9 @@ pub enum UiEvent {
     Log {
         kinds: Vec<deadloader_core::log::Kind>,
     },
+    /// How far a running apply is (the Library's applying banner), and a last report with `finished` when it ends.
+    /// Sent only while the UI listens.
+    Applying(crate::progress::Applying),
 }
 
 /// What the start found, for a toast or a banner.
@@ -275,6 +280,23 @@ pub(crate) mod tests {
             serde_json::to_value(ui.take()).expect("json"),
             serde_json::json!([{"event": "log", "data": {"kinds": ["files"]}}])
         );
+    }
+
+    #[test]
+    fn apply_progress_is_tagged_for_the_ui() {
+        let event = UiEvent::Applying(crate::progress::Applying {
+            progress: deadloader_core::engine::ApplyProgress {
+                done: 3,
+                total: 4,
+                ..Default::default()
+            },
+            left_ms: Some(5000),
+            finished: false,
+        });
+        let json = serde_json::to_value(&event).expect("json");
+        assert_eq!(json["event"], "applying");
+        assert_eq!(json["data"]["done"], 3);
+        assert_eq!(json["data"]["left_ms"], 5000);
     }
 
     /// The shape `ui/src/lib/api.ts` relies on.

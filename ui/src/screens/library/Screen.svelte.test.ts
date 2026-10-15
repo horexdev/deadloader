@@ -30,7 +30,7 @@ async function start(scenario?: string): Promise<HTMLElement> {
   history.replaceState(null, '', scenario ? `/?scenario=${scenario}#/library` : '/#/library');
   resetMock();
   router.go('library');
-  Object.assign(app, { pendingOpen: false, mapping: null, updates: null, updatesAt: null, toasts: [], gameinfoForeign: false });
+  Object.assign(app, { pendingOpen: false, mapping: null, updates: null, updatesAt: null, toasts: [], gameinfoForeign: false, progress: null });
   await app.start();
   const { target } = render(Screen, {});
   // happy-dom has no layout: give the list a viewport.
@@ -188,6 +188,71 @@ describe('the Library screen', () => {
     click(button(panel, 'Undo all'));
     await settle();
     expect(app.library?.mods[0]?.enabled).toBe(true);
+  });
+
+  it('shows the file list of a profile switch on request', async () => {
+    const target = await start('library-switch');
+    click(button(target, 'Review switch'));
+    await settle();
+    const panel = one(target, '[role=dialog]');
+    expect(panel.textContent).toContain('Evening → Weekend');
+    expect(panel.textContent).toContain('1 file added · 3 removed · 1 renumbered');
+    expect(panel.querySelector('.file')).toBeNull();
+    const show = button(panel, 'Show the file list');
+    expect(show.getAttribute('aria-expanded')).toBe('false');
+    click(show);
+    await settle();
+    expect(all(panel, '.label').map((l) => l.textContent)).toEqual(
+      // Only the rows in view are drawn (here the first few: the list has no height in the test).
+      expect.arrayContaining(['Added · 1', 'Removed · 3']),
+    );
+    expect(panel.textContent).toContain('Wraith — Formal');
+    click(button(panel, 'Hide the file list'));
+    await settle();
+    expect(panel.querySelector('.file')).toBeNull();
+  });
+
+  it('shows how far an apply is in the banner, and drops the banner when it ends', async () => {
+    const target = await start();
+    expect(target.querySelector('.applying')).toBeNull();
+    app.handle({
+      event: 'applying',
+      data: {
+        done: 3,
+        total: 4,
+        linked: 9,
+        copied: 1,
+        bytes_done: 300,
+        bytes_total: 400,
+        bytes_copied: 100,
+        left_ms: 4200,
+        finished: false,
+      },
+    });
+    await settle();
+    const banner = one(target, '.applying');
+    expect(banner.textContent).toContain('Applying profile');
+    expect(banner.textContent).toContain('Step 4 of 4');
+    expect(banner.textContent).toContain('9 files linked, 1 copied');
+    expect(banner.textContent).toContain('About 5 s left');
+    expect(one(banner, '[role=progressbar]').getAttribute('aria-valuenow')).toBe('75');
+
+    app.handle({
+      event: 'applying',
+      data: {
+        done: 4,
+        total: 4,
+        linked: 9,
+        copied: 1,
+        bytes_done: 400,
+        bytes_total: 400,
+        bytes_copied: 100,
+        left_ms: null,
+        finished: true,
+      },
+    });
+    await settle();
+    expect(target.querySelector('.applying')).toBeNull();
   });
 
   it('lists foreign files and takes one under management through D11', async () => {

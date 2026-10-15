@@ -42,6 +42,7 @@
   import PendingPanel from './PendingPanel.svelte';
   import TakeDialog from './TakeDialog.svelte';
   import UpdateDialog from './UpdateDialog.svelte';
+  import { progressFiles, progressLeft, progressStep, progressValue } from './progress';
   import { FILTERS, counts, fileLabel, hasUpdate, matches, updateOf, type Context, type FilterId, type Pair } from './model';
 
   let filter = $state<FilterId>('all');
@@ -529,13 +530,25 @@
         {/snippet}
       </Banner>
     {/if}
-    {#if app.playing || app.applying}
+    {#if app.playing || app.applying || app.progress}
       <div class="dl-banner dl-banner--neutral applying" role="status" aria-busy="true">
         <span class="dl-banner__text">
           <strong>{t('library-applying-what', { name: profile })}</strong>
           <span class="dl-banner__why">{t('library-applying-why')}</span>
         </span>
-        <div class="progress"><ProgressBar value={0} state="indeterminate" label={t('library-applying-what', { name: profile })} /></div>
+        <div class="progress">
+          {#if app.progress}
+            <ProgressBar
+              value={progressValue(app.progress)}
+              label={t('library-applying-what', { name: profile })}
+              lead={progressStep(app.progress)}
+              detail={progressFiles(app.progress) || undefined}
+              rate={progressLeft(app.progress) || undefined}
+            />
+          {:else}
+            <ProgressBar value={0} state="indeterminate" label={t('library-applying-what', { name: profile })} />
+          {/if}
+        </div>
       </div>
     {/if}
 

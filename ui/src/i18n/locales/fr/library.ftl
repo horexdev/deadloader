@@ -34,6 +34,27 @@ library-switch-why-first = Appliquez { $name } maintenant ou appuyez sur Jouer �
 library-review-switch = Voir le changement
 library-applying-what = Application du profil { $name }…
 library-applying-why = Vous pouvez continuer à naviguer ; Jouer revient quand c’est terminé.
+library-applying-step = Étape { $done } sur { $total }
+library-applying-linked =
+    { $count ->
+        [one] { $count } fichier lié
+       *[other] { $count } fichiers liés
+    }
+library-applying-copied =
+    { $count ->
+        [one] { $count } fichier copié
+       *[other] { $count } fichiers copiés
+    }
+library-applying-both =
+    { $linked ->
+        [one] { $linked } fichier lié
+       *[other] { $linked } fichiers liés
+    }, { $copied ->
+        [one] { $copied } copié
+       *[other] { $copied } copiés
+    }
+library-applying-left-seconds = Encore environ { $seconds } s
+library-applying-left-minutes = Encore environ { $minutes } min { $seconds } s
 library-show = Afficher
 library-tab-all = Tous
 library-tab-enabled = Activés

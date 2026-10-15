@@ -111,3 +111,19 @@ library-d5-confirm-map = 이 파일 사용
 library-update-downloading = { $name } 업데이트를 다운로드하는 중입니다. 도착하면 설치됩니다.
 library-updated = { $name }을(를) 업데이트했습니다.
 library-updated-text = 이전 버전을 쓰던 모든 프로필에서 사용됩니다. 이전 버전은 보관되므로 모드 세부 정보에서 다시 전환할 수 있습니다.
+
+## N12: the changes applied when Deadlock was closed, each in a few words
+library-n12-on = { $name } 켜짐
+library-n12-off = { $name } 꺼짐
+library-n12-above = { $name }: { $other } 위로 이동
+library-n12-below = { $name }: { $other } 아래로 이동
+library-n12-switched = { $name }: { $to }(으)로 전환
+library-n12-files = { $name }: 파일 변경됨
+
+## S9: the file list of a pending apply
+library-show-file-list = 파일 목록 보기
+library-hide-file-list = 파일 목록 숨기기
+library-file-list = 게임 폴더의 파일
+library-files-added = 추가 · { $count }
+library-files-removed = 제거 · { $count }
+library-files-renumbered = 번호 변경 · { $count }
