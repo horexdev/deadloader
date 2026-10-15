@@ -17,7 +17,7 @@ pub enum Target {
 }
 
 /// What D6 shows before the user confirms.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RemovalPlan {
     pub mod_id: String,
     pub files: Vec<String>,
@@ -30,7 +30,7 @@ pub struct RemovalPlan {
     pub applied_in: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Removed {
     pub files: Vec<String>,
     /// Files the manifest no longer refers to but that could not be deleted; [`sweep`] tries again.

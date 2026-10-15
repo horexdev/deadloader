@@ -690,8 +690,10 @@ dependencies = [
 name = "deadloader"
 version = "0.1.0"
 dependencies = [
+ "deadloader-catalog",
  "deadloader-core",
  "deadloader-platform-windows",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -706,6 +708,19 @@ dependencies = [
  "sevenz-rust2",
  "sha2 0.11.0",
  "zip",
+]
+
+[[package]]
+name = "deadloader-catalog"
+version = "0.1.0"
+dependencies = [
+ "deadloader-core",
+ "deadloader-gamebanana",
+ "deadloader-html",
+ "deadloader-net",
+ "serde",
+ "serde_json",
+ "time",
 ]
 
 [[package]]

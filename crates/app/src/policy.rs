@@ -9,8 +9,10 @@ const CONFIG: &str = include_str!("../tauri.conf.json");
 const MANIFEST: &str = include_str!("../Cargo.toml");
 
 /// Our in-process protocols the UI may reach, as `https://<name>.localhost` (WebView2 has no custom schemes, so
-/// Tauri maps each one to such an origin and serves it without touching the network).
-const OWN_PROTOCOLS: &[&str] = &["ipc"];
+/// Tauri maps each one to such an origin and serves it without touching the network), each with the one directive
+/// that may name it: Tauri's IPC for calls, our image protocol for pictures.
+const OWN_PROTOCOLS: &[(&str, &str)] =
+    &[("ipc", "connect-src"), (crate::protocol::SCHEME, "img-src")];
 
 /// Permissions the UI may hold. Empty: no command is callable yet; never `shell:`, `fs:` or `http:`.
 const ALLOWED_PERMISSIONS: &[&str] = &[];
@@ -40,11 +42,12 @@ fn csp() -> BTreeMap<String, Vec<String>> {
     parse_csp(csp)
 }
 
-fn is_own_protocol(source: &str) -> bool {
+/// Whether `source` is one of our protocols and `directive` may name it.
+fn is_own_protocol(directive: &str, source: &str) -> bool {
     source
         .strip_prefix("https://")
         .and_then(|host| host.strip_suffix(".localhost"))
-        .is_some_and(|name| OWN_PROTOCOLS.contains(&name))
+        .is_some_and(|name| OWN_PROTOCOLS.contains(&(name, directive)))
 }
 
 #[test]
@@ -64,7 +67,8 @@ fn csp_defaults_to_self_only() {
 fn csp_allows_no_remote_origin_and_nothing_unsafe() {
     for (directive, sources) in csp() {
         for source in sources {
-            let allowed = source == "'self'" || source == "'none'" || is_own_protocol(&source);
+            let allowed =
+                source == "'self'" || source == "'none'" || is_own_protocol(&directive, &source);
             assert!(allowed, "{directive} allows {source}");
         }
     }
@@ -80,11 +84,48 @@ fn csp_blocks_plugins_base_and_form_targets() {
 
 #[test]
 fn own_protocol_check_rejects_lookalikes() {
-    assert!(is_own_protocol("https://ipc.localhost"));
-    assert!(!is_own_protocol("http://ipc.localhost"));
-    assert!(!is_own_protocol("https://ipc.localhost.example.com"));
-    assert!(!is_own_protocol("https://evil.localhost"));
-    assert!(!is_own_protocol("https://localhost"));
+    assert!(is_own_protocol("connect-src", "https://ipc.localhost"));
+    assert!(is_own_protocol("img-src", "https://dl.localhost"));
+    assert!(!is_own_protocol("connect-src", "http://ipc.localhost"));
+    assert!(!is_own_protocol(
+        "connect-src",
+        "https://ipc.localhost.example.com"
+    ));
+    assert!(!is_own_protocol("connect-src", "https://evil.localhost"));
+    assert!(!is_own_protocol("connect-src", "https://localhost"));
+    assert!(!is_own_protocol("img-src", "http://dl.localhost"));
+    assert!(!is_own_protocol(
+        "img-src",
+        "https://dl.localhost.example.com"
+    ));
+}
+
+#[test]
+fn own_protocols_are_allowed_only_for_their_directive() {
+    assert!(!is_own_protocol("img-src", "https://ipc.localhost"));
+    assert!(!is_own_protocol("default-src", "https://dl.localhost"));
+    assert!(!is_own_protocol("script-src", "https://dl.localhost"));
+    assert!(!is_own_protocol("connect-src", "https://dl.localhost"));
+    assert!(!is_own_protocol("frame-src", "https://dl.localhost"));
+}
+
+#[test]
+fn pictures_come_from_the_ui_and_the_image_protocol_only() {
+    let csp = csp();
+    assert_eq!(csp["img-src"], ["'self'", crate::protocol::ORIGIN]);
+    // The image protocol appears in no other directive; `default-src` does not fall back to it.
+    for (directive, sources) in &csp {
+        if directive != "img-src" {
+            assert!(
+                !sources.iter().any(|s| s == crate::protocol::ORIGIN),
+                "{directive} allows the image protocol"
+            );
+        }
+    }
+    // No inline or remote pictures: `data:` and `blob:` would let the UI show bytes the core did not check.
+    for source in &csp["img-src"] {
+        assert!(!source.ends_with(':'), "{source}");
+    }
 }
 
 #[test]

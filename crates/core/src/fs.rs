@@ -124,6 +124,114 @@ impl FileOps for Disk {
     }
 }
 
+/// File operations that report each change to the files log (ADR 0009) and then return its result unchanged.
+/// Reads are not logged.
+pub struct Logged<'a, F, L: ?Sized> {
+    pub fs: &'a F,
+    pub log: &'a L,
+}
+
+impl<F: std::fmt::Debug, L: ?Sized> std::fmt::Debug for Logged<'_, F, L> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Logged")
+            .field("fs", self.fs)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<F, L: crate::log::FileLog + ?Sized> Logged<'_, F, L> {
+    fn report<T>(
+        &self,
+        event: crate::log::FileEvent,
+        result: io::Result<T>,
+        detail: impl FnOnce(&T, &mut crate::log::FileEvent),
+    ) -> io::Result<T> {
+        use crate::log::Outcome;
+        let mut event = event;
+        match &result {
+            Ok(value) => detail(value, &mut event),
+            Err(e) => {
+                event.result = Outcome::Failed;
+                event.error = Some(e.to_string());
+            }
+        }
+        let msg = match event.result {
+            Outcome::Ok => "file operation",
+            Outcome::Failed => "file operation failed",
+        };
+        self.log.record(msg, &event);
+        result
+    }
+}
+
+fn event(op: crate::log::FileOp, src: Option<&Path>, dst: Option<&Path>) -> crate::log::FileEvent {
+    crate::log::FileEvent {
+        src: src.map(|p| p.display().to_string()),
+        dst: dst.map(|p| p.display().to_string()),
+        ..crate::log::FileEvent::new(op)
+    }
+}
+
+impl<F: FileOps, L: crate::log::FileLog + ?Sized> FileOps for Logged<'_, F, L> {
+    fn hard_link(&self, original: &Path, link: &Path) -> io::Result<()> {
+        use crate::log::FileOp;
+        let e = event(FileOp::Hardlink, Some(original), Some(link));
+        self.report(e, self.fs.hard_link(original, link), |_, _| {})
+    }
+
+    fn copy_verified(&self, from: &Path, to: &Path) -> io::Result<(u64, [u8; 32])> {
+        use crate::log::FileOp;
+        let e = event(FileOp::Copy, Some(from), Some(to));
+        self.report(e, self.fs.copy_verified(from, to), |(len, hash), e| {
+            e.bytes = Some(*len);
+            e.sha256 = Some(*hash);
+        })
+    }
+
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        use crate::log::FileOp;
+        let e = event(FileOp::Delete, Some(path), None);
+        self.report(e, self.fs.remove_file(path), |_, _| {})
+    }
+
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        use crate::log::FileOp;
+        let e = event(FileOp::Rename, Some(from), Some(to));
+        self.report(e, self.fs.rename(from, to), |_, _| {})
+    }
+
+    fn exists(&self, path: &Path) -> io::Result<bool> {
+        self.fs.exists(path)
+    }
+
+    fn list_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>> {
+        self.fs.list_dir(dir)
+    }
+
+    fn create_dir_all(&self, dir: &Path) -> io::Result<()> {
+        self.fs.create_dir_all(dir)
+    }
+
+    fn write_new(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        use crate::log::FileOp;
+        let mut e = event(FileOp::Write, None, Some(path));
+        e.bytes = Some(bytes.len() as u64);
+        self.report(e, self.fs.write_new(path, bytes), |_, _| {})
+    }
+
+    fn replace(&self, from: &Path, to: &Path) -> io::Result<()> {
+        use crate::log::FileOp;
+        let e = event(FileOp::Rename, Some(from), Some(to));
+        self.report(e, self.fs.replace(from, to), |_, _| {})
+    }
+}
+
+impl<F: ReadText, L: ?Sized> ReadText for Logged<'_, F, L> {
+    fn read_text(&self, path: &Path) -> io::Result<String> {
+        self.fs.read_text(path)
+    }
+}
+
 /// Replaces `path` with `text` so a crash leaves either version: a flushed `<name>.tmp`, the current file copied to
 /// `<name>.bak`, then a rename over it. For the JSON files users may read and edit (manifest, profiles, settings).
 pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
@@ -400,6 +508,93 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("deadloader-fs-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn logged_operations_report_what_they_did() {
+        use crate::log::{FileOp, MemFileLog, Outcome};
+        let mem = fake::MemFs::default()
+            .volume("D:", true)
+            .with(r"D:\lib\a.vpk", b"abc");
+        let log = MemFileLog::default();
+        let fs = Logged {
+            fs: &mem,
+            log: &log,
+        };
+        fs.hard_link(
+            Path::new(r"D:\lib\a.vpk"),
+            Path::new(r"D:\game\pak01_dir.vpk"),
+        )
+        .expect("link");
+        fs.copy_verified(Path::new(r"D:\lib\a.vpk"), Path::new(r"D:\game\copy.vpk"))
+            .expect("copy");
+        fs.rename(
+            Path::new(r"D:\game\copy.vpk"),
+            Path::new(r"D:\game\pak02_dir.vpk"),
+        )
+        .expect("rename");
+        fs.write_new(Path::new(r"D:\game\gameinfo.tmp"), b"xyz")
+            .expect("write");
+        fs.replace(
+            Path::new(r"D:\game\gameinfo.tmp"),
+            Path::new(r"D:\game\gameinfo.gi"),
+        )
+        .expect("replace");
+        fs.remove_file(Path::new(r"D:\game\pak02_dir.vpk"))
+            .expect("delete");
+        let events = log.events();
+        let ops: Vec<FileOp> = events.iter().map(|(_, e)| e.op).collect();
+        assert_eq!(
+            ops,
+            [
+                FileOp::Hardlink,
+                FileOp::Copy,
+                FileOp::Rename,
+                FileOp::Write,
+                FileOp::Rename,
+                FileOp::Delete
+            ]
+        );
+        let copy = &events[1].1;
+        assert_eq!(copy.src.as_deref(), Some(r"D:\lib\a.vpk"));
+        assert_eq!(copy.dst.as_deref(), Some(r"D:\game\copy.vpk"));
+        assert_eq!((copy.bytes, copy.sha256), (Some(3), Some(sha256(b"abc"))));
+        assert_eq!(events[3].1.bytes, Some(3));
+        assert!(events.iter().all(|(_, e)| e.result == Outcome::Ok));
+    }
+
+    #[test]
+    fn a_failed_operation_is_logged_with_its_error_and_still_fails() {
+        use crate::log::{FileOp, MemFileLog, Outcome};
+        let mem = fake::MemFs::default();
+        let log = MemFileLog::default();
+        let fs = Logged {
+            fs: &mem,
+            log: &log,
+        };
+        let err = fs
+            .remove_file(Path::new(r"D:\game\missing.vpk"))
+            .expect_err("missing");
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        let events = log.events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].1.op, FileOp::Delete);
+        assert_eq!(events[0].1.result, Outcome::Failed);
+        assert!(events[0].1.error.is_some());
+    }
+
+    #[test]
+    fn reads_are_not_logged() {
+        use crate::log::MemFileLog;
+        let mem = fake::MemFs::default().with(r"D:\game\x.vpk", b"1");
+        let log = MemFileLog::default();
+        let fs = Logged {
+            fs: &mem,
+            log: &log,
+        };
+        assert!(fs.exists(Path::new(r"D:\game\x.vpk")).expect("exists"));
+        fs.list_dir(Path::new(r"D:\game")).expect("list");
+        assert!(log.events().is_empty());
     }
 
     #[test]

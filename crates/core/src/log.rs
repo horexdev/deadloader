@@ -465,6 +465,58 @@ impl std::error::Error for LogError {
     }
 }
 
+/// Where file operations are reported (the files log). Writing a log line never makes the operation fail.
+pub trait FileLog {
+    fn record(&self, msg: &str, event: &FileEvent);
+}
+
+impl<T: FileLog + ?Sized> FileLog for &T {
+    fn record(&self, msg: &str, event: &FileEvent) {
+        (**self).record(msg, event);
+    }
+}
+
+impl<T: FileLog + ?Sized> FileLog for std::sync::Arc<T> {
+    fn record(&self, msg: &str, event: &FileEvent) {
+        (**self).record(msg, event);
+    }
+}
+
+impl<T: FileLog + ?Sized> FileLog for Box<T> {
+    fn record(&self, msg: &str, event: &FileEvent) {
+        (**self).record(msg, event);
+    }
+}
+
+impl<C: Clock, D: LogDir> FileLog for Logger<C, D> {
+    fn record(&self, msg: &str, event: &FileEvent) {
+        // An operation must not fail because its log line could not be written.
+        let _ = self.file(msg, event);
+    }
+}
+
+/// Keeps the events in memory, for tests.
+#[derive(Debug, Default)]
+pub struct MemFileLog(pub Mutex<Vec<(String, FileEvent)>>);
+
+impl MemFileLog {
+    pub fn events(&self) -> Vec<(String, FileEvent)> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl FileLog for MemFileLog {
+    fn record(&self, msg: &str, event: &FileEvent) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((msg.to_owned(), event.clone()));
+    }
+}
+
 /// Writes the three logs. Safe to share between threads; lines are written in id order.
 #[derive(Debug)]
 pub struct Logger<C, D> {
