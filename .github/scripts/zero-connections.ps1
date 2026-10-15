@@ -1,20 +1,28 @@
 <#
 Starts deadloader.exe from a fresh folder, watches the TCP connections of its whole process tree (the exe and the
-WebView2 processes it starts) for a while, and fails if any of them has a remote endpoint. Also fails if the window
-never loaded its page, so "no connections" cannot come from a webview that did not start.
+WebView2 processes it starts) and fails if any of them has a remote endpoint. Also fails if the window never loaded
+its page, so "no connections" cannot come from a webview that did not start.
 
-Then it starts the exe a second time on the same data folder: the first start creates the WebView2 profile, a one-time
-cost that decision 166 exempts from the 800 ms first-frame budget; the second start is the regular one and must load
-its page within -MaxWarmStartMs.
+The first start creates the WebView2 profile, a one-time cost that decision 166 exempts from the 800 ms first-frame
+budget. Its time varies a lot on CI runners (about 3 to 16 s), so the script does not sleep a fixed time: it polls the
+app log for "page loaded" (up to -MaxLoadSeconds) and then keeps watching for -Seconds more. Idle private memory is
+read at the end of that window, when the page has been loaded and idle for -Seconds.
+
+Then it starts the exe -WarmRuns more times on the same data folder. These are regular starts: each must load its
+page, the median of their load times must stay within -MaxWarmStartMs, and their connections are watched too.
 
 The process tree is built from the parent PID *and* the creation time: Windows never clears ParentProcessId and reuses
 PIDs, so an unrelated older process can look like our child.
 #>
 param(
     [Parameter(Mandatory)] [string] $Exe,
+    # Watched after the first start has loaded its page.
     [int] $Seconds = 20,
+    # How long a start may take to load its page before it counts as failed.
+    [int] $MaxLoadSeconds = 60,
     [int] $MaxIdlePrivateMB = 200,
-    [int] $MaxWarmStartMs = 800
+    [int] $MaxWarmStartMs = 800,
+    [int] $WarmRuns = 3
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +32,7 @@ Remove-Item -Recurse -Force $runDir -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $runDir | Out-Null
 $runExe = Join-Path $runDir 'deadloader.exe'
 Copy-Item $Exe $runExe
+$logDir = Join-Path $runDir 'deadloader-data\logs'
 
 function Test-Local([string] $address) {
     $ip = [Net.IPAddress]::Parse($address)
@@ -50,24 +59,32 @@ function Get-Tree([int] $rootId) {
     return $tree
 }
 
-$proc = Start-Process -FilePath $runExe -WorkingDirectory $runDir -PassThru
-$rootId = $proc.Id
-Write-Host "started deadloader.exe, pid $rootId"
+function Stop-Tree([object[]] $processes) {
+    # Only our own tree, children first.
+    [array]::Reverse($processes)
+    foreach ($p in $processes) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 2
+}
+
+# Every "page loaded" line in the app log, oldest first. A line the app is still writing is skipped, not fatal.
+function Get-PageLoads {
+    @(Get-ChildItem $logDir -Filter 'app-*.jsonl' -ErrorAction SilentlyContinue | Sort-Object Name |
+            Get-Content | Where-Object { $_ -like '*"page loaded"*' } |
+            ForEach-Object { try { $_ | ConvertFrom-Json } catch { $null } } |
+            Where-Object { $_ -and $_.msg -eq 'page loaded' })
+}
 
 $remote = [Collections.Generic.List[object]]::new()
 $seen = @{}
-$tree = @()
 $names = @{}
-$deadline = (Get-Date).AddSeconds($Seconds)
-$nextTree = Get-Date
-while ((Get-Date) -lt $deadline) {
-    if ((Get-Date) -ge $nextTree) {
-        $tree = Get-Tree $rootId
-        foreach ($p in $tree) { $names[[int]$p.ProcessId] = $p.Name }
-        $nextTree = (Get-Date).AddSeconds(1)
-    }
+
+# One look at the TCP table: records every remote endpoint owned by a process of the tree.
+function Watch-Connections([object[]] $tree) {
     $ids = [Collections.Generic.HashSet[int]]::new()
-    foreach ($p in $tree) { [void]$ids.Add([int]$p.ProcessId) }
+    foreach ($p in $tree) {
+        [void]$ids.Add([int]$p.ProcessId)
+        $names[[int]$p.ProcessId] = $p.Name
+    }
     foreach ($c in Get-NetTCPConnection -ErrorAction SilentlyContinue) {
         if (-not $ids.Contains([int]$c.OwningProcess)) { continue }
         if (Test-Local $c.RemoteAddress) { continue }
@@ -81,13 +98,58 @@ while ((Get-Date) -lt $deadline) {
                 At      = (Get-Date).ToString('HH:mm:ss.fff')
             })
     }
-    Start-Sleep -Milliseconds 100
+}
+
+# Starts the exe and watches its connections until it logs a new "page loaded" line (or -MaxLoadSeconds pass, or it
+# exits), then for -IdleSeconds more. Returns the load time the app logged ($null if none) and the tree at the end;
+# the tree is left running for the caller to inspect and stop.
+function Invoke-Start([string] $label, [int] $idleSeconds) {
+    $before = (Get-PageLoads).Count
+    $proc = Start-Process -FilePath $runExe -WorkingDirectory $runDir -PassThru
+    Write-Host "$label`: started deadloader.exe, pid $($proc.Id)"
+    $started = Get-Date
+    $loadDeadline = $started.AddSeconds($MaxLoadSeconds)
+    $deadline = $loadDeadline
+    $loadedMs = $null
+    $tree = @()
+    $nextTree = $started
+    $nextLog = $started
+    while ((Get-Date) -lt $deadline) {
+        $now = Get-Date
+        if ($now -ge $nextTree) {
+            $tree = Get-Tree $proc.Id
+            if ($tree.Count -eq 0) { break }
+            $nextTree = $now.AddSeconds(1)
+        }
+        Watch-Connections $tree
+        if ($null -eq $loadedMs -and $now -ge $nextLog) {
+            $loads = Get-PageLoads
+            if ($loads.Count -gt $before) {
+                $loadedMs = [int]$loads[-1].fields.ms_since_start
+                $deadline = (Get-Date).AddSeconds($idleSeconds)
+                Write-Host "$label`: page loaded after $loadedMs ms, watching $idleSeconds s more"
+            }
+            $nextLog = $now.AddMilliseconds(250)
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    $watched = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+    return [pscustomobject]@{
+        Ms      = $loadedMs
+        Tree    = @(Get-Tree $proc.Id)
+        Alive   = [bool](Get-Process -Id $proc.Id -ErrorAction SilentlyContinue)
+        Watched = $watched
+    }
 }
 
 $failures = [Collections.Generic.List[string]]::new()
-$tree = Get-Tree $rootId
-$alive = Get-Process -Id $rootId -ErrorAction SilentlyContinue
-if (-not $alive) { $failures.Add('deadloader.exe exited during the check') }
+
+$first = Invoke-Start 'first start' $Seconds
+$tree = $first.Tree
+if (-not $first.Alive) { $failures.Add('deadloader.exe exited during the check') }
+if ($null -eq $first.Ms) {
+    $failures.Add("the page never finished loading within $MaxLoadSeconds s (no ""page loaded"" line in the app log)")
+}
 $webviews = @($tree | Where-Object Name -EQ 'msedgewebview2.exe')
 if ($webviews.Count -eq 0) { $failures.Add('no WebView2 process was started') }
 
@@ -104,55 +166,47 @@ if ($browser) {
     $failures.Add('the WebView2 browser process was not found')
 }
 
-$privateMB = 0
-foreach ($p in $tree) {
-    $gp = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
-    if ($gp) { $privateMB += $gp.PrivateMemorySize64 / 1MB }
-}
-$privateMB = [math]::Round($privateMB, 1)
-if ($MaxIdlePrivateMB -gt 0 -and $privateMB -gt $MaxIdlePrivateMB) {
-    $failures.Add("the process tree uses $privateMB MB private memory at idle (budget $MaxIdlePrivateMB MB)")
+# Idle memory only means something once the page is up; otherwise WebView2 may not have started yet.
+$privateMB = $null
+if ($null -ne $first.Ms) {
+    $privateMB = 0
+    foreach ($p in $tree) {
+        $gp = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
+        if ($gp) { $privateMB += $gp.PrivateMemorySize64 / 1MB }
+    }
+    $privateMB = [math]::Round($privateMB, 1)
+    if ($MaxIdlePrivateMB -gt 0 -and $privateMB -gt $MaxIdlePrivateMB) {
+        $failures.Add("the process tree uses $privateMB MB private memory at idle (budget $MaxIdlePrivateMB MB)")
+    }
 }
 
-$log = Get-ChildItem (Join-Path $runDir 'deadloader-data\logs') -Filter 'app-*.jsonl' -ErrorAction SilentlyContinue |
-    Get-Content | ForEach-Object { $_ | ConvertFrom-Json }
-$loaded = $log | Where-Object msg -EQ 'page loaded' | Select-Object -First 1
-if (-not $loaded) { $failures.Add('the page never finished loading (no "page loaded" line in the app log)') }
+$log = @(Get-ChildItem $logDir -Filter 'app-*.jsonl' -ErrorAction SilentlyContinue | Get-Content |
+        ForEach-Object { try { $_ | ConvertFrom-Json } catch { $null } } | Where-Object { $_ })
 $runtime = ($log | Where-Object msg -EQ 'webview2 runtime' | Select-Object -First 1).fields.version
-$profileWarning = $log | Where-Object msg -EQ 'webview2 profile folder is not where deadloader put it'
-if ($profileWarning) { $failures.Add('the app reported that the WebView2 profile folder was moved') }
-
-function Stop-Tree([object[]] $processes) {
-    # Only our own tree, children first.
-    [array]::Reverse($processes)
-    foreach ($p in $processes) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
-    Start-Sleep -Seconds 2
-}
-
-function Get-PageLoads {
-    @(Get-ChildItem (Join-Path $runDir 'deadloader-data\logs') -Filter 'app-*.jsonl' -ErrorAction SilentlyContinue |
-            Get-Content | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object msg -EQ 'page loaded')
+if ($log | Where-Object msg -EQ 'webview2 profile folder is not where deadloader put it') {
+    $failures.Add('the app reported that the WebView2 profile folder was moved')
 }
 
 Stop-Tree $tree
 
-# The regular start: the profile exists now.
-$before = (Get-PageLoads).Count
-$warm = Start-Process -FilePath $runExe -WorkingDirectory $runDir -PassThru
-Write-Host "started deadloader.exe again, pid $($warm.Id)"
-$warmMs = $null
-$until = (Get-Date).AddSeconds(30)
-while ((Get-Date) -lt $until) {
-    $loads = Get-PageLoads
-    if ($loads.Count -gt $before) { $warmMs = [int]$loads[-1].fields.ms_since_start; break }
-    Start-Sleep -Milliseconds 200
+# Regular starts: the profile exists now. Each is stopped as soon as its page has loaded.
+$warmMs = [Collections.Generic.List[int]]::new()
+for ($i = 1; $i -le $WarmRuns; $i++) {
+    $run = Invoke-Start "regular start $i" 0
+    Stop-Tree $run.Tree
+    if ($null -eq $run.Ms) { $failures.Add("regular start $i never finished loading its page within $MaxLoadSeconds s") }
+    else { $warmMs.Add($run.Ms) }
 }
-Stop-Tree (Get-Tree $warm.Id)
 Remove-Item -Recurse -Force $runDir -ErrorAction SilentlyContinue
-if ($null -eq $warmMs) {
-    $failures.Add('the second start never finished loading its page')
-} elseif ($MaxWarmStartMs -gt 0 -and $warmMs -gt $MaxWarmStartMs) {
-    $failures.Add("the regular start loaded its page after $warmMs ms (budget $MaxWarmStartMs ms)")
+
+$warmMedian = $null
+if ($warmMs.Count -gt 0) {
+    $sorted = @($warmMs | Sort-Object)
+    $mid = [math]::Floor($sorted.Count / 2)
+    $warmMedian = if ($sorted.Count % 2) { $sorted[$mid] } else { [int](($sorted[$mid - 1] + $sorted[$mid]) / 2) }
+    if ($MaxWarmStartMs -gt 0 -and $warmMedian -gt $MaxWarmStartMs) {
+        $failures.Add("regular starts loaded their page after $warmMedian ms (median of $($warmMs -join ', ') ms; budget $MaxWarmStartMs ms)")
+    }
 }
 
 foreach ($r in $remote) { $failures.Add("remote connection: $($r.Process) -> $($r.Remote) [$($r.State)] at $($r.At)") }
@@ -164,11 +218,11 @@ $summary = @(
     "|---|---|"
     "| WebView2 runtime | $runtime |"
     "| processes in the tree | $($tree.Count) ($($webviews.Count) WebView2) |"
-    "| watched | $Seconds s |"
-    "| remote TCP connections | $($remote.Count) |"
-    "| page loaded, first start (creates the WebView2 profile) | $($loaded.fields.ms_since_start) ms |"
-    "| page loaded, regular start | $warmMs ms |"
-    "| private memory at the end | $privateMB MB |"
+    "| watched, first start | $($first.Watched) s ($Seconds s after the page loaded) |"
+    "| remote TCP connections, all starts | $($remote.Count) |"
+    "| page loaded, first start (creates the WebView2 profile, not budgeted) | $($first.Ms) ms |"
+    "| page loaded, regular starts | $($warmMs -join ', ') ms (median $warmMedian ms, budget $MaxWarmStartMs ms) |"
+    "| private memory, idle after the page loaded | $privateMB MB |"
     ''
 )
 $summary | Write-Host
