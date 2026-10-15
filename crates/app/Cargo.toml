@@ -17,6 +17,8 @@ tauri-build = { version = "=2.7.1" }
 [dependencies]
 deadloader-catalog = { path = "../catalog" }
 deadloader-core = { path = "../core" }
+deadloader-downloads = { path = "../downloads" }
+deadloader-gamebanana = { path = "../gamebanana" }
 deadloader-net = { path = "../net" }
 deadloader-platform-windows = { path = "../platform-windows" }
 serde = { version = "1", features = ["derive"] }

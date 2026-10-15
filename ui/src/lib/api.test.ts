@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   Channel: FakeChannel,
 }));
 
-const { api, catalog, imageUrl, isUserMessage, subscribe } = await import('./api');
+const { api, catalog, downloads, imageUrl, isUserMessage, subscribe } = await import('./api');
 
 describe('api', () => {
   beforeEach(() => {
@@ -133,6 +133,20 @@ describe('api', () => {
     await expect(catalog.status()).rejects.toEqual({ id: 'E1', args: {} });
     invoke.mockRejectedValue('broken');
     await expect(catalog.status()).rejects.toEqual({ id: 'Internal', args: { detail: 'broken' } });
+  });
+
+  it('calls the download commands by their Rust names', async () => {
+    invoke.mockResolvedValue({});
+    await downloads.install('mod', 655209, 1480331, 'Haze V2', 'Nyx');
+    await downloads.list();
+    await downloads.control(17, 'pause');
+    await downloads.control(17, 'cancel');
+    expect(invoke.mock.calls).toEqual([
+      ['download_install', { section: 'mod', modId: 655209, fileId: 1480331, name: 'Haze V2', author: 'Nyx' }],
+      ['downloads', {}],
+      ['download_control', { id: 17, action: 'pause' }],
+      ['download_control', { id: 17, action: 'cancel' }],
+    ]);
   });
 
   it('builds picture addresses on the image protocol only', () => {
