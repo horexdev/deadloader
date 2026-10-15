@@ -5,7 +5,7 @@
 //! Library paths are stored relative to `deadloader-data\` with forward slashes and must stay inside it.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::io;
 use std::path::Path;
 
@@ -16,6 +16,9 @@ pub struct Manifest {
     pub schema: u32,
     pub mods: Vec<Mod>,
     pub installations: Vec<InstallationState>,
+    /// "New files available" the user hid, per library mod: GameBanana file ids not to report again (168).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub dismissed_new_files: BTreeMap<String, Vec<u64>>,
 }
 
 impl Default for Manifest {
@@ -24,6 +27,7 @@ impl Default for Manifest {
             schema: SCHEMA,
             mods: Vec::new(),
             installations: Vec::new(),
+            dismissed_new_files: BTreeMap::new(),
         }
     }
 }

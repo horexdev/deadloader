@@ -279,6 +279,12 @@ pub async fn updates_check(
     .await
 }
 
+/// "Hide" on "new files available" (168): these GameBanana files of the mod are not reported again.
+#[tauri::command]
+pub async fn updates_dismiss(backend: Shared<'_>, mod_id: String, file_ids: Vec<u64>) -> Reply<()> {
+    blocking(backend, move |b| b.dismiss_new_files(&mod_id, &file_ids)).await
+}
+
 /// Install (F2): the file of a mod page the UI showed becomes a download. `name` and `author` are what the page showed.
 #[tauri::command]
 pub async fn download_install(
