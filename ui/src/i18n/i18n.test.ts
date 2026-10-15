@@ -97,6 +97,34 @@ describe('a message from the core', () => {
     expect(unreadable.todo).not.toBe(notAProfile.todo);
   });
 
+  it('reads the HTTP status and the wait of a busy GameBanana', () => {
+    const busy = describeMessage({ id: 'E5', args: { status: '429', retry_in_s: '12' } });
+    expect(busy.why).toContain('HTTP 429');
+    expect(busy.todo).toContain('12 seconds');
+    expect(describeMessage({ id: 'E5', args: { status: '503' } }).why).toMatch(/server reported an error/);
+    expect(describeMessage({ id: 'E5', args: {} }).todo).toMatch(/in a moment/);
+  });
+
+  it('says why a download failed, in the words of the downloads crate', () => {
+    expect(describeMessage({ id: 'E6', args: { reason: 'dns', host: 'files.gamebanana.com' } }).why).toMatch(
+      /couldn’t be found/,
+    );
+    const status = describeMessage({ id: 'E6', args: { reason: 'http_status', status: '404' } });
+    expect(status.why).toContain('HTTP 404');
+    expect(describeMessage({ id: 'E6', args: { reason: 'local_mode' } }).todo).toMatch(/catalog/);
+    expect(describeMessage({ id: 'E7', args: { reason: 'size' } }).why).toMatch(/size/);
+    expect(describeMessage({ id: 'E7', args: { reason: 'checksum' } }).why).toMatch(/checksum/);
+  });
+
+  it('treats a blocked host without a reason as not on the allowlist', () => {
+    const plain = describeMessage({ id: 'E16', args: { host: 'x.example' } });
+    expect(plain.why).toContain('x.example');
+    expect(plain.todo).toMatch(/Settings → Advanced/);
+    const insecure = describeMessage({ id: 'E16', args: { reason: 'not_https', from: 'gamebanana.com' } });
+    expect(insecure.why).toMatch(/HTTPS/);
+    expect(insecure.todo).not.toMatch(/Settings → Advanced/);
+  });
+
   it('names the entry an archive problem is about', () => {
     const m = describeMessage({ id: 'E8', args: { reason: 'not_a_vpk', entry: 'haze.vpk' } });
     expect(m.why).toContain('haze.vpk');

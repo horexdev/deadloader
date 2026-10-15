@@ -80,23 +80,35 @@ e5 = GameBanana yoğun.
     .todo =
         { $wait ->
             [seconds]
-                { $seconds ->
-                    [one] deadloader { $seconds } saniye sonra otomatik olarak yeniden deneyecek.
-                   *[other] deadloader { $seconds } saniye sonra otomatik olarak yeniden deneyecek.
+                { $retry_in_s ->
+                    [one] deadloader { $retry_in_s } saniye sonra otomatik olarak yeniden deneyecek.
+                   *[other] deadloader { $retry_in_s } saniye sonra otomatik olarak yeniden deneyecek.
                 }
            *[later] deadloader birazdan otomatik olarak yeniden deneyecek.
         }
 e6 = İndirme başarısız oldu.
     .why =
         { $reason ->
-            [connection] Bağlantı kesildi.
+            [local_mode] deadloader yerel çalışma modunda olduğu için hiçbir ağ isteği göndermiyor.
+            [dns] İndirme sunucusunun adresi bulunamadı.
+            [connect] deadloader indirme sunucusuna bağlanamadı.
+            [tls] İndirme sunucusuyla güvenli bir bağlantı kurulamadı.
             [timeout] Sunucu çok geç yanıt verdi.
-            [server] GameBanana sunucusu bir hata bildirdi.
+            [connection_lost] Bağlantı kesildi.
+            [http_status] Sunucu bir hatayla yanıt verdi (HTTP { $status }).
            *[other] İndirme yarıda kesildi.
         }
-    .todo = İndirme kaldığı yerden devam edecek.
+    .todo =
+        { $reason ->
+            [local_mode] Mod indirmek için Ayarlar’dan kataloğu açın.
+           *[other] İndirme kaldığı yerden devam edecek.
+        }
 e7 = İndirilen dosya bozuk.
-    .why = Sağlama toplamı, GameBanana’da belirtilenle eşleşmiyor.
+    .why =
+        { $reason ->
+            [size] Boyutu, GameBanana’da belirtilenle eşleşmiyor.
+           *[checksum] Sağlama toplamı, GameBanana’da belirtilenle eşleşmiyor.
+        }
     .todo = Dosyayı yeniden indirin.
 e8 = Arşiv ayıklanamıyor.
     .why =
@@ -154,8 +166,18 @@ e15 = Bağlantı açılamadı.
     .why = Windows’ta varsayılan tarayıcı ayarlanmamış.
     .todo = Bağlantıyı kopyalayıp kendiniz açın.
 e16 = İstek engellendi.
-    .why = GameBanana, izin verilen sunucular listesinde olmayan { $host } adresine yönlendirdi.
-    .todo = Bir şey yapmanız gerekmiyor — deadloader yalnızca GameBanana ile iletişim kurar. Bu sunucuya güveniyorsanız Ayarlar → Gelişmiş bölümünden ekleyin.
+    .why =
+        { $reason ->
+            [not_https] Sunucu HTTPS kullanmayan bir adrese yönlendirdi; deadloader bu tür yönlendirmeleri asla izlemez.
+            [bad_redirect] Sunucu, deadloader’ın izleyemeyeceği bir yönlendirme gönderdi.
+            [too_many_redirects] Sunucu çok fazla kez yönlendirdi.
+           *[not_listed] { $host } izin verilen sunucular listesinde yok, bu yüzden deadloader ona bağlanmadı.
+        }
+    .todo =
+        { $reason ->
+            [not_listed] Bir şey yapmanız gerekmiyor — deadloader yalnızca GameBanana ile iletişim kurar. Bu sunucuya güveniyorsanız Ayarlar → Gelişmiş bölümünden ekleyin.
+           *[not_https] Bir şey yapmanız gerekmiyor — deadloader yalnızca güvenli yönlendirmeleri izler. Daha sonra yeniden deneyin.
+        }
 e17 = Profil içe aktarılamadı.
     .why =
         { $reason ->

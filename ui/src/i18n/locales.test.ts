@@ -2,7 +2,7 @@ import { FluentResource } from '@fluent/bundle';
 import type { Message } from '@fluent/bundle';
 import { describe, expect, it } from 'vitest';
 import messageRs from '../../../crates/core/src/message.rs?raw';
-import { ERROR_IDS, NOTICE_IDS, TEXTS, textId } from './catalog';
+import { ERROR_IDS, type ErrorId, NOTICE_IDS, TEXTS, textId } from './catalog';
 import { LANGS, type Lang } from './languages';
 
 // The runtime AST of @fluent/bundle (its `ast.d.ts`), walked to compare translations structurally.
@@ -11,6 +11,35 @@ type Expression = Exclude<Extract<Pattern, unknown[]>[number], string>;
 type Select = Extract<Expression, { type: 'select' }>;
 
 const sources = import.meta.glob<string>('./locales/*.ftl', { query: '?raw', import: 'default', eager: true });
+const crates = import.meta.glob<string>('../../../crates/*/src/**/*.rs', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+/**
+ * (message id, reason) pairs a Rust file sends: `MessageId::E7).arg("reason", "size")`, and helpers such as
+ * `let e6 = |reason: &str| UserMessage::new(MessageId::E6).arg("reason", reason)` called as `e6("dns")` or
+ * `e6(match kind { … => "tls", … })`.
+ */
+function reasonsSent(rust: string): [string, string][] {
+  const pairs: [string, string][] = [];
+  for (const m of rust.matchAll(/MessageId::(E\d+)\)\s*\.arg\(\s*"reason",\s*"(\w+)"/g)) {
+    pairs.push([m[1] ?? '', m[2] ?? '']);
+  }
+  for (const helper of rust.matchAll(/let (\w+) = \|reason: &str\|\s*\{?\s*UserMessage::new\(MessageId::(E\d+)\)/g)) {
+    const [, name = '', id = ''] = helper;
+    for (const call of rust.matchAll(new RegExp(String.raw`\b${name}\(\s*"(\w+)"`, 'g'))) {
+      pairs.push([id, call[1] ?? '']);
+    }
+    for (const call of rust.matchAll(new RegExp(String.raw`\b${name}\(match [^{]*\{([^}]*)\}`, 'g'))) {
+      for (const arm of (call[1] ?? '').matchAll(/=>\s*"(\w+)"/g)) {
+        pairs.push([id, arm[1] ?? '']);
+      }
+    }
+  }
+  return pairs;
+}
 
 function source(lang: Lang): string {
   const text = sources[`./locales/${lang}.ftl`];
@@ -130,6 +159,18 @@ describe('the English texts', () => {
     const known = new Set(ERROR_IDS.flatMap((id) => TEXTS[textId(id)]?.selectors?.reason?.values ?? []));
     for (const value of sent) {
       expect(known, value).toContain(value);
+    }
+  });
+
+  it('have a variant for every reason any crate sends with its message', () => {
+    const sent = [...Object.entries(crates)].flatMap(([file, text]) =>
+      reasonsSent(text).map(([id, reason]) => ({ file, id, reason })),
+    );
+    // The downloads crate sends E6, E7 and E16 with reasons; if this drops, the scan no longer sees them.
+    expect(sent.filter((s) => s.file.includes('/downloads/')).length).toBeGreaterThan(10);
+    for (const { file, id, reason } of sent) {
+      const values = TEXTS[textId(id as ErrorId)]?.selectors?.reason?.values ?? [];
+      expect(values, `${id} [${reason}] from ${file}`).toContain(reason);
     }
   });
 

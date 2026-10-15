@@ -90,25 +90,37 @@ e5 = GameBanana je přetížený.
     .todo =
         { $wait ->
             [seconds]
-                { $seconds ->
-                    [one] deadloader to automaticky zkusí znovu za { $seconds } sekundu.
-                    [few] deadloader to automaticky zkusí znovu za { $seconds } sekundy.
-                    [many] deadloader to automaticky zkusí znovu za { $seconds } sekundy.
-                   *[other] deadloader to automaticky zkusí znovu za { $seconds } sekund.
+                { $retry_in_s ->
+                    [one] deadloader to automaticky zkusí znovu za { $retry_in_s } sekundu.
+                    [few] deadloader to automaticky zkusí znovu za { $retry_in_s } sekundy.
+                    [many] deadloader to automaticky zkusí znovu za { $retry_in_s } sekundy.
+                   *[other] deadloader to automaticky zkusí znovu za { $retry_in_s } sekund.
                 }
            *[later] deadloader to za chvíli automaticky zkusí znovu.
         }
 e6 = Stahování se nezdařilo.
     .why =
         { $reason ->
-            [connection] Připojení bylo přerušeno.
+            [local_mode] deadloader je v místním režimu, takže neodesílá žádné síťové požadavky.
+            [dns] Adresu serveru pro stahování se nepodařilo najít.
+            [connect] deadloader se nemohl připojit k serveru pro stahování.
+            [tls] Zabezpečené připojení k serveru pro stahování se nepodařilo navázat.
             [timeout] Server příliš dlouho neodpovídal.
-            [server] Server GameBanana nahlásil chybu.
+            [connection_lost] Připojení bylo přerušeno.
+            [http_status] Server odpověděl chybou (HTTP { $status }).
            *[other] Stahování bylo přerušeno.
         }
-    .todo = Bude pokračovat tam, kde se zastavilo.
+    .todo =
+        { $reason ->
+            [local_mode] Zapněte katalog v Nastavení, abyste mohli stahovat mody.
+           *[other] Bude pokračovat tam, kde se zastavilo.
+        }
 e7 = Stažený soubor je poškozený.
-    .why = Jeho kontrolní součet neodpovídá tomu, který uvádí GameBanana.
+    .why =
+        { $reason ->
+            [size] Jeho velikost neodpovídá té, kterou uvádí GameBanana.
+           *[checksum] Jeho kontrolní součet neodpovídá tomu, který uvádí GameBanana.
+        }
     .todo = Stáhněte ho znovu.
 e8 = Archiv nelze rozbalit.
     .why =
@@ -168,8 +180,18 @@ e15 = Odkaz se nepodařilo otevřít.
     .why = Ve Windows není nastavený výchozí prohlížeč.
     .todo = Zkopírujte odkaz a otevřete ho sami.
 e16 = Požadavek byl zablokován.
-    .why = GameBanana přesměroval na { $host }, který není na seznamu povolených hostitelů.
-    .todo = Nemusíte nic dělat — deadloader komunikuje jen s GameBanana. Pokud tomuto hostiteli důvěřujete, přidejte ho v části Nastavení → Pokročilé.
+    .why =
+        { $reason ->
+            [not_https] Server přesměroval na adresu bez HTTPS a taková přesměrování deadloader nikdy nenásleduje.
+            [bad_redirect] Server poslal přesměrování, které deadloader nedokáže následovat.
+            [too_many_redirects] Server přesměroval příliš mnohokrát.
+           *[not_listed] { $host } není na seznamu povolených hostitelů, takže se k němu deadloader nepřipojil.
+        }
+    .todo =
+        { $reason ->
+            [not_listed] Nemusíte nic dělat — deadloader komunikuje jen s GameBanana. Pokud tomuto hostiteli důvěřujete, přidejte ho v části Nastavení → Pokročilé.
+           *[not_https] Nemusíte nic dělat — deadloader následuje jen bezpečná přesměrování. Zkuste to později.
+        }
 e17 = Profil se nepodařilo importovat.
     .why =
         { $reason ->

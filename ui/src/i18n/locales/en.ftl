@@ -80,23 +80,35 @@ e5 = GameBanana is busy.
     .todo =
         { $wait ->
             [seconds]
-                { $seconds ->
-                    [one] deadloader retries automatically in { $seconds } second.
-                   *[other] deadloader retries automatically in { $seconds } seconds.
+                { $retry_in_s ->
+                    [one] deadloader retries automatically in { $retry_in_s } second.
+                   *[other] deadloader retries automatically in { $retry_in_s } seconds.
                 }
            *[later] deadloader retries automatically in a moment.
         }
 e6 = Download failed.
     .why =
         { $reason ->
-            [connection] The connection was lost.
+            [local_mode] deadloader is in local mode, so it makes no network requests.
+            [dns] The download server’s address couldn’t be found.
+            [connect] deadloader couldn’t connect to the download server.
+            [tls] A secure connection to the download server couldn’t be established.
             [timeout] The server took too long to respond.
-            [server] GameBanana’s server reported an error.
+            [connection_lost] The connection was lost.
+            [http_status] The server answered with an error (HTTP { $status }).
            *[other] The download was interrupted.
         }
-    .todo = It will resume from where it stopped.
+    .todo =
+        { $reason ->
+            [local_mode] Turn the catalog on in Settings to download mods.
+           *[other] It will resume from where it stopped.
+        }
 e7 = The downloaded file is damaged.
-    .why = Its checksum doesn’t match the one GameBanana lists.
+    .why =
+        { $reason ->
+            [size] Its size doesn’t match the one GameBanana lists.
+           *[checksum] Its checksum doesn’t match the one GameBanana lists.
+        }
     .todo = Download it again.
 e8 = The archive can’t be unpacked.
     .why =
@@ -154,8 +166,18 @@ e15 = Couldn’t open the link.
     .why = No default browser is set in Windows.
     .todo = Copy the link and open it yourself.
 e16 = Request blocked.
-    .why = GameBanana redirected to { $host }, which isn’t on the list of allowed hosts.
-    .todo = Nothing to do — deadloader only talks to GameBanana. If you trust this host, add it in Settings → Advanced.
+    .why =
+        { $reason ->
+            [not_https] The server redirected to an address without HTTPS, which deadloader never follows.
+            [bad_redirect] The server sent a redirect deadloader can’t follow.
+            [too_many_redirects] The server redirected too many times.
+           *[not_listed] { $host } isn’t on the list of allowed hosts, so deadloader didn’t connect to it.
+        }
+    .todo =
+        { $reason ->
+            [not_listed] Nothing to do — deadloader only talks to GameBanana. If you trust this host, add it in Settings → Advanced.
+           *[not_https] Nothing to do — deadloader follows only safe redirects. Try again later.
+        }
 e17 = Couldn’t import the profile.
     .why =
         { $reason ->

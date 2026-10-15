@@ -122,14 +122,29 @@ export const TEXTS: Readonly<Record<string, TextSpec>> = {
   e3: {},
   e4: {},
   e5: {
-    args: { seconds: count },
+    args: { retry_in_s: count, status: text, host: text },
     selectors: {
-      reason: reason('rate_limited', 'server', 'other'),
-      wait: { values: ['seconds', 'later'], pick: (args) => (present(args, 'seconds') ? 'seconds' : 'later') },
+      // The core sends the HTTP status rather than a reason: 429 is "too many requests", 5xx a server error.
+      reason: {
+        values: ['rate_limited', 'server', 'other'],
+        pick: (args) => {
+          const status = Number(args.status);
+          if (status === 429) {
+            return 'rate_limited';
+          }
+          return status >= 500 && status < 600 ? 'server' : 'other';
+        },
+      },
+      wait: { values: ['seconds', 'later'], pick: (args) => (present(args, 'retry_in_s') ? 'seconds' : 'later') },
     },
   },
-  e6: { selectors: { reason: reason('connection', 'timeout', 'server', 'other') } },
-  e7: {},
+  e6: {
+    args: { status: text, host: text },
+    selectors: {
+      reason: reason('local_mode', 'dns', 'connect', 'tls', 'timeout', 'connection_lost', 'http_status', 'other'),
+    },
+  },
+  e7: { args: { expected: text, actual: text }, selectors: { reason: reason('size', 'checksum') } },
   e8: {
     args: { entry: text },
     selectors: { reason: reason('not_an_archive', 'damaged', 'encrypted', 'unsupported', 'not_a_vpk', 'other') },
@@ -159,7 +174,11 @@ export const TEXTS: Readonly<Record<string, TextSpec>> = {
   e13: {},
   e14: {},
   e15: {},
-  e16: { args: { host: text } },
+  e16: {
+    args: { host: text, from: text, location: text },
+    // Without a reason (the catalog sends only the host) the host is simply not allowed.
+    selectors: { reason: reason('not_https', 'bad_redirect', 'too_many_redirects', 'not_listed') },
+  },
   e17: { args: { file: text }, selectors: { reason: reason('newer', 'unreadable', 'not_a_profile') } },
   e18: { selectors: { reason: reason('access_denied', 'in_use', 'other') } },
   e19: { selectors: { reason: reason('no_response', 'not_an_image', 'too_large', 'other') } },

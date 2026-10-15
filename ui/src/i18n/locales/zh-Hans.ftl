@@ -59,20 +59,32 @@ e5 = GameBanana 繁忙。
         }
     .todo =
         { $wait ->
-            [seconds] deadloader 将在 { $seconds } 秒后自动重试。
+            [seconds] deadloader 将在 { $retry_in_s } 秒后自动重试。
            *[later] deadloader 稍后会自动重试。
         }
 e6 = 下载失败。
     .why =
         { $reason ->
-            [connection] 连接已断开。
+            [local_mode] deadloader 处于本地模式，因此不会发出任何网络请求。
+            [dns] 找不到下载服务器的地址。
+            [connect] deadloader 无法连接到下载服务器。
+            [tls] 无法与下载服务器建立安全连接。
             [timeout] 服务器响应超时。
-            [server] GameBanana 服务器报告了错误。
+            [connection_lost] 连接已断开。
+            [http_status] 服务器返回了错误（HTTP { $status }）。
            *[other] 下载已中断。
         }
-    .todo = 下载将从中断处继续。
+    .todo =
+        { $reason ->
+            [local_mode] 请在“设置”中启用目录以下载模组。
+           *[other] 下载将从中断处继续。
+        }
 e7 = 下载的文件已损坏。
-    .why = 其校验和与 GameBanana 上列出的不一致。
+    .why =
+        { $reason ->
+            [size] 其大小与 GameBanana 上列出的不一致。
+           *[checksum] 其校验和与 GameBanana 上列出的不一致。
+        }
     .todo = 请重新下载。
 e8 = 无法解压该压缩包。
     .why =
@@ -126,8 +138,18 @@ e15 = 无法打开链接。
     .why = Windows 中未设置默认浏览器。
     .todo = 请复制链接并自行打开。
 e16 = 请求已被阻止。
-    .why = GameBanana 重定向到了 { $host }，但该主机不在允许的主机列表中。
-    .todo = 无需任何操作——deadloader 只与 GameBanana 通信。如果你信任此主机，请在“设置 → 高级”中添加它。
+    .why =
+        { $reason ->
+            [not_https] 服务器重定向到了不使用 HTTPS 的地址，deadloader 从不跟随此类重定向。
+            [bad_redirect] 服务器发送了 deadloader 无法跟随的重定向。
+            [too_many_redirects] 服务器重定向次数过多。
+           *[not_listed] { $host } 不在允许的主机列表中，因此 deadloader 没有连接到它。
+        }
+    .todo =
+        { $reason ->
+            [not_listed] 无需任何操作——deadloader 只与 GameBanana 通信。如果你信任此主机，请在“设置 → 高级”中添加它。
+           *[not_https] 无需任何操作——deadloader 只跟随安全的重定向。请稍后重试。
+        }
 e17 = 无法导入配置方案。
     .why =
         { $reason ->

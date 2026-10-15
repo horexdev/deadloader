@@ -90,25 +90,37 @@ e5 = GameBanana jest przeciążone.
     .todo =
         { $wait ->
             [seconds]
-                { $seconds ->
-                    [one] deadloader automatycznie spróbuje ponownie za { $seconds } sekundę.
-                    [few] deadloader automatycznie spróbuje ponownie za { $seconds } sekundy.
-                    [many] deadloader automatycznie spróbuje ponownie za { $seconds } sekund.
-                   *[other] deadloader automatycznie spróbuje ponownie za { $seconds } sekundy.
+                { $retry_in_s ->
+                    [one] deadloader automatycznie spróbuje ponownie za { $retry_in_s } sekundę.
+                    [few] deadloader automatycznie spróbuje ponownie za { $retry_in_s } sekundy.
+                    [many] deadloader automatycznie spróbuje ponownie za { $retry_in_s } sekund.
+                   *[other] deadloader automatycznie spróbuje ponownie za { $retry_in_s } sekundy.
                 }
            *[later] deadloader za chwilę automatycznie spróbuje ponownie.
         }
 e6 = Pobieranie nie powiodło się.
     .why =
         { $reason ->
-            [connection] Połączenie zostało przerwane.
+            [local_mode] deadloader działa w trybie lokalnym, więc nie wysyła żadnych żądań sieciowych.
+            [dns] Nie znaleziono adresu serwera pobierania.
+            [connect] deadloader nie mógł połączyć się z serwerem pobierania.
+            [tls] Nie udało się nawiązać bezpiecznego połączenia z serwerem pobierania.
             [timeout] Serwer zbyt długo nie odpowiadał.
-            [server] Serwer GameBanana zgłosił błąd.
+            [connection_lost] Połączenie zostało przerwane.
+            [http_status] Serwer odpowiedział błędem (HTTP { $status }).
            *[other] Pobieranie zostało przerwane.
         }
-    .todo = Zostanie wznowione od miejsca, w którym się zatrzymało.
+    .todo =
+        { $reason ->
+            [local_mode] Włącz katalog w Ustawieniach, aby pobierać mody.
+           *[other] Zostanie wznowione od miejsca, w którym się zatrzymało.
+        }
 e7 = Pobrany plik jest uszkodzony.
-    .why = Jego suma kontrolna nie zgadza się z podaną w GameBanana.
+    .why =
+        { $reason ->
+            [size] Jego rozmiar nie zgadza się z podanym w GameBanana.
+           *[checksum] Jego suma kontrolna nie zgadza się z podaną w GameBanana.
+        }
     .todo = Pobierz go ponownie.
 e8 = Nie można rozpakować archiwum.
     .why =
@@ -168,8 +180,18 @@ e15 = Nie udało się otworzyć linku.
     .why = W systemie Windows nie ustawiono domyślnej przeglądarki.
     .todo = Skopiuj link i otwórz go samodzielnie.
 e16 = Żądanie zablokowane.
-    .why = GameBanana przekierowało do { $host }, a tego hosta nie ma na liście dozwolonych hostów.
-    .todo = Nie musisz nic robić — deadloader komunikuje się tylko z GameBanana. Jeśli ufasz temu hostowi, dodaj go w sekcji Ustawienia → Zaawansowane.
+    .why =
+        { $reason ->
+            [not_https] Serwer przekierował na adres bez HTTPS, a deadloader nigdy nie podąża za takimi przekierowaniami.
+            [bad_redirect] Serwer wysłał przekierowanie, za którym deadloader nie może podążyć.
+            [too_many_redirects] Serwer przekierowywał zbyt wiele razy.
+           *[not_listed] Hosta { $host } nie ma na liście dozwolonych hostów, więc deadloader się z nim nie połączył.
+        }
+    .todo =
+        { $reason ->
+            [not_listed] Nie musisz nic robić — deadloader komunikuje się tylko z GameBanana. Jeśli ufasz temu hostowi, dodaj go w sekcji Ustawienia → Zaawansowane.
+           *[not_https] Nie musisz nic robić — deadloader podąża tylko za bezpiecznymi przekierowaniami. Spróbuj ponownie później.
+        }
 e17 = Nie udało się zaimportować profilu.
     .why =
         { $reason ->

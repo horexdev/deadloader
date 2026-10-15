@@ -59,20 +59,32 @@ e5 = GameBanana가 혼잡합니다.
         }
     .todo =
         { $wait ->
-            [seconds] deadloader가 { $seconds }초 후에 자동으로 다시 시도합니다.
+            [seconds] deadloader가 { $retry_in_s }초 후에 자동으로 다시 시도합니다.
            *[later] deadloader가 곧 자동으로 다시 시도합니다.
         }
 e6 = 다운로드하지 못했습니다.
     .why =
         { $reason ->
-            [connection] 연결이 끊어졌습니다.
+            [local_mode] deadloader가 로컬 모드이므로 네트워크 요청을 보내지 않습니다.
+            [dns] 다운로드 서버의 주소를 찾을 수 없습니다.
+            [connect] deadloader가 다운로드 서버에 연결하지 못했습니다.
+            [tls] 다운로드 서버와 보안 연결을 설정하지 못했습니다.
             [timeout] 서버 응답이 너무 오래 걸렸습니다.
-            [server] GameBanana 서버에서 오류가 발생했습니다.
+            [connection_lost] 연결이 끊어졌습니다.
+            [http_status] 서버가 오류로 응답했습니다(HTTP { $status }).
            *[other] 다운로드가 중단되었습니다.
         }
-    .todo = 중단된 지점부터 다시 이어서 받습니다.
+    .todo =
+        { $reason ->
+            [local_mode] 모드를 다운로드하려면 설정에서 카탈로그를 켜세요.
+           *[other] 중단된 지점부터 다시 이어서 받습니다.
+        }
 e7 = 다운로드한 파일이 손상되었습니다.
-    .why = 체크섬이 GameBanana에 표시된 값과 일치하지 않습니다.
+    .why =
+        { $reason ->
+            [size] 파일 크기가 GameBanana에 표시된 값과 일치하지 않습니다.
+           *[checksum] 체크섬이 GameBanana에 표시된 값과 일치하지 않습니다.
+        }
     .todo = 다시 다운로드하세요.
 e8 = 압축 파일을 풀 수 없습니다.
     .why =
@@ -126,8 +138,18 @@ e15 = 링크를 열 수 없습니다.
     .why = Windows에 기본 브라우저가 설정되어 있지 않습니다.
     .todo = 링크를 복사해 직접 여세요.
 e16 = 요청이 차단되었습니다.
-    .why = GameBanana가 허용된 호스트 목록에 없는 { $host } 호스트로 리디렉션했습니다.
-    .todo = 아무것도 하지 않아도 됩니다. deadloader는 GameBanana와만 통신합니다. 이 호스트를 신뢰한다면 설정 → 고급에서 추가하세요.
+    .why =
+        { $reason ->
+            [not_https] 서버가 HTTPS가 아닌 주소로 리디렉션했습니다. deadloader는 이런 리디렉션을 따르지 않습니다.
+            [bad_redirect] 서버가 deadloader가 따를 수 없는 리디렉션을 보냈습니다.
+            [too_many_redirects] 서버가 너무 여러 번 리디렉션했습니다.
+           *[not_listed] { $host } 호스트가 허용된 호스트 목록에 없어 deadloader가 연결하지 않았습니다.
+        }
+    .todo =
+        { $reason ->
+            [not_listed] 아무것도 하지 않아도 됩니다. deadloader는 GameBanana와만 통신합니다. 이 호스트를 신뢰한다면 설정 → 고급에서 추가하세요.
+           *[not_https] 아무것도 하지 않아도 됩니다. deadloader는 안전한 리디렉션만 따릅니다. 나중에 다시 시도하세요.
+        }
 e17 = 프로필을 가져올 수 없습니다.
     .why =
         { $reason ->

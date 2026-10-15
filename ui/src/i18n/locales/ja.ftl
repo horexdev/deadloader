@@ -59,20 +59,32 @@ e5 = GameBananaが混雑しています。
         }
     .todo =
         { $wait ->
-            [seconds] { $seconds }秒後にdeadloaderが自動的に再試行します。
+            [seconds] { $retry_in_s }秒後にdeadloaderが自動的に再試行します。
            *[later] まもなくdeadloaderが自動的に再試行します。
         }
 e6 = ダウンロードに失敗しました。
     .why =
         { $reason ->
-            [connection] 接続が切断されました。
+            [local_mode] deadloaderはローカルモードのため、ネットワーク要求を行いません。
+            [dns] ダウンロードサーバーのアドレスが見つかりませんでした。
+            [connect] deadloaderがダウンロードサーバーに接続できませんでした。
+            [tls] ダウンロードサーバーとの安全な接続を確立できませんでした。
             [timeout] サーバーの応答に時間がかかりすぎました。
-            [server] GameBananaのサーバーがエラーを返しました。
+            [connection_lost] 接続が切断されました。
+            [http_status] サーバーがエラーを返しました（HTTP { $status }）。
            *[other] ダウンロードが中断されました。
         }
-    .todo = 中断したところから再開されます。
+    .todo =
+        { $reason ->
+            [local_mode] MODをダウンロードするには、設定でカタログをオンにしてください。
+           *[other] 中断したところから再開されます。
+        }
 e7 = ダウンロードしたファイルが破損しています。
-    .why = チェックサムがGameBananaに記載されている値と一致しません。
+    .why =
+        { $reason ->
+            [size] ファイルサイズがGameBananaに記載されている値と一致しません。
+           *[checksum] チェックサムがGameBananaに記載されている値と一致しません。
+        }
     .todo = もう一度ダウンロードしてください。
 e8 = アーカイブを展開できません。
     .why =
@@ -126,8 +138,18 @@ e15 = リンクを開けませんでした。
     .why = Windowsで既定のブラウザーが設定されていません。
     .todo = リンクをコピーして、ご自身で開いてください。
 e16 = リクエストをブロックしました。
-    .why = GameBananaが{ $host }にリダイレクトしましたが、このホストは許可されたホストの一覧にありません。
-    .todo = 対処は不要です。deadloaderはGameBananaとだけ通信します。このホストを信頼できる場合は、設定 → 詳細設定で追加してください。
+    .why =
+        { $reason ->
+            [not_https] サーバーがHTTPSではないアドレスにリダイレクトしました。deadloaderはこのようなリダイレクトには従いません。
+            [bad_redirect] deadloaderが従えないリダイレクトがサーバーから送られてきました。
+            [too_many_redirects] サーバーのリダイレクト回数が多すぎます。
+           *[not_listed] { $host }は許可されたホストの一覧にないため、deadloaderは接続しませんでした。
+        }
+    .todo =
+        { $reason ->
+            [not_listed] 対処は不要です。deadloaderはGameBananaとだけ通信します。このホストを信頼できる場合は、設定 → 詳細設定で追加してください。
+           *[not_https] 対処は不要です。deadloaderは安全なリダイレクトにのみ従います。しばらくしてからもう一度お試しください。
+        }
 e17 = プロファイルをインポートできませんでした。
     .why =
         { $reason ->

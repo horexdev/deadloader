@@ -80,23 +80,35 @@ e5 = GameBanana è sovraccarico.
     .todo =
         { $wait ->
             [seconds]
-                { $seconds ->
-                    [one] deadloader riproverà automaticamente tra { $seconds } secondo.
-                   *[other] deadloader riproverà automaticamente tra { $seconds } secondi.
+                { $retry_in_s ->
+                    [one] deadloader riproverà automaticamente tra { $retry_in_s } secondo.
+                   *[other] deadloader riproverà automaticamente tra { $retry_in_s } secondi.
                 }
            *[later] deadloader riproverà automaticamente tra poco.
         }
 e6 = Download non riuscito.
     .why =
         { $reason ->
-            [connection] La connessione si è interrotta.
+            [local_mode] deadloader è in modalità locale, quindi non effettua richieste di rete.
+            [dns] Impossibile trovare l’indirizzo del server di download.
+            [connect] deadloader non è riuscito a connettersi al server di download.
+            [tls] Impossibile stabilire una connessione sicura con il server di download.
             [timeout] Il server ha impiegato troppo tempo a rispondere.
-            [server] Il server di GameBanana ha segnalato un errore.
+            [connection_lost] La connessione si è interrotta.
+            [http_status] Il server ha risposto con un errore (HTTP { $status }).
            *[other] Il download è stato interrotto.
         }
-    .todo = Riprenderà da dove si era fermato.
+    .todo =
+        { $reason ->
+            [local_mode] Attiva il catalogo nelle Impostazioni per scaricare i mod.
+           *[other] Riprenderà da dove si era fermato.
+        }
 e7 = Il file scaricato è danneggiato.
-    .why = Il suo checksum non corrisponde a quello indicato da GameBanana.
+    .why =
+        { $reason ->
+            [size] La sua dimensione non corrisponde a quella indicata da GameBanana.
+           *[checksum] Il suo checksum non corrisponde a quello indicato da GameBanana.
+        }
     .todo = Scaricalo di nuovo.
 e8 = Impossibile estrarre l’archivio.
     .why =
@@ -154,8 +166,18 @@ e15 = Impossibile aprire il link.
     .why = In Windows non è impostato un browser predefinito.
     .todo = Copia il link e aprilo tu.
 e16 = Richiesta bloccata.
-    .why = GameBanana ha reindirizzato a { $host }, che non è nell’elenco degli host consentiti.
-    .todo = Non devi fare nulla: deadloader comunica solo con GameBanana. Se ti fidi di questo host, aggiungilo in Impostazioni → Avanzate.
+    .why =
+        { $reason ->
+            [not_https] Il server ha reindirizzato a un indirizzo senza HTTPS, che deadloader non segue mai.
+            [bad_redirect] Il server ha inviato un reindirizzamento che deadloader non può seguire.
+            [too_many_redirects] Il server ha effettuato troppi reindirizzamenti.
+           *[not_listed] { $host } non è nell’elenco degli host consentiti, quindi deadloader non si è connesso.
+        }
+    .todo =
+        { $reason ->
+            [not_listed] Non devi fare nulla: deadloader comunica solo con GameBanana. Se ti fidi di questo host, aggiungilo in Impostazioni → Avanzate.
+           *[not_https] Non devi fare nulla: deadloader segue solo reindirizzamenti sicuri. Riprova più tardi.
+        }
 e17 = Impossibile importare il profilo.
     .why =
         { $reason ->

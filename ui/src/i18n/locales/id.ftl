@@ -59,20 +59,32 @@ e5 = GameBanana sedang sibuk.
         }
     .todo =
         { $wait ->
-            [seconds] deadloader akan mencoba lagi secara otomatis dalam { $seconds } detik.
+            [seconds] deadloader akan mencoba lagi secara otomatis dalam { $retry_in_s } detik.
            *[later] deadloader akan segera mencoba lagi secara otomatis.
         }
 e6 = Unduhan gagal.
     .why =
         { $reason ->
-            [connection] Koneksi terputus.
+            [local_mode] deadloader sedang dalam mode lokal, jadi tidak membuat permintaan jaringan.
+            [dns] Alamat server unduhan tidak ditemukan.
+            [connect] deadloader tidak dapat terhubung ke server unduhan.
+            [tls] Koneksi aman ke server unduhan tidak dapat dibuat.
             [timeout] Server terlalu lama merespons.
-            [server] Server GameBanana melaporkan kesalahan.
+            [connection_lost] Koneksi terputus.
+            [http_status] Server merespons dengan kesalahan (HTTP { $status }).
            *[other] Unduhan terhenti.
         }
-    .todo = Unduhan akan dilanjutkan dari titik terakhir.
+    .todo =
+        { $reason ->
+            [local_mode] Aktifkan katalog di Pengaturan untuk mengunduh mod.
+           *[other] Unduhan akan dilanjutkan dari titik terakhir.
+        }
 e7 = File yang diunduh rusak.
-    .why = Checksum-nya tidak cocok dengan yang tercantum di GameBanana.
+    .why =
+        { $reason ->
+            [size] Ukurannya tidak cocok dengan yang tercantum di GameBanana.
+           *[checksum] Checksum-nya tidak cocok dengan yang tercantum di GameBanana.
+        }
     .todo = Unduh ulang file tersebut.
 e8 = Arsip tidak dapat diekstrak.
     .why =
@@ -126,8 +138,18 @@ e15 = Tautan tidak dapat dibuka.
     .why = Belum ada browser default yang diatur di Windows.
     .todo = Salin tautan dan buka sendiri.
 e16 = Permintaan diblokir.
-    .why = GameBanana mengalihkan ke { $host }, yang tidak ada dalam daftar host yang diizinkan.
-    .todo = Anda tidak perlu melakukan apa pun — deadloader hanya berkomunikasi dengan GameBanana. Jika Anda memercayai host ini, tambahkan di Pengaturan → Lanjutan.
+    .why =
+        { $reason ->
+            [not_https] Server mengalihkan ke alamat tanpa HTTPS, dan deadloader tidak pernah mengikuti pengalihan seperti itu.
+            [bad_redirect] Server mengirim pengalihan yang tidak dapat diikuti deadloader.
+            [too_many_redirects] Server melakukan pengalihan terlalu banyak kali.
+           *[not_listed] { $host } tidak ada dalam daftar host yang diizinkan, jadi deadloader tidak terhubung ke sana.
+        }
+    .todo =
+        { $reason ->
+            [not_listed] Anda tidak perlu melakukan apa pun — deadloader hanya berkomunikasi dengan GameBanana. Jika Anda memercayai host ini, tambahkan di Pengaturan → Lanjutan.
+           *[not_https] Anda tidak perlu melakukan apa pun — deadloader hanya mengikuti pengalihan yang aman. Coba lagi nanti.
+        }
 e17 = Profil tidak dapat diimpor.
     .why =
         { $reason ->
