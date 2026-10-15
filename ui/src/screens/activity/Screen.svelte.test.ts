@@ -92,6 +92,8 @@ describe('the Activity screen', () => {
     await settle();
     expect(one(root, '[role="tab"][aria-selected="true"]').textContent).toContain('Files');
     expect(text(one(root, '.act-head'))).toContain('Part of change');
+    // 186: the change in words, not its number.
+    expect(text(one(root, '.act-body'))).toContain('Profile “Default” applied');
   });
 
   it('explains a blocked request named in the address, with the way to allow its host', async () => {

@@ -397,9 +397,14 @@ impl Session {
         remove_foreign: bool,
         game_running: bool,
     ) -> Result<RolledBack, SessionError> {
+        let change = crate::log::InChange {
+            log: &*self.log,
+            txn: unique_number(),
+            change: crate::log::Change::Rollback,
+        };
         let fs = Logged {
             fs: &Disk,
-            log: &*self.log,
+            log: &change,
         };
         let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
         let engine = Engine {
@@ -688,6 +693,24 @@ mod tests {
         assert_eq!(p.selected_profile, "Default");
         assert_eq!(p.library_mods, 2);
         assert!(p.others.is_empty());
+    }
+
+    #[test]
+    fn a_rollback_says_what_its_file_operations_were() {
+        let f = Fixture::new("rollbackchange");
+        let mut s = f.applied();
+        let at = f.log.events().len();
+        s.rollback(&f.game("Deadlock"), false, false)
+            .expect("rolled back");
+        let events = f.log.events();
+        let since = &events[at..];
+        assert!(!since.is_empty());
+        assert!(
+            since
+                .iter()
+                .all(|(_, e)| e.change == Some(crate::log::Change::Rollback) && e.txn.is_some()),
+            "{since:?}"
+        );
     }
 
     #[test]

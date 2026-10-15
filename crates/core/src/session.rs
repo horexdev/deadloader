@@ -544,9 +544,15 @@ impl Session {
 
         let direction = Direction::default();
         let journal = FileJournal::new(data_dir.join("journal.jsonl"));
+        // Whatever recovery does to the game folder finishes a change a crash cut off (186).
+        let change = crate::log::InChange {
+            log: &*log,
+            txn: unique_number(),
+            change: crate::log::Change::Recovered,
+        };
         let fs = Logged {
             fs: &Disk,
-            log: &*log,
+            log: &change,
         };
         let engine = Engine {
             fs: &fs,
@@ -1427,9 +1433,23 @@ impl Session {
         if game_running {
             return Err(SessionError::Engine(EngineError::GameRunning));
         }
+        // The profile's name as it is stored, whatever case the caller used.
+        let profile = self
+            .manifest
+            .installations
+            .iter()
+            .filter_map(|i| i.applied_profile.as_deref())
+            .find(|n| n.to_lowercase() == name.to_lowercase())
+            .unwrap_or(name)
+            .to_owned();
+        let change = crate::log::InChange {
+            log: &*self.log,
+            txn: unique_number(),
+            change: crate::log::Change::ProfileRemoved { profile },
+        };
         let fs = Logged {
             fs: &Disk,
-            log: &*self.log,
+            log: &change,
         };
         let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
         let engine = Engine {
@@ -1485,6 +1505,9 @@ impl Session {
         let change = crate::log::InChange {
             log: &*self.log,
             txn: tx,
+            change: crate::log::Change::Apply {
+                profile: profile.name.clone(),
+            },
         };
         let fs = Logged {
             fs: &Disk,
@@ -1762,11 +1785,19 @@ impl Session {
         };
         let imported = self.import_request(&req, None, false)?;
         let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
+        let tx = unique_number();
+        let change = crate::log::InChange {
+            log: &*self.log,
+            txn: tx,
+            change: crate::log::Change::TakeForeign {
+                file: item.name.clone(),
+            },
+        };
         let fs = Logged {
             fs: &Disk,
-            log: &*self.log,
+            log: &change,
         };
-        if let Err(e) = journal::run(&fs, &journal, unique_number(), &[Step::Delete { path }]) {
+        if let Err(e) = journal::run(&fs, &journal, tx, &[Step::Delete { path }]) {
             // The original stays where it was; the copy goes again.
             let _ = self.remove(&Target::Mod(imported.mod_id.clone()), &Permanently);
             return Err(SessionError::Engine(EngineError::Tx(e)));
@@ -1799,9 +1830,14 @@ impl Session {
         if game_running {
             return Err(SessionError::Engine(EngineError::GameRunning));
         }
+        let change = crate::log::InChange {
+            log: &*self.log,
+            txn: unique_number(),
+            change: crate::log::Change::GameinfoFixed,
+        };
         let fs = Logged {
             fs: &Disk,
-            log: &*self.log,
+            log: &change,
         };
         Ok(ensure_mods_load(
             &fs,
@@ -2997,6 +3033,126 @@ mod tests {
             events[imported..].iter().map(|(_, e)| e.txn).collect();
         assert_eq!(txns.len(), 1, "{events:?}");
         assert!(txns.iter().all(Option::is_some), "{events:?}");
+    }
+
+    /// The file operations logged since `from`: every one says it was part of `change` (186).
+    fn all_part_of(f: &Fixture, from: usize, change: &crate::log::Change) {
+        let events = f.log.events();
+        let since = &events[from..];
+        assert!(!since.is_empty(), "nothing logged");
+        assert!(
+            since.iter().all(|(_, e)| e.change.as_ref() == Some(change)),
+            "{since:?}"
+        );
+        let txns: std::collections::BTreeSet<Option<u64>> =
+            since.iter().map(|(_, e)| e.txn).collect();
+        assert_eq!(txns.len(), 1, "one change id: {since:?}");
+        assert!(txns.iter().all(Option::is_some), "{since:?}");
+    }
+
+    #[test]
+    fn every_change_to_the_game_folder_says_what_it_was() {
+        use crate::log::Change;
+        let f = Fixture::new("changes");
+        let mut s = open(&f);
+        let game = f.game();
+        s.import_file(
+            &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("haze");
+
+        let at = f.log.events().len();
+        s.apply(&game, false).expect("applied");
+        all_part_of(
+            &f,
+            at,
+            &Change::Apply {
+                profile: "Default".to_owned(),
+            },
+        );
+
+        let at = f.log.events().len();
+        s.take_out_of_game("default", false).expect("taken out");
+        all_part_of(
+            &f,
+            at,
+            &Change::ProfileRemoved {
+                profile: "Default".to_owned(),
+            },
+        );
+    }
+
+    #[test]
+    fn finishing_a_change_a_crash_cut_off_says_so() {
+        use crate::log::Change;
+        let f = Fixture::new("changesrecovered");
+        let addons = f.game().join("game").join("citadel").join("addons");
+        std::fs::create_dir_all(&addons).expect("addons");
+        let from = addons.join("pak01_dir.vpk.tmp");
+        std::fs::write(&from, b"vpk").expect("placed");
+        std::fs::create_dir_all(f.data()).expect("data");
+        // A change that renamed nothing yet when the process died.
+        let begin = serde_json::json!({
+            "rec": "begin",
+            "tx": 42,
+            "steps": [crate::journal::Step::Rename { from: from.clone(), to: addons.join("pak01_dir.vpk") }],
+        });
+        std::fs::write(f.data().join("journal.jsonl"), format!("{begin}\n")).expect("journal");
+        let at = f.log.events().len();
+        open(&f);
+        assert!(addons.join("pak01_dir.vpk").exists(), "rolled forward");
+        let events = f.log.events();
+        let renamed: Vec<_> = events[at..]
+            .iter()
+            .filter(|(_, e)| e.op == crate::log::FileOp::Rename)
+            .collect();
+        assert!(!renamed.is_empty(), "{events:?}");
+        assert!(
+            renamed
+                .iter()
+                .all(|(_, e)| e.change == Some(Change::Recovered) && e.txn.is_some()),
+            "{renamed:?}"
+        );
+    }
+
+    #[test]
+    fn taking_a_foreign_file_and_fixing_gameinfo_say_what_they_were() {
+        use crate::log::Change;
+        let f = Fixture::new("changesforeign");
+        let mut s = open(&f);
+        let game = foreign_game(&f);
+        let at = f.log.events().len();
+        s.take_foreign(&game, "pak01_dir.vpk", "Haze skin", false)
+            .expect("taken");
+        // The copy into the library only reads the game folder (an import); the change to it is the original leaving.
+        let events = f.log.events();
+        let in_addons = |p: &Option<String>| p.as_deref().is_some_and(|p| p.contains("addons"));
+        let in_game: Vec<_> = events[at..]
+            .iter()
+            .filter(|(_, e)| {
+                in_addons(&e.dst)
+                    || (matches!(
+                        e.op,
+                        crate::log::FileOp::Rename | crate::log::FileOp::Delete
+                    ) && in_addons(&e.src))
+            })
+            .collect();
+        assert!(!in_game.is_empty());
+        assert!(
+            in_game.iter().all(|(_, e)| e.txn.is_some()
+                && e.change
+                    == Some(Change::TakeForeign {
+                        file: "pak01_dir.vpk".to_owned()
+                    })),
+            "{in_game:?}"
+        );
+
+        let f = Fixture::new("changesgameinfo");
+        let mut s = open(&f);
+        let at = f.log.events().len();
+        s.fix_gameinfo(&f.game(), false).expect("fixed");
+        all_part_of(&f, at, &Change::GameinfoFixed);
     }
 
     #[test]

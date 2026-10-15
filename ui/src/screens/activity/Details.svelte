@@ -13,6 +13,7 @@
   import type { LogEntry } from '../../lib/api';
   import { describe, t } from '../../i18n';
   import {
+    changeText,
     clock,
     durationText,
     hopStatusText,
@@ -138,7 +139,12 @@
         if (r.error) {
           out.push({ label: t('activity-d-error'), value: r.error, mono: true });
         }
-        out.push({ label: t('activity-d-change'), value: r.txn === undefined ? '—' : String(r.txn), mono: r.txn !== undefined });
+        // The change in words, with its number to find its other operations (186).
+        out.push({
+          label: t('activity-d-change'),
+          value: r.txn === undefined ? '—' : r.change ? `${changeText(r)} · ${r.txn}` : String(r.txn),
+          mono: r.txn !== undefined && !r.change,
+        });
         if (r.sha256) {
           out.push({ label: t('activity-d-sha256'), value: r.sha256, mono: true });
         }
