@@ -213,6 +213,8 @@ pub enum SessionError {
     GameNotFound(PathBuf),
     /// Only a self-contained `pakNN_dir.vpk` of another tool can be taken under management (D11).
     NotTakeable(String),
+    /// The name is not a foreign item of the game's mod folder (F9).
+    NotForeign(String),
     Io(io::Error),
 }
 
@@ -232,6 +234,9 @@ impl std::fmt::Display for SessionError {
             Self::EmptyName => f.write_str("a mod name can't be empty"),
             Self::GameNotFound(root) => {
                 write!(f, "no Deadlock installation in {}", root.display())
+            }
+            Self::NotForeign(name) => {
+                write!(f, "{name} is not a foreign item of the game's mod folder")
             }
             Self::NotTakeable(name) => {
                 write!(
@@ -264,7 +269,8 @@ impl ToUserMessage for SessionError {
             | Self::UnknownFile(_)
             | Self::NotLinked(_)
             | Self::EmptyName
-            | Self::NotTakeable(_) => UserMessage::new(MessageId::Internal).arg("detail", self),
+            | Self::NotTakeable(_)
+            | Self::NotForeign(_) => UserMessage::new(MessageId::Internal).arg("detail", self),
         }
     }
 }
@@ -1492,6 +1498,13 @@ impl Session {
 
     /// F9 "Leave as is": the item stays where it is and listed, but is never reported again.
     pub fn leave_foreign(&mut self, game_root: &Path, name: &str) -> Result<(), SessionError> {
+        let name = self
+            .foreign(game_root)
+            .into_iter()
+            .find(|i| i.name.eq_ignore_ascii_case(name))
+            .map(|i| i.name)
+            .ok_or_else(|| SessionError::NotForeign(name.to_owned()))?;
+        let name = name.as_str();
         let root = game_root.display().to_string();
         let mut updated = self.manifest.clone();
         let index = match updated
@@ -3155,6 +3168,25 @@ mod tests {
                 .left
         );
         assert!(addons(&game).join("replays").exists(), "never touched");
+    }
+
+    #[test]
+    fn only_a_listed_foreign_item_can_be_left_as_it_is() {
+        let f = Fixture::new("foreignleaveunknown");
+        let mut s = open(&f);
+        let game = foreign_game(&f);
+        assert!(matches!(
+            s.leave_foreign(&game, "nothing_here.vpk"),
+            Err(SessionError::NotForeign(_))
+        ));
+        assert!(
+            open(&f)
+                .manifest()
+                .installations
+                .iter()
+                .all(|i| i.left_foreign.is_empty()),
+            "nothing written"
+        );
     }
 
     #[test]

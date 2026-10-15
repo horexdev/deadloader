@@ -6,7 +6,10 @@
 #![allow(unsafe_code)]
 
 use std::io;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
+use windows_sys::Win32::System::SystemInformation::{
+    GetSystemDirectoryW, GetSystemWindowsDirectoryW,
+};
 use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -39,10 +42,34 @@ pub fn open_url(url: &str) -> io::Result<()> {
     execute(url.trim(), None)
 }
 
-/// The program [`reveal`] starts.
-pub const EXPLORER: &str = "explorer.exe";
-/// The program [`open_in_notepad`] starts.
-pub const NOTEPAD: &str = "notepad.exe";
+/// File Explorer, which [`reveal`] starts. Programs are started by their full path in the Windows folders: a bare
+/// name is looked up in the current folder first, where a planted copy could sit (e.g. Downloads, next to the exe).
+pub fn explorer() -> io::Result<PathBuf> {
+    folder(GetSystemWindowsDirectoryW).map(|d| d.join("explorer.exe"))
+}
+
+/// Notepad, which [`open_in_notepad`] starts (see [`explorer`]).
+pub fn notepad() -> io::Result<PathBuf> {
+    folder(GetSystemDirectoryW).map(|d| d.join("notepad.exe"))
+}
+
+/// A Windows folder from one of the `Get…DirectoryW` functions.
+fn folder(get: unsafe extern "system" fn(*mut u16, u32) -> u32) -> io::Result<PathBuf> {
+    let mut buffer = vec![0u16; 260];
+    loop {
+        let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+        // SAFETY: `buffer` is writable for `capacity` UTF-16 units and outlives the call.
+        let len = unsafe { get(buffer.as_mut_ptr(), capacity) } as usize;
+        if len == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if len < buffer.len() {
+            return Ok(PathBuf::from(String::from_utf16_lossy(&buffer[..len])));
+        }
+        // Too small: `len` is the size needed, including the NUL.
+        buffer.resize(len, 0);
+    }
+}
 
 /// File Explorer's command line that opens the folder of `path` with `path` selected.
 pub fn explorer_arguments(path: &Path) -> io::Result<String> {
@@ -57,13 +84,13 @@ pub fn notepad_arguments(path: &Path) -> io::Result<String> {
 /// Shows `path` selected in its folder in File Explorer ("Open folder").
 pub fn reveal(path: &Path) -> io::Result<()> {
     let arguments = explorer_arguments(path)?;
-    execute(EXPLORER, Some(&arguments))
+    execute(&explorer()?.to_string_lossy(), Some(&arguments))
 }
 
 /// Opens a text file in Notepad ("Open file" for `gameinfo.gi`, which has no program of its own).
 pub fn open_in_notepad(path: &Path) -> io::Result<()> {
     let arguments = notepad_arguments(path)?;
-    execute(NOTEPAD, Some(&arguments))
+    execute(&notepad()?.to_string_lossy(), Some(&arguments))
 }
 
 /// An absolute path without `..` or quotes, as text.
@@ -142,6 +169,18 @@ mod tests {
         ] {
             assert!(!may_open(refused), "{refused}");
         }
+    }
+
+    #[test]
+    fn explorer_and_notepad_are_started_from_the_windows_folders_by_full_path() {
+        let explorer = explorer().expect("the Windows folder");
+        let notepad = notepad().expect("the system folder");
+        for (program, name) in [(&explorer, "explorer.exe"), (&notepad, "notepad.exe")] {
+            assert!(program.is_absolute(), "{}", program.display());
+            assert!(program.is_file(), "{}", program.display());
+            assert_eq!(program.file_name().and_then(|n| n.to_str()), Some(name));
+        }
+        assert_eq!(notepad.parent().and_then(Path::parent), explorer.parent());
     }
 
     #[test]
