@@ -1,6 +1,6 @@
 // The words and numbers of the Activity screen, in the current language.
 
-import type { FileOp, HostSource, LogEntry, LogLevel, NetworkLine, Purpose } from '../../lib/api';
+import type { FileLine, FileOp, HostSource, LogEntry, LogLevel, NetworkLine, Purpose } from '../../lib/api';
 import { formatClock, formatInstant, formatNumber, formatSize, t } from '../../i18n';
 import { hopStatus, networkStatus } from './model';
 
@@ -10,6 +10,25 @@ export const levelLabel = (lvl: LogLevel): string => t(`activity-lv-${lvl}`);
 export const sourceLabel = (s: HostSource | undefined): string => t(`activity-src-${s ?? 'blocked'}`);
 export const sourceLong = (s: HostSource | undefined | null): string => t(`activity-src-long-${s ?? 'blocked'}`);
 export const initiatorLabel = (i: 'auto' | 'user'): string => t(`activity-by-${i}`);
+
+/** The change a file operation was part of, in words ("Profile “Evening” applied"); its number on lines written before
+ * changes were described (186); null when it was part of none. */
+export function changeText(line: FileLine): string | null {
+  const change = line.change;
+  if (change) {
+    const key = `activity-change-${change.kind.replace(/_/g, '-')}`;
+    switch (change.kind) {
+      case 'apply':
+      case 'profile_removed':
+        return t(key, { profile: change.profile });
+      case 'take_foreign':
+        return t(key, { file: change.file });
+      default:
+        return t(key);
+    }
+  }
+  return line.txn === undefined ? null : String(line.txn);
+}
 
 /** "14:32:09". */
 export function clock(ts: string): string {

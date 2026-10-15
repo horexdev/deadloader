@@ -642,6 +642,37 @@ fn requests_filter_by_purpose_host_and_result() {
 }
 
 #[test]
+fn a_file_operation_says_which_change_it_was_part_of() {
+    let dir = MemLogDir::default();
+    let change = crate::log::Change::Apply {
+        profile: "Evening".to_owned(),
+    };
+    file(
+        &dir,
+        TODAY,
+        "09:00",
+        "f-1",
+        FileEvent {
+            dst: Some(r"D:\Deadlock\game\citadel\addons\pak01_dir.vpk".into()),
+            txn: Some(7),
+            change: Some(change.clone()),
+            ..FileEvent::new(FileOp::Hardlink)
+        },
+    );
+    let masker = nobody();
+    let page = reader(&dir, &masker)
+        .page(&query(Kind::Files))
+        .expect("page");
+    match &page.entries[..] {
+        [Entry::Files { record }] => {
+            assert_eq!(record.body.txn, Some(7));
+            assert_eq!(record.body.change, Some(change));
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
 fn file_operations_filter_by_operation_and_result() {
     let dir = MemLogDir::default();
     file(

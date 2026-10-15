@@ -218,6 +218,9 @@ pub struct FileEvent {
     /// The intent-journal transaction the operation belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub txn: Option<u64>,
+    /// What that change to the game folder was (186).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<Change>,
     pub result: Outcome,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -233,6 +236,7 @@ impl FileEvent {
             bytes: None,
             sha256: None,
             txn: None,
+            change: None,
             result: Outcome::Ok,
             error: None,
         }
@@ -555,18 +559,39 @@ impl<C: Clock, D: LogDir> FileLog for Logger<C, D> {
     }
 }
 
-/// The file operations of one change to the game folder: every event carries the change's intent-journal transaction,
+/// What a change to the game folder was, for Activity's "Part of change" (186). Data, not words: the UI says it in
+/// the user's language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Change {
+    /// A profile went into the game folder (Apply, Play, the apply after the game closed, its Undo).
+    Apply { profile: String },
+    /// Rollback (D7, F11): deadloader's files and line left the game folder.
+    Rollback,
+    /// The applied profile was deleted, so its mods left the game folder (184).
+    ProfileRemoved { profile: String },
+    /// Another tool's pak file was taken under management (D11).
+    TakeForeign { file: String },
+    /// Our line went back into the original `gameinfo.gi` (D10 "Check again").
+    GameinfoFixed,
+    /// A change cut off by a crash was finished at start.
+    Recovered,
+}
+
+/// The file operations of one change to the game folder: every event carries the change's id and what the change was,
 /// so the Activity screen can show which change an operation belonged to.
 #[derive(Debug)]
 pub struct InChange<L> {
     pub log: L,
     pub txn: u64,
+    pub change: Change,
 }
 
 impl<L: FileLog> FileLog for InChange<L> {
     fn record(&self, msg: &str, event: &FileEvent) {
         let event = FileEvent {
             txn: Some(self.txn),
+            change: Some(self.change.clone()),
             ..event.clone()
         };
         self.log.record(msg, &event);
@@ -2400,12 +2425,58 @@ mod tests {
     }
 
     #[test]
-    fn file_operations_of_one_change_carry_its_transaction() {
+    fn file_operations_of_one_change_carry_its_transaction_and_what_it_was() {
         let mem = MemFileLog::default();
-        let change = InChange { log: &mem, txn: 42 };
+        let change = InChange {
+            log: &mem,
+            txn: 42,
+            change: Change::Apply {
+                profile: "Evening".to_owned(),
+            },
+        };
         change.record("placed", &FileEvent::new(FileOp::Hardlink));
         assert_eq!(mem.events()[0].1.txn, Some(42));
+        assert_eq!(
+            mem.events()[0].1.change,
+            Some(Change::Apply {
+                profile: "Evening".to_owned()
+            })
+        );
         assert_eq!(mem.events()[0].0, "placed");
+    }
+
+    #[test]
+    fn a_change_is_written_as_data_for_the_ui_to_word() {
+        let event = FileEvent {
+            txn: Some(7),
+            change: Some(Change::ProfileRemoved {
+                profile: "Ranked".to_owned(),
+            }),
+            ..FileEvent::new(FileOp::Delete)
+        };
+        let value = serde_json::to_value(&event).expect("json");
+        assert_eq!(
+            value["change"],
+            json!({"kind": "profile_removed", "profile": "Ranked"})
+        );
+        for (change, kind) in [
+            (Change::Rollback, "rollback"),
+            (
+                Change::TakeForeign {
+                    file: "pak03_dir.vpk".to_owned(),
+                },
+                "take_foreign",
+            ),
+            (Change::GameinfoFixed, "gameinfo_fixed"),
+            (Change::Recovered, "recovered"),
+        ] {
+            assert_eq!(serde_json::to_value(&change).expect("json")["kind"], kind);
+        }
+        // Lines written before changes were described still read.
+        let old: FileEvent =
+            serde_json::from_value(json!({"op": "delete", "txn": 7, "result": "ok"}))
+                .expect("old line");
+        assert_eq!(old.change, None);
     }
 
     #[test]

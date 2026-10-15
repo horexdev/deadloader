@@ -39,6 +39,7 @@
   import Details from './Details.svelte';
   import Summary from './Summary.svelte';
   import {
+    changeText,
     clock,
     durationText,
     hopStatusText,
@@ -596,8 +597,9 @@
               : t('activity-lv-error')}</span
           ></span
         >
-        {#if fcols.change}<span class="act-c act-t" title={r.txn === undefined ? undefined : String(r.txn)}
-            >{r.txn ?? '—'}</span
+        {#if fcols.change}{@const change = changeText(r)}<span
+            class={['act-c', !r.change && 'act-t']}
+            title={r.txn === undefined ? undefined : `${change} · ${r.txn}`}>{change ?? '—'}</span
           >{/if}
       {:else}
         {@const r = e.record}

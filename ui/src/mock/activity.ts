@@ -126,7 +126,9 @@ function browse(b: Builder, page: number, by: 'auto' | 'user'): void {
 }
 
 /** Applying a profile: gameinfo.gi checked, files linked under temporary names, renamed into place, one removed. */
-function apply(b: Builder, txn: number, mods: string[], removed: number | null): void {
+/** An apply of `profile` (186: every operation says which change it was part of). */
+function apply(b: Builder, txn: number, mods: string[], removed: number | null, profile = 'Default'): void {
+  const change = { kind: 'apply' as const, profile };
   mods.forEach((mod, i) => {
     const slot = String(i + 3).padStart(2, '0');
     fileOp(b, 'hardlink', {
@@ -134,18 +136,20 @@ function apply(b: Builder, txn: number, mods: string[], removed: number | null):
       dst: String.raw`${GAME}\addons\pak${slot}_dir.vpk.${txn}.tmp`,
       bytes: 4_000_000 + i * 900_000,
       txn,
+      change,
     });
     later(b, 30);
     fileOp(b, 'rename', {
       src: String.raw`${GAME}\addons\pak${slot}_dir.vpk.${txn}.tmp`,
       dst: String.raw`${GAME}\addons\pak${slot}_dir.vpk`,
       txn,
+      change,
     });
     later(b, 30);
   });
   if (removed !== null) {
     const slot = String(removed).padStart(2, '0');
-    fileOp(b, 'delete', { src: String.raw`${GAME}\addons\pak${slot}_dir.vpk`, bytes: 23_000_000, txn });
+    fileOp(b, 'delete', { src: String.raw`${GAME}\addons\pak${slot}_dir.vpk`, bytes: 23_000_000, txn, change });
   }
 }
 
@@ -185,12 +189,14 @@ export function mockLogs(now: Date, scenario: string | null): MockLogs {
     dst: String.raw`${DATA}\backups\gameinfo\1792000000.gi`,
     bytes: 2150,
     txn: 1_792_000_000_000_000,
+    change: { kind: 'gameinfo_fixed' },
   });
   fileOp(b, 'rename', {
     src: String.raw`${GAME}\gameinfo.gi.tmp`,
     dst: String.raw`${GAME}\gameinfo.gi`,
     bytes: 2190,
     txn: 1_792_000_000_000_000,
+    change: { kind: 'gameinfo_fixed' },
   });
   event(b, 'info', 'deadlock was updated: our line in gameinfo.gi was added again');
   if (!local) {
@@ -213,6 +219,7 @@ export function mockLogs(now: Date, scenario: string | null): MockLogs {
     result: 'failed',
     error: 'The process cannot access the file because it is being used by another process. (os error 32)',
     txn: 1_792_011_000_000_000,
+    change: { kind: 'apply', profile: 'Default' },
   });
   event(b, 'warn', 'a file in the game folder could not be deleted', { file: String.raw`${GAME}\addons\pak09_dir.vpk` });
 

@@ -881,6 +881,15 @@ export interface NetworkLine extends LogLine {
   blocked?: string;
 }
 
+/** What a change to the game folder was (186); the UI words it. */
+export type GameChange =
+  | { kind: 'apply'; profile: string }
+  | { kind: 'rollback' }
+  | { kind: 'profile_removed'; profile: string }
+  | { kind: 'take_foreign'; file: string }
+  | { kind: 'gameinfo_fixed' }
+  | { kind: 'recovered' };
+
 export interface FileLine extends LogLine {
   op: FileOp;
   src?: string;
@@ -889,6 +898,8 @@ export interface FileLine extends LogLine {
   sha256?: string;
   /** The change (journal transaction) it belonged to. */
   txn?: number;
+  /** What that change was; missing on lines written before changes were described. */
+  change?: GameChange;
   result: 'ok' | 'failed';
   error?: string;
 }
