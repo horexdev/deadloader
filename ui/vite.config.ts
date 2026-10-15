@@ -2,6 +2,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
+import { firstLoadBudget } from './build/budget.ts';
 
 /**
  * `pnpm dev:mock` only: catalog pictures as coloured placeholders, so screens can be previewed in a browser without
@@ -27,7 +28,8 @@ function mockPictures(): Plugin {
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [svelte(), ...(mode === 'mock' ? [mockPictures()] : [])],
+  // What the page loads before its first frame (decision 120); screens and the wizard load when shown.
+  plugins: [svelte(), firstLoadBudget(272 * 1024), ...(mode === 'mock' ? [mockPictures()] : [])],
   resolve: process.env.VITEST
     ? // Component tests mount real components, so Svelte must resolve to its client build there.
       { conditions: ['browser'] }
@@ -35,6 +37,9 @@ export default defineConfig(({ mode }) => ({
       ? // The browser preview answers the core's commands from invented data (src/mock).
         { alias: { '@tauri-apps/api/core': fileURLToPath(new URL('./src/mock/core.ts', import.meta.url)) } }
       : undefined,
+  // Screens and the wizard load lazily; the dev server scans them at start, so their first visit doesn't make it
+  // re-bundle the dependencies and reload the page.
+  optimizeDeps: { entries: ['index.html', 'src/screens/*/Screen.svelte', 'src/wizard/Wizard.svelte'] },
   // The i18n tests read the Rust sources (message ids, reasons, language codes) to stay in step with the core.
   server: process.env.VITEST ? { fs: { allow: ['.', '../crates'] } } : undefined,
   build: {
@@ -44,7 +49,7 @@ export default defineConfig(({ mode }) => ({
     target: 'chrome120',
   },
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'build/**/*.test.ts'],
     environment: 'happy-dom',
     setupFiles: ['src/lib/test/setup.ts'],
     // Tests read the design stylesheets and the font stacks per script as text; other CSS is not processed in tests.

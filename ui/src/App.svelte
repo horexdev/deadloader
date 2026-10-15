@@ -4,18 +4,30 @@
   import { app } from './lib/app.svelte';
   import { notice, windowView, type Acknowledged } from './lib/notice.svelte';
   import { router, type Route } from './lib/router.svelte';
+  import { screenLoader } from './lib/screens';
   import Shell from './shell/Shell.svelte';
   import NoWrite from './wizard/NoWrite.svelte';
-  import Wizard from './wizard/Wizard.svelte';
 
-  // Each screen is src/screens/<route>/Screen.svelte; a route without one shows an empty area.
-  const screens = import.meta.glob<{ default: Component }>('./screens/*/Screen.svelte', { eager: true });
+  // Each screen is src/screens/<route>/Screen.svelte, loaded the first time it is shown; a route without one shows an
+  // empty area.
+  const screens = screenLoader(import.meta.glob<{ default: Component }>('./screens/*/Screen.svelte'));
 
-  function screenOf(route: Route): Component | undefined {
-    return screens[`./screens/${route}/Screen.svelte`]?.default;
+  function screenOf(route: Route): Component | Promise<Component> | undefined {
+    const screen = screens.get(route);
+    if (screen instanceof Promise) {
+      screen.catch((error: unknown) => app.fail(error));
+    }
+    return screen;
   }
 
   const Screen = $derived(screenOf(router.current));
+
+  /** The first-run wizard is needed once, so it isn't part of every start either. */
+  function wizard(): Promise<{ default: typeof import('./wizard/Wizard.svelte').default }> {
+    const loading = import('./wizard/Wizard.svelte');
+    loading.catch((error: unknown) => app.fail(error));
+    return loading;
+  }
 
   /** How the core started (E1 blocks everything else), and whether the app state has loaded. */
   let started = $state<Startup | null>(null);
@@ -56,11 +68,19 @@
 {#if view.kind === 'blocked'}
   <NoWrite folder={view.folder} detail={view.detail} />
 {:else if view.kind === 'wizard'}
-  <Wizard {app} mode={view.mode} ondone={wizardDone} />
+  {#await wizard() then { default: Wizard }}
+    <Wizard {app} mode={view.mode} ondone={wizardDone} />
+  {:catch}
+    <!-- The toast says what failed. -->
+  {/await}
 {:else if view.kind === 'shell'}
   <Shell {app} {router}>
-    {#if Screen}
-      <Screen />
-    {/if}
+    {#await Screen then Loaded}
+      {#if Loaded}
+        <Loaded />
+      {/if}
+    {:catch}
+      <!-- The toast says what failed. -->
+    {/await}
   </Shell>
 {/if}
