@@ -276,16 +276,21 @@ pub fn run() -> Result<(), StartError> {
     app.manage(Arc::clone(&backend));
     app.manage(Arc::clone(&outbox));
     push::start_notices(&backend, &outbox);
+    let settings_source = Arc::clone(&backend);
     watch_game(backend, outbox, Arc::clone(&log));
-    if let Err(e) = open_main_window(&app, &layout, &log, started) {
-        write(
-            &log,
-            Level::Error,
-            "main window could not be opened",
-            [("error", e.to_string().into())],
-        );
-        return Err(StartError::Window(e));
-    }
+    let window = match open_main_window(&app, &layout, &log, started) {
+        Ok(window) => window,
+        Err(e) => {
+            write(
+                &log,
+                Level::Error,
+                "main window could not be opened",
+                [("error", e.to_string().into())],
+            );
+            return Err(StartError::Window(e));
+        }
+    };
+    follow_zoom(&window, &settings_source, &log);
     open_catalog(app.handle().clone(), slot, catalog_parts, Arc::clone(&log));
     app.run(move |_, event| {
         // Running downloads save their position and stay queued for the next start.
@@ -513,6 +518,37 @@ fn main_window(app: &App, profile: PathBuf) -> WebviewWindowBuilder<'_, tauri::W
         .data_directory(profile)
         // A secure origin (`https://tauri.localhost`): plain-http subresources are blocked as mixed content.
         .use_https_scheme(true)
+        // The UI handles Ctrl + wheel / plus / minus / 0 and saves the zoom; WebView2's own keys would bypass it.
+        .zoom_hotkeys_enabled(false)
+}
+
+/// The zoom of Settings → General on the window now and after every change of it (Ctrl + wheel / plus / minus / 0
+/// save it too). WebView2's own zoom keys stay off, so the zoom is always the saved one.
+fn follow_zoom(window: &tauri::WebviewWindow, backend: &Arc<Backend>, log: &Log) {
+    let zoom = Arc::new(webview::Zoom::default());
+    let apply = {
+        let (window, log) = (window.clone(), Arc::clone(log));
+        move |percent: u32| {
+            if let Some(factor) = zoom.changed(percent)
+                && let Err(e) = window.set_zoom(factor)
+            {
+                write(
+                    &log,
+                    Level::Warn,
+                    "zoom could not be applied",
+                    [("percent", percent.into()), ("error", e.to_string().into())],
+                );
+            }
+        }
+    };
+    apply(
+        backend
+            .settings()
+            .map_or(100, |settings| settings.general.zoom_percent),
+    );
+    backend.on_settings(Box::new(move |settings| {
+        apply(settings.general.zoom_percent);
+    }));
 }
 
 fn open_main_window(
@@ -520,7 +556,7 @@ fn open_main_window(
     layout: &DataLayout,
     log: &Log,
     started: Instant,
-) -> tauri::Result<()> {
+) -> tauri::Result<tauri::WebviewWindow> {
     let loaded = AtomicBool::new(false);
     let on_load_log = Arc::clone(log);
     let window = main_window(app, layout.webview())
@@ -541,7 +577,8 @@ fn open_main_window(
     let check_log = Arc::clone(log);
     window.with_webview(move |platform| {
         check_profile_folder(&check_log, &expected, platform);
-    })
+    })?;
+    Ok(window)
 }
 
 #[cfg(windows)]

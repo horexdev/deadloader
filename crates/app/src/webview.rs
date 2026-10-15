@@ -73,6 +73,21 @@ where
 
 const PREFIX: &str = "WEBVIEW2_";
 
+/// The window's zoom (Settings → General, Ctrl + wheel / plus / minus / 0): the last percentage applied, so saving any
+/// other setting doesn't zoom the page again (a zoom change lays out the whole page).
+#[derive(Debug, Default)]
+pub struct Zoom {
+    last: std::sync::atomic::AtomicU32,
+}
+
+impl Zoom {
+    /// The WebView2 scale factor for `percent`, or `None` when the window already has it.
+    pub fn changed(&self, percent: u32) -> Option<f64> {
+        let before = self.last.swap(percent, std::sync::atomic::Ordering::SeqCst);
+        (before != percent).then(|| f64::from(percent) / 100.0)
+    }
+}
+
 /// Whether two Windows paths name the same folder, ignoring case, separators and a trailing separator.
 pub fn same_folder(a: &Path, b: &Path) -> bool {
     normalise(a) == normalise(b)
@@ -88,6 +103,19 @@ fn normalise(path: &Path) -> String {
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn the_zoom_reaches_the_window_only_when_it_changed() {
+        let zoom = Zoom::default();
+        assert_eq!(
+            zoom.changed(100),
+            Some(1.0),
+            "the first value always applies"
+        );
+        assert_eq!(zoom.changed(100), None, "another setting was saved");
+        assert_eq!(zoom.changed(125), Some(1.25));
+        assert_eq!(zoom.changed(50), Some(0.5));
+    }
 
     /// The set from ADR 0001, written out independently of the constants above.
     const REQUIRED_SWITCHES: [&str; 6] = [

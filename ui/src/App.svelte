@@ -5,6 +5,7 @@
   import { notice, windowView, type Acknowledged } from './lib/notice.svelte';
   import { router, type Route } from './lib/router.svelte';
   import { screenLoader } from './lib/screens';
+  import { watchZoom } from './lib/zoom';
   import Shell from './shell/Shell.svelte';
   import NoWrite from './wizard/NoWrite.svelte';
 
@@ -32,6 +33,9 @@
   /** How the core started (E1 blocks everything else), and whether the app state has loaded. */
   let started = $state<Startup | null>(null);
   let loaded = $state(false);
+
+  // Ctrl + wheel / plus / minus / 0 change the saved zoom; the core applies it to the window.
+  onMount(() => watchZoom(app));
 
   onMount(() => {
     void startup
