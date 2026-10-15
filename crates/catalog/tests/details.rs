@@ -104,6 +104,53 @@ fn files_are_listed_without_download_urls_and_kept_for_downloads() {
 }
 
 #[test]
+fn a_download_shows_the_first_picture_of_its_saved_page_at_card_size() {
+    let h = harness("text", false, NsfwMode::Hidden);
+    assert_eq!(
+        h.catalog.download_thumbnail(Section::Mod, MOD),
+        None,
+        "not saved yet: nothing is requested for it"
+    );
+    assert_eq!(h.transport.count(), 0);
+    h.catalog
+        .details(Section::Mod, MOD, None, Initiator::User)
+        .expect("page");
+    let id = h
+        .catalog
+        .download_thumbnail(Section::Mod, MOD)
+        .expect("from the saved page");
+    assert_eq!(
+        h.catalog.download_thumbnail(Section::Mod, MOD),
+        Some(id),
+        "the same picture every time, also after a restart"
+    );
+    assert_eq!(h.catalog.download_thumbnail(Section::Mod, 1), None);
+    assert_eq!(h.transport.count(), 1, "no request of its own");
+    h.on(THUMB_220, Reply::image("image/jpeg", JPEG));
+    h.catalog.image(&id).expect("the 220 px picture");
+    assert_eq!(h.net_log.all()[1].initiator, Initiator::Auto);
+}
+
+#[test]
+fn a_download_of_an_nsfw_mod_shows_its_picture_only_when_nsfw_is_shown() {
+    for (mode, shown) in [
+        (NsfwMode::Hidden, false),
+        (NsfwMode::Blurred, false),
+        (NsfwMode::Shown, true),
+    ] {
+        let h = harness("text", true, mode);
+        h.catalog
+            .details(Section::Mod, MOD, None, Initiator::User)
+            .expect("page");
+        assert_eq!(
+            h.catalog.download_thumbnail(Section::Mod, MOD).is_some(),
+            shown,
+            "{mode:?}"
+        );
+    }
+}
+
+#[test]
 fn a_saved_page_is_current_while_the_listing_shows_no_newer_update() {
     let h = harness("text", false, NsfwMode::Hidden);
     h.catalog

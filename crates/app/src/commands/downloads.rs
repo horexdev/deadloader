@@ -15,8 +15,8 @@ pub async fn download_install(
 ) -> Reply<deadloader_downloads::TaskId> {
     let downloads = Arc::clone(downloads.inner());
     on_catalog(slot, move |c| {
-        let file = c
-            .wait()?
+        let catalog = c.wait()?;
+        let file = catalog
             .remote_file(section, mod_id, file_id)
             .ok_or_else(|| {
                 UserMessage::new(MessageId::Internal).arg(
@@ -32,6 +32,9 @@ pub async fn download_install(
             mod_id,
             name,
             author,
+            thumbnail: catalog
+                .download_thumbnail(section, mod_id)
+                .map(|id| id.to_string()),
         };
         crate::downloads::install(&downloads, &file, &of)
     })

@@ -69,6 +69,24 @@ describe('the Downloads screen (S6)', () => {
     expect(update.querySelector<HTMLAnchorElement>('a.name')?.getAttribute('href')).toMatch(/^#\/catalog\/mod\/\d+$/);
   });
 
+  it('shows the mod’s picture in each row, and the placeholder without one or when it can’t be loaded', async () => {
+    const app = await start('downloads');
+    const { target } = render(Screen, { app });
+    const row = rowNamed(target, 'Vindicta — Coral Reef');
+    const task = app.tasks.find((t) => t.meta.mod_name === 'Vindicta — Coral Reef');
+    const img = one<HTMLImageElement>(row, 'img.thumb');
+    expect(img.getAttribute('src')).toBe(`https://dl.localhost/img/${task?.meta.thumbnail}`);
+    expect(img.getAttribute('alt')).toBe('');
+    expect(row.querySelector('span.thumb')).toBeNull();
+    const plainRow = rowNamed(target, 'Always Show Item Icons');
+    expect(plainRow.querySelector('img')).toBeNull();
+    expect(plainRow.querySelector('span.thumb')).not.toBeNull();
+    img.dispatchEvent(new Event('error'));
+    flushSync();
+    expect(row.querySelector('img')).toBeNull();
+    expect(row.querySelector('span.thumb')).not.toBeNull();
+  });
+
   it('pauses, resumes and cancels a download', async () => {
     const app = await start('downloads');
     const { target } = render(Screen, { app });

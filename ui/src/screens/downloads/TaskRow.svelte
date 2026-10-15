@@ -18,6 +18,7 @@
   import Button from '../../lib/components/Button.svelte';
   import Spinner from '../../lib/components/Spinner.svelte';
   import type { IconComponent } from '../../lib/components/types';
+  import { imageUrl } from '../../lib/api';
   import { describe, t } from '../../i18n';
   import { actionsOf, modHref, type Row, type Stage } from './tasks';
   import { metaOf, stageWord } from './text';
@@ -60,13 +61,20 @@
   const StageIcon = $derived(ICONS[row.stage]);
   const update = $derived(row.kind === 'task' && row.task.meta.replaces !== undefined ? row.task.meta.version : null);
   const failure = $derived(row.kind === 'task' && row.task.state.state === 'failed' ? describe(row.task.state.message) : null);
+  // The mod's picture (the catalog's id from the saved mod page); the placeholder without one or when it fails.
+  const thumbnail = $derived(row.kind === 'task' ? (row.task.meta.thumbnail ?? null) : null);
+  let failedPicture: string | null = $state(null);
   const barState = $derived(
     meta.indeterminate ? 'dl-progress--indeterminate' : ['paused', 'offline', 'disk', 'retrying'].includes(row.stage) ? 'dl-progress--paused' : '',
   );
 </script>
 
 <div role="listitem" aria-label={`${name} — ${word}`} class={['row', `row--${row.stage}`]}>
-  <span class="thumb" aria-hidden="true"></span>
+  {#if thumbnail && failedPicture !== thumbnail}
+    <img class="thumb picture" src={imageUrl(thumbnail)} alt="" onerror={() => (failedPicture = thumbnail)} />
+  {:else}
+    <span class="thumb" aria-hidden="true"></span>
+  {/if}
   <div
     class={['dl-progress', barState]}
     role={meta.track ? 'progressbar' : 'group'}
@@ -191,6 +199,12 @@
     border-radius: 4px;
     background: var(--surface-sunken);
     border: 1px solid var(--line);
+  }
+
+  .picture {
+    object-fit: cover;
+    object-position: 50% 30%;
+    border: 0;
   }
 
   .dl-progress {

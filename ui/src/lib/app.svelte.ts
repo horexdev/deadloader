@@ -482,11 +482,17 @@ export class AppState {
     this.toasts = this.toasts.filter((t) => t.id !== id);
   }
 
-  /** A core message as an error toast with what happened and what to do. */
+  /** A core message as an error toast with what happened and what to do; its "Details" opens D12 (155), which links
+   *  to the failure's log entry in Activity. */
   fail(error: unknown): void {
     const message: UserMessage = isUserMessage(error) ? error : { id: 'Internal', args: { detail: String(error) } };
     const text = describe(message);
-    this.toast({ kind: 'error', title: text.what, text: [text.why, text.todo].filter(Boolean).join(' ') });
+    this.toast({
+      kind: 'error',
+      title: text.what,
+      text: [text.why, text.todo].filter(Boolean).join(' '),
+      action: { label: t('errors-details'), onclick: () => this.showError(message) },
+    });
   }
 
   /** D12: the whole story of an error (what, why, what to do, Details) with its actions. Open it on the user's
