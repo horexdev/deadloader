@@ -251,6 +251,37 @@ fn the_back_off_ends_by_itself() {
 }
 
 #[test]
+fn the_status_stops_saying_busy_when_the_wait_is_over() {
+    let h = online();
+    h.on(&newest_url(2), Reply::status(503));
+    h.catalog
+        .list(&newest(2), Initiator::Auto)
+        .expect_err("busy");
+    assert!(matches!(h.catalog.status(), Status::RateLimited { .. }));
+    h.events.take();
+
+    h.clock.advance(Duration::from_secs(30));
+    assert_eq!(h.catalog.status(), Status::Online);
+}
+
+#[test]
+fn retry_now_tells_the_ui_that_the_wait_is_over() {
+    let h = online();
+    h.on(&newest_url(2), Reply::status(503));
+    h.catalog
+        .list(&newest(2), Initiator::Auto)
+        .expect_err("busy");
+    h.events.take();
+
+    h.catalog.retry_now();
+    assert_eq!(h.catalog.status(), Status::Online);
+    assert_eq!(h.events.take(), [Event::Status(Status::Online)]);
+    // Nothing more to end.
+    h.catalog.retry_now();
+    assert!(h.events.take().is_empty());
+}
+
+#[test]
 fn a_changed_api_maps_to_e4_and_clears_on_success() {
     let h = online();
     h.on(&newest_url(2), Reply::ok(b"<html>maintenance</html>"));

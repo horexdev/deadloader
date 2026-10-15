@@ -364,8 +364,11 @@ where
         if !self.config().enabled {
             return Status::LocalMode;
         }
+        let now = self.now();
         match &*lock(&self.inner.link) {
+            // Once the wait is over nothing is known to be wrong; the next request tells.
             Link::Online => Status::Online,
+            Link::RateLimited { until, .. } if *until <= now => Status::Online,
             Link::Offline { since } => Status::Offline {
                 since_unix_ms: unix_ms(*since),
             },
@@ -381,9 +384,14 @@ where
 
     /// "Retry now" (E5): ends the wait after GameBanana said it was busy.
     pub fn retry_now(&self) {
+        let before = self.status();
         let now = self.now();
         if let Link::RateLimited { until, .. } = &mut *lock(&self.inner.link) {
             *until = now;
+        }
+        let after = self.status();
+        if after != before {
+            self.inner.events.notify(Event::Status(after));
         }
     }
 
@@ -1081,7 +1089,10 @@ where
             Err(BodyError::Io(_)) => return Err(ImageError::Unreachable),
         };
         let sniffed = ImageType::sniff(&bytes).ok_or(ImageError::NotAnImage)?;
-        let content_type = declared.unwrap_or_else(|| sniffed.mime().to_owned());
+        // No type, or a generic "some bytes" one, says nothing: the bytes decide. A specific non-image type is refused.
+        let content_type = declared
+            .filter(|declared| !is_generic_binary(declared))
+            .unwrap_or_else(|| sniffed.mime().to_owned());
         match area.put(&entry.url, &bytes, &content_type) {
             Ok(content_type) => Ok(deadloader_core::cache::Blob {
                 bytes,
@@ -1407,6 +1418,17 @@ fn register_gamebanana(
 ) -> Option<ImageId> {
     let host = https_host(url)?;
     Some(registry.register(kind, url, &host, initiator))
+}
+
+/// `Content-Type`s that only say "bytes", as storage-backed hosts send for every file.
+fn is_generic_binary(content_type: &str) -> bool {
+    let essence = content_type
+        .split_once(';')
+        .map_or(content_type, |(essence, _)| essence)
+        .trim();
+    ["application/octet-stream", "binary/octet-stream"]
+        .iter()
+        .any(|generic| essence.eq_ignore_ascii_case(generic))
 }
 
 fn file_view(f: &RemoteFile) -> FileView {
