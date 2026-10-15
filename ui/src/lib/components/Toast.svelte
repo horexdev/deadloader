@@ -30,6 +30,8 @@
     title: string;
     /** Why, or what to do. */
     text?: string;
+    /** A file the text names, after it in a monospace font ("Saved as D:\Shared\Evening.json"). */
+    file?: string;
     /** Overrides the kind's icon (e.g. gamepad-2 for "Deadlock was closed"). */
     icon?: IconComponent;
     /** At most one action, e.g. Undo. */
@@ -47,6 +49,7 @@
     kind = 'neutral',
     title,
     text,
+    file,
     icon,
     action,
     details,
@@ -122,7 +125,7 @@
   <Icon class="dl-icon dl-icon--md dl-toast__icon" />
   <div class="dl-toast__body">
     <div class="dl-toast__title">{title}</div>
-    {#if text}<div class="dl-toast__text">{text}</div>{/if}
+    {#if text}<div class="dl-toast__text">{file ? `${text} ` : text}{#if file}<span class="dl-mono file">{file}</span>{/if}</div>{/if}
     {#if action || details}
       <div class="dl-toast__actions">
         {#if action}<Button size="sm" label={action.label} icon={action.icon} onclick={action.onclick} />{/if}
@@ -132,3 +135,11 @@
   </div>
   <Button variant="ghost" size="sm" iconOnly icon={X} label={dismissLabel} title={dismissLabel} onclick={ondismiss} />
 </div>
+
+<style>
+  /* From ProfilesScreen.dc.html: the exported file in the toast's text. */
+  .file {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+</style>

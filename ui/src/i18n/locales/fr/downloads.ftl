@@ -104,3 +104,5 @@ downloads-d4-install = Installer
 downloads-d4-installed = Variante « { $variant } » · en tête du profil « { $profile } ».
 downloads-cancel = Annuler
 downloads-close-esc = Fermer (Échap)
+downloads-open-folder = Ouvrir le dossier
+downloads-opened = Ouvert dans l’Explorateur de fichiers

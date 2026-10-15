@@ -171,3 +171,5 @@ profiles-undo = Zpět
 profiles-check-update = Zkontrolovat aktualizaci deadloaderu
 profiles-choose-another = Vybrat jiný soubor
 profiles-switcher = Spravovat profily
+profiles-saved-as = Uloženo jako
+profiles-show-folder = Zobrazit ve složce

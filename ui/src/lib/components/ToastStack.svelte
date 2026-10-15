@@ -9,6 +9,8 @@
     kind?: ToastKind;
     title: string;
     text?: string;
+    /** A file the text names, e.g. where an export went. */
+    file?: string;
     icon?: IconComponent;
     action?: ToastAction;
     details?: ToastDetails;
@@ -34,6 +36,7 @@
       kind={toast.kind}
       title={toast.title}
       text={toast.text}
+      file={toast.file}
       icon={toast.icon}
       action={toast.action}
       details={toast.details}

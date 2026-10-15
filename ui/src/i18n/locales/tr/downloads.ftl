@@ -104,3 +104,5 @@ downloads-d4-install = Yükle
 downloads-d4-installed = Varyant “{ $variant }” · “{ $profile }” profilinin en üstünde.
 downloads-cancel = İptal
 downloads-close-esc = Kapat (Esc)
+downloads-open-folder = Klasörü aç
+downloads-opened = Dosya Gezgini’nde açıldı

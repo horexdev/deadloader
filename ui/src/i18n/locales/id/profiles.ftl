@@ -141,3 +141,5 @@ profiles-undo = Urungkan
 profiles-check-update = Periksa pembaruan deadloader
 profiles-choose-another = Pilih file lain
 profiles-switcher = Kelola profil
+profiles-saved-as = Disimpan sebagai
+profiles-show-folder = Tampilkan di folder

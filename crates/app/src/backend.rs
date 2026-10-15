@@ -76,6 +76,8 @@ pub enum Place {
     Foreign { name: String },
     /// A library mod's files (mod details).
     ModFiles { mod_id: String },
+    /// The file the last profile export wrote ("Show in folder" on its toast).
+    ExportedProfile,
 }
 
 /// S9's content: the pending changes plus what the last automatic apply did, while it can be undone (143, 147).
@@ -180,6 +182,8 @@ pub struct Backend {
     apply_listener: Mutex<Option<ApplyListener>>,
     /// The throttle's quiet start and spacing.
     progress_timing: Mutex<(std::time::Duration, std::time::Duration)>,
+    /// Where the last profile export of this session went.
+    last_export: Mutex<Option<PathBuf>>,
 }
 
 pub type SettingsListener = Box<dyn Fn(&Settings) + Send + Sync>;
@@ -272,6 +276,7 @@ impl Backend {
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
                 apply_listener: Mutex::new(None),
                 progress_timing: Mutex::new((crate::progress::QUIET, crate::progress::EVERY)),
+                last_export: Mutex::new(None),
             },
             Err(e) => Self {
                 session: Mutex::new(None),
@@ -287,6 +292,7 @@ impl Backend {
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
                 apply_listener: Mutex::new(None),
                 progress_timing: Mutex::new((crate::progress::QUIET, crate::progress::EVERY)),
+                last_export: Mutex::new(None),
             },
         }
     }
@@ -531,12 +537,21 @@ impl Backend {
             Place::ModFiles { mod_id } => self
                 .with(|s| Ok(s.mod_file_path(mod_id)))?
                 .ok_or_else(|| unknown("the mod has no files in the library"))?,
+            Place::ExportedProfile => lock(&self.last_export)
+                .clone()
+                .ok_or_else(|| unknown("no profile was exported"))?,
         };
         let request = match (place, as_file) {
             (Place::Gameinfo, true) => ShellRequest::Notepad(path),
             _ => ShellRequest::Reveal(path),
         };
         self.shell(request)
+    }
+
+    /// File Explorer with a file selected that the core found itself (a download's kept archive), never one the UI
+    /// named.
+    pub fn show_file(&self, path: PathBuf) -> Result<ShellRequest, UserMessage> {
+        self.shell(ShellRequest::Reveal(path))
     }
 
     fn shell(&self, request: ShellRequest) -> Result<ShellRequest, UserMessage> {
@@ -873,8 +888,9 @@ impl Backend {
         self.with(|s| Ok(s.import_profile(text)?))
     }
 
-    /// Profiles → Export: the shareable JSON written where the user chose (F14).
-    pub fn export_profile_to(&self, name: &str, path: &Path) -> Result<(), UserMessage> {
+    /// Profiles → Export: the shareable JSON written where the user chose (F14). Returns that path for the toast, whose
+    /// "Show in folder" is [`Place::ExportedProfile`].
+    pub fn export_profile_to(&self, name: &str, path: &Path) -> Result<String, UserMessage> {
         let text = self.export_profile(name)?;
         let result = std::fs::write(path, text.as_bytes());
         let mut event = FileEvent {
@@ -887,7 +903,9 @@ impl Backend {
             event.error = Some(e.to_string());
         }
         self.log.record("profile exported", &event);
-        result.map_err(|e| from_io(&e, Area::Data))
+        result.map_err(|e| from_io(&e, Area::Data))?;
+        *lock(&self.last_export) = Some(path.to_path_buf());
+        Ok(path.display().to_string())
     }
 
     /// Profiles → Import from a file the user chose.
@@ -2066,6 +2084,49 @@ pub(crate) mod tests {
         assert!(text.contains("deadloader_profile"));
         let imported = backend.import_profile_from(&file).expect("imported");
         assert_eq!(imported.name, "Default (2)");
+    }
+
+    #[test]
+    fn an_exported_profile_says_where_it_went_and_can_be_shown_in_its_folder() {
+        let f = Fixture::new("profileshown");
+        let game = FakeGame::default();
+        let backend = f.backend(&game);
+        assert!(
+            backend.show(&Place::ExportedProfile, false).is_err(),
+            "nothing exported yet"
+        );
+        let file = f.dir.join("Default.json");
+        let saved = backend
+            .export_profile_to("Default", &file)
+            .expect("exported");
+        assert_eq!(saved, file.display().to_string());
+        // A later export that fails doesn't change which file is shown.
+        assert!(
+            backend
+                .export_profile_to("Default", &f.dir.join("missing").join("x.json"))
+                .is_err()
+        );
+        backend
+            .show(&Place::ExportedProfile, false)
+            .expect("folder");
+        assert_eq!(
+            game.shown.lock().expect("lock").clone(),
+            [ShellRequest::Reveal(file)]
+        );
+    }
+
+    #[test]
+    fn a_file_the_core_found_is_shown_in_file_explorer() {
+        let f = Fixture::new("showfile");
+        let game = FakeGame::default();
+        let backend = f.backend(&game);
+        let archive = f.dir.join("downloads").join("17.rar");
+        let request = backend.show_file(archive.clone()).expect("shown");
+        assert_eq!(request, ShellRequest::Reveal(archive.clone()));
+        assert_eq!(
+            game.shown.lock().expect("lock").clone(),
+            [ShellRequest::Reveal(archive)]
+        );
     }
 
     #[test]

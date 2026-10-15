@@ -974,6 +974,31 @@ fn a_failed_hook_keeps_the_archive_and_retry_only_runs_the_hook() {
 }
 
 #[test]
+fn the_kept_archive_of_a_failed_task_can_be_found_and_nothing_else() {
+    let mut h = Harness::new("archive");
+    h.config.parallel = 1;
+    h.open();
+    assert_eq!(h.dl().archive(TaskId(1)), None, "no such task");
+    *h.hook.fail_next.lock().expect("lock") = Some(UserMessage::new(MessageId::E11));
+    let id = h.add(1, &content(5000, 36));
+    h.events.wait("failed", state_is(id, "failed"));
+    assert_eq!(h.dl().archive(id), Some(h.data().join("1.zip")));
+
+    let gate = Gate::new();
+    h.server
+        .fault(&url(2), Fault::HoldAt(1000, Arc::clone(&gate)));
+    let running = h.add(2, &content(5000, 37));
+    h.wait_part(running, 1000);
+    assert_eq!(h.dl().archive(running), None, "a part is not an archive");
+    gate.open();
+    h.events.wait("done", removed(running));
+    assert_eq!(h.dl().archive(running), None, "gone with its task");
+
+    std::fs::remove_file(h.data().join("1.zip")).expect("removed by hand");
+    assert_eq!(h.dl().archive(id), None, "only a file that is there");
+}
+
+#[test]
 fn the_queue_survives_a_restart() {
     let mut h = Harness::new("restart");
     h.config.parallel = 1;

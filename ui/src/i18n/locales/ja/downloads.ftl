@@ -102,3 +102,5 @@ downloads-d4-install = インストール
 downloads-d4-installed = バリエーション「{ $variant }」 · プロファイル「{ $profile }」の先頭に追加しました。
 downloads-cancel = キャンセル
 downloads-close-esc = 閉じる (Esc)
+downloads-open-folder = フォルダーを開く
+downloads-opened = エクスプローラーで開きました

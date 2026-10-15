@@ -171,3 +171,5 @@ profiles-undo = Отменить
 profiles-check-update = Проверить обновление deadloader
 profiles-choose-another = Выбрать другой файл
 profiles-switcher = Управлять профилями
+profiles-saved-as = Сохранено как
+profiles-show-folder = Показать в папке

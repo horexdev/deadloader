@@ -140,6 +140,7 @@ pub fn run() -> Result<(), StartError> {
             commands::downloads::download_install,
             commands::downloads::downloads,
             commands::downloads::download_control,
+            commands::downloads::download_show_archive,
             commands::updates::updates_check,
             commands::updates::updates_dismiss,
             commands::updates::update_install,
