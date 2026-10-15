@@ -5,7 +5,7 @@
 //! cleared; the new layout also travels in the transaction itself, so [`Engine::recover`] can record it if the process
 //! died in between. Nothing is changed while the game is running (decision 17).
 
-use crate::addons::{AppliedFile, ForeignItem, scan};
+use crate::addons::{AppliedFile, ForeignItem, ForeignKind, scan};
 use crate::apply::{Direction, PlanError, Wanted, layout, plan};
 use crate::fs::FileOps;
 use crate::gamedir::addons_path;
@@ -73,11 +73,25 @@ impl std::fmt::Display for EngineError {
 
 impl std::error::Error for EngineError {}
 
-/// Stored in the transaction so recovery knows what to record.
+/// What a rollback took out of one game installation (D7, decision 20).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RollbackReport {
+    /// Whether anything in the game folder changed.
+    pub changed: bool,
+    /// Our pak files taken out.
+    pub removed: usize,
+    /// Foreign files deleted at the user's request (folders are never touched).
+    pub foreign_removed: Vec<String>,
+    /// What the start-of-rollback recovery found.
+    pub recovered: Recovery,
+}
+
+/// Stored in the transaction so recovery knows what to record. `profile` is `None` after a rollback: nothing is
+/// applied there any more.
 #[derive(Debug, Serialize, Deserialize)]
 struct Outcome {
     game_root: String,
-    profile: String,
+    profile: Option<String>,
     applied: Vec<AppliedRecord>,
 }
 
@@ -93,7 +107,7 @@ impl<F: FileOps, J: JournalStore> Engine<'_, F, J> {
         if let Some(value) = meta {
             let o: Outcome =
                 serde_json::from_value(value).map_err(|e| EngineError::Meta(e.to_string()))?;
-            record(manifest, &o.game_root, &o.profile, o.applied);
+            record(manifest, &o.game_root, o.profile.as_deref(), o.applied);
             save(manifest).map_err(EngineError::Io)?;
         }
         Ok(outcome)
@@ -169,7 +183,7 @@ impl<F: FileOps, J: JournalStore> Engine<'_, F, J> {
                 i.applied == records && i.applied_profile.as_deref() == Some(profile.name.as_str())
             });
             if !current {
-                record(manifest, &root, &profile.name, records);
+                record(manifest, &root, Some(&profile.name), records);
                 save(manifest).map_err(EngineError::Io)?;
             }
             return Ok(report(false, 0));
@@ -177,18 +191,131 @@ impl<F: FileOps, J: JournalStore> Engine<'_, F, J> {
 
         let meta = serde_json::to_value(Outcome {
             game_root: root.clone(),
-            profile: profile.name.clone(),
+            profile: Some(profile.name.clone()),
             applied: records.clone(),
         })
         .map_err(|e| EngineError::Meta(e.to_string()))?;
         let count = steps.len();
         journal::run_with(self.fs, self.journal, tx, &steps, meta, || {
-            record(manifest, &root, &profile.name, records);
+            record(manifest, &root, Some(&profile.name), records);
             save(manifest)
         })
         .map_err(EngineError::Tx)?;
         Ok(report(true, count))
     }
+
+    /// Full rollback of one installation (D7, decision 20): our pak files leave `addons` through the journal, and with
+    /// `remove_foreign` the files deadloader didn't create too (never folders). The installation is then recorded as
+    /// empty and applied by no profile, so Apply brings everything back. `gameinfo.gi` is the caller's next step
+    /// ([`crate::gamedir::remove_mods_path`]). Nothing is changed while the game is running (decision 17).
+    pub fn rollback(
+        &self,
+        manifest: &mut Manifest,
+        game_root: &Path,
+        remove_foreign: bool,
+        game_running: bool,
+        tx: u64,
+        mut save: impl FnMut(&Manifest) -> io::Result<()>,
+    ) -> Result<RollbackReport, EngineError> {
+        if game_running {
+            return Err(EngineError::GameRunning);
+        }
+        let recovered = self.recover(manifest, &mut save)?;
+        let root = game_root.to_string_lossy().into_owned();
+        let addons = addons_path(game_root);
+        let found = scan_installation(self.fs, manifest, game_root).map_err(EngineError::Io)?;
+        let mut counter = 0usize;
+        let mut temp = || {
+            counter += 1;
+            addons.join(format!("~dl-{tx}-{counter}.tmp"))
+        };
+        let mut moves = Vec::new();
+        let mut deletes: Vec<Step> = found
+            .leftovers
+            .iter()
+            .map(|p| Step::Delete { path: p.clone() })
+            .collect();
+        for file in &found.ours {
+            let t = temp();
+            moves.push(Step::Rename {
+                from: crate::apply::pak_path(&addons, file.slot),
+                to: t.clone(),
+            });
+            deletes.push(Step::Delete { path: t });
+        }
+        let mut foreign_removed = Vec::new();
+        if remove_foreign {
+            for item in found
+                .foreign
+                .iter()
+                .filter(|f| f.kind != ForeignKind::Folder)
+            {
+                let t = temp();
+                moves.push(Step::Rename {
+                    from: addons.join(&item.name),
+                    to: t.clone(),
+                });
+                deletes.push(Step::Delete { path: t });
+                foreign_removed.push(item.name.clone());
+            }
+        }
+        let removed = found.ours.len();
+        let recorded = installation(manifest, &root)
+            .is_some_and(|i| !i.applied.is_empty() || i.applied_profile.is_some());
+        if moves.is_empty() && deletes.is_empty() {
+            if recorded {
+                record(manifest, &root, None, Vec::new());
+                save(manifest).map_err(EngineError::Io)?;
+            }
+            return Ok(RollbackReport {
+                changed: false,
+                removed: 0,
+                foreign_removed,
+                recovered,
+            });
+        }
+        let meta = serde_json::to_value(Outcome {
+            game_root: root.clone(),
+            profile: None,
+            applied: Vec::new(),
+        })
+        .map_err(|e| EngineError::Meta(e.to_string()))?;
+        let steps: Vec<Step> = moves.into_iter().chain(deletes).collect();
+        journal::run_with(self.fs, self.journal, tx, &steps, meta, || {
+            record(manifest, &root, None, Vec::new());
+            save(manifest)
+        })
+        .map_err(EngineError::Tx)?;
+        Ok(RollbackReport {
+            changed: true,
+            removed,
+            foreign_removed,
+            recovered,
+        })
+    }
+}
+
+/// What is in an installation's `addons` folder now: our files (as the manifest recorded them), foreign items and
+/// leftovers. For the rollback summary (D7) and the setup step (S1).
+pub fn scan_installation(
+    fs: &impl FileOps,
+    manifest: &Manifest,
+    game_root: &Path,
+) -> io::Result<crate::addons::Scan> {
+    let root = game_root.to_string_lossy();
+    let applied: Vec<AppliedFile> = installation(manifest, &root)
+        .map(|i| {
+            i.applied
+                .iter()
+                .map(|r| AppliedFile {
+                    slot: r.slot,
+                    id: r.file.clone(),
+                    len: r.len,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    scan(fs, &addons_path(game_root), &applied)
 }
 
 /// The profile's files in priority order: per entry its chosen variants, then its add-ons.
@@ -243,7 +370,7 @@ fn installation<'m>(manifest: &'m Manifest, root: &str) -> Option<&'m Installati
         .find(|i| same_root(&i.game_root, root))
 }
 
-fn record(manifest: &mut Manifest, root: &str, profile: &str, applied: Vec<AppliedRecord>) {
+fn record(manifest: &mut Manifest, root: &str, profile: Option<&str>, applied: Vec<AppliedRecord>) {
     let state = match manifest
         .installations
         .iter()
@@ -260,7 +387,7 @@ fn record(manifest: &mut Manifest, root: &str, profile: &str, applied: Vec<Appli
             manifest.installations.last_mut().expect("just pushed")
         }
     };
-    state.applied_profile = Some(profile.to_owned());
+    state.applied_profile = profile.map(str::to_owned);
     state.applied = applied;
 }
 
@@ -632,6 +759,141 @@ mod tests {
         );
         assert_eq!(saved.as_ref(), Some(&on_disk));
         assert!(store.read_all().expect("read").is_empty());
+    }
+
+    /// Applies mods "a" and "b" (b2) on top of a foreign pak and DMM's file, for the rollback tests.
+    fn applied_with_foreign(fs: &MemFs, store: &MemStore) -> Manifest {
+        let mut m = manifest();
+        engine(fs, store)
+            .apply(
+                &mut m,
+                &profile(&[("a", &["a1"]), ("b", &["b2"])]),
+                Path::new(ROOT),
+                false,
+                1,
+                |_| Ok(()),
+            )
+            .expect("applied");
+        m
+    }
+
+    fn with_foreign() -> MemFs {
+        fs().with(&addons("pak01_dir.vpk"), b"someone else")
+            .with(&addons(".dmm.json"), b"{}")
+            .with(&addons(r"replays\x.dem"), b"demo")
+    }
+
+    #[test]
+    fn rollback_takes_our_files_out_and_leaves_foreign_ones() {
+        let (fs, store) = (with_foreign(), MemStore::default());
+        let mut m = applied_with_foreign(&fs, &store);
+        assert!(fs.read(&addons("pak02_dir.vpk")).is_some());
+        let mut saves = 0;
+        let report = engine(&fs, &store)
+            .rollback(&mut m, Path::new(ROOT), false, false, 2, |_| {
+                saves += 1;
+                Ok(())
+            })
+            .expect("rolled back");
+        assert_eq!(report.removed, 2);
+        assert!(report.foreign_removed.is_empty());
+        assert!(report.changed);
+        assert_eq!(fs.read(&addons("pak02_dir.vpk")), None);
+        assert_eq!(fs.read(&addons("pak03_dir.vpk")), None);
+        assert_eq!(
+            fs.read(&addons("pak01_dir.vpk")).as_deref(),
+            Some(&b"someone else"[..])
+        );
+        assert!(fs.read(&addons(".dmm.json")).is_some());
+        assert!(
+            fs.snapshot().keys().all(|k| !k.contains("~dl-")),
+            "no temporary file left"
+        );
+        // The installation is recorded as empty and applied by no profile, so Apply brings everything back.
+        assert_eq!(m.installations[0].applied, []);
+        assert_eq!(m.installations[0].applied_profile, None);
+        assert_eq!(saves, 1);
+        assert!(store.read_all().expect("read").is_empty());
+    }
+
+    #[test]
+    fn rollback_can_also_remove_foreign_files_but_never_folders() {
+        let (fs, store) = (with_foreign(), MemStore::default());
+        let mut m = applied_with_foreign(&fs, &store);
+        let report = engine(&fs, &store)
+            .rollback(&mut m, Path::new(ROOT), true, false, 2, |_| Ok(()))
+            .expect("rolled back");
+        assert_eq!(report.removed, 2);
+        let mut foreign = report.foreign_removed.clone();
+        foreign.sort();
+        assert_eq!(foreign, [".dmm.json", "pak01_dir.vpk"]);
+        assert_eq!(fs.read(&addons("pak01_dir.vpk")), None);
+        assert_eq!(fs.read(&addons(".dmm.json")), None);
+        assert!(fs.read(&addons(r"replays\x.dem")).is_some(), "folders stay");
+    }
+
+    #[test]
+    fn rollback_waits_while_the_game_runs() {
+        let (fs, store) = (with_foreign(), MemStore::default());
+        let mut m = applied_with_foreign(&fs, &store);
+        let before = fs.snapshot();
+        let err = engine(&fs, &store)
+            .rollback(&mut m, Path::new(ROOT), true, true, 2, |_| Ok(()))
+            .expect_err("running");
+        assert!(matches!(err, EngineError::GameRunning), "{err:?}");
+        assert_eq!(fs.snapshot(), before);
+    }
+
+    #[test]
+    fn rollback_of_a_folder_without_our_files_changes_nothing() {
+        let (fs, store) = (with_foreign(), MemStore::default());
+        let mut m = manifest();
+        let before = fs.snapshot();
+        let mut saves = 0;
+        let report = engine(&fs, &store)
+            .rollback(&mut m, Path::new(ROOT), false, false, 2, |_| {
+                saves += 1;
+                Ok(())
+            })
+            .expect("nothing");
+        assert!(!report.changed);
+        assert_eq!(report.removed, 0);
+        assert_eq!(fs.snapshot(), before);
+        assert_eq!(saves, 0);
+    }
+
+    #[test]
+    fn a_crash_during_rollback_is_finished_on_start() {
+        let (fs, store) = (with_foreign(), MemStore::default());
+        let mut m = applied_with_foreign(&fs, &store);
+        engine(&fs, &store)
+            .rollback(&mut m, Path::new(ROOT), false, false, 2, |_| {
+                Err(io::Error::other("disk full"))
+            })
+            .expect_err("save failed");
+        let mut on_disk = applied_with_foreign_manifest();
+        let recovery = engine(&fs, &store)
+            .recover(&mut on_disk, |_| Ok(()))
+            .expect("recovered");
+        assert_eq!(recovery, Recovery::Completed);
+        assert_eq!(on_disk.installations[0].applied, []);
+        assert_eq!(on_disk.installations[0].applied_profile, None);
+    }
+
+    /// What the manifest said after [`applied_with_foreign`], as saved before a rollback.
+    fn applied_with_foreign_manifest() -> Manifest {
+        let (fs, store) = (with_foreign(), MemStore::default());
+        applied_with_foreign(&fs, &store)
+    }
+
+    #[test]
+    fn the_scan_shows_what_a_rollback_would_remove() {
+        let (fs, store) = (with_foreign(), MemStore::default());
+        let m = applied_with_foreign(&fs, &store);
+        let found = scan_installation(&fs, &m, Path::new(ROOT)).expect("scan");
+        assert_eq!(found.ours.len(), 2);
+        let names: Vec<&str> = found.foreign.iter().map(|f| f.name.as_str()).collect();
+        assert!(names.contains(&"pak01_dir.vpk") && names.contains(&".dmm.json"));
     }
 
     #[test]

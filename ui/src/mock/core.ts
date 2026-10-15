@@ -31,6 +31,7 @@ import {
 import * as downloadsPreview from './downloads';
 import * as profilesPreview from './profiles';
 import * as activity from './activity';
+import { settingsHandlers } from './settings';
 import { LibraryMock, libraryConflicts, libraryMods } from './library';
 
 /** Tauri's `Channel`: the UI sets `onmessage`; the mock calls it. */
@@ -201,15 +202,57 @@ function applyScenario(s: State): State {
       break;
     }
   }
+  applyNoticeScenario(s, scenario);
   if (scenario?.startsWith('library-')) {
     s.libraryMock.scenario(scenario);
   }
   return s;
 }
 
+/**
+ * The first-run notice: acknowledged in every scenario except the wizard's own, so other screens preview without it.
+ * `wizard`, `wizard-setup-issues`: a first start (local mode until the choice). `settings-local`: local mode.
+ */
+function applyNoticeScenario(s: State, scenario: string | null): void {
+  const firstStart = scenario === 'wizard' || scenario === 'wizard-setup-issues';
+  if (firstStart) {
+    s.settings.catalog = { ...s.settings.catalog, enabled: false };
+    return;
+  }
+  if (scenario === 'settings-local') {
+    s.settings.catalog = { ...s.settings.catalog, enabled: false };
+  }
+  s.settings.acknowledgements = {
+    ...s.settings.acknowledgements,
+    notice: {
+      version: 1,
+      at: '2026-10-14T16:42:00Z',
+      language: 'en',
+      catalog: s.settings.catalog?.enabled === true ? 'catalog' : 'local_mode',
+    },
+  };
+}
+
+/** Settings, first run and maintenance (src/mock/settings.ts), made again with each reset. */
+let maintenanceHandlers: Record<string, (args: Args) => unknown> = {};
+
+function currentScenario(): string | null {
+  return typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('scenario');
+}
+
 /** Back to the first-start state (tests). */
 export function resetMock(): void {
   state = applyScenario(fresh());
+  maintenanceHandlers = settingsHandlers({
+    settings: () => state.settings,
+    setSettings: (settings) => {
+      state.settings = structuredClone(settings);
+    },
+    profiles: () => [...state.profiles],
+    selectedProfile: () => state.library.selected_profile,
+    gameRunning: () => state.gameRunning,
+    scenario: currentScenario,
+  });
   catalogScenario = scenarioFromAddress();
   activated.clear();
   // Profiles (S5): a fourth profile on a second installation (153).
@@ -693,7 +736,7 @@ const handlers: Record<string, (args: Args) => unknown> = {
 
 /** Tauri's `invoke`, answered from the mock state after a short, realistic delay. */
 export async function invoke<T>(command: string, args: Args = {}): Promise<T> {
-  const handler = state.libraryMock.handlers()[command] ?? handlers[command];
+  const handler = state.libraryMock.handlers()[command] ?? handlers[command] ?? maintenanceHandlers[command];
   if (!handler) {
     throw { id: 'Internal', args: { detail: `mock: ${command} is not implemented` } };
   }

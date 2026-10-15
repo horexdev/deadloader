@@ -959,3 +959,163 @@ export const activity = {
   /** Opens deadloader's logs folder in File Explorer; resolves to the folder as it may be shown. */
   openFolder: () => call<string>('open_logs_folder'),
 };
+
+// ---- Settings, the first-run wizard and maintenance (S8, S1, D7, D8; crates/app/src/commands/settings.rs)
+
+/** `gameinfo.gi` of a game folder. */
+export type GameinfoState = 'ours' | 'vanilla' | 'foreign' | 'missing' | 'unreadable';
+
+export interface ForeignFile {
+  name: string;
+  bytes: number;
+  from_dmm: boolean;
+}
+
+/** D7: what Rollback would remove from the selected profile's game folder, and what stays. */
+export interface RollbackPreview {
+  game_root: string;
+  files: number;
+  bytes: number;
+  gameinfo: GameinfoState;
+  foreign: ForeignFile[];
+  profiles: string[];
+  selected_profile: string;
+  all_profiles: string[];
+  library_mods: number;
+  library_bytes: number;
+  others: { game_root: string; applied_profile: string | null; files: number }[];
+}
+
+export interface RolledBack {
+  game_root: string;
+  removed: number;
+  foreign_removed: string[];
+  gameinfo_restored: boolean;
+  gameinfo: GameinfoState;
+}
+
+/** A row of Settings → Game → Game installations. */
+export interface InstallationView {
+  game_root: string;
+  source: 'steam' | 'manual' | 'known';
+  library: string | null;
+  build_id: number | null;
+  profiles: string[];
+  applied_profile: string | null;
+  selected: boolean;
+  gameinfo: GameinfoState;
+  files: number;
+}
+
+/** One field the Advanced editor refused. */
+export type EditProblem = { path: string } & (
+  | { problem: 'unknown_field' }
+  | { problem: 'invalid_value'; detail: string }
+  | { problem: 'out_of_range'; found: number; min: number; max: number }
+  | { problem: 'invalid_entry'; entry: string }
+  | { problem: 'duplicate_entry'; entry: string }
+  | { problem: 'needs_age_confirmation' }
+  | { problem: 'unavailable_in_local_mode' }
+);
+
+/** Why the Advanced editor saved nothing (decision 156). */
+export type EditRefused =
+  | { kind: 'json'; line: number; column: number }
+  | { kind: 'newer_schema'; found: number; supported: number }
+  | { kind: 'problems'; problems: EditProblem[] }
+  | { kind: 'invalid'; detail: string }
+  | { kind: 'failed'; message: UserMessage };
+
+export interface EditSaved {
+  /** The dated backup of the previous file. */
+  backup: string | null;
+}
+
+/** Rust `Result<EditSaved, EditRefused>` as serde writes it. */
+export type EditResult = { Ok: EditSaved } | { Err: EditRefused };
+
+export type EditedFile = 'settings' | 'manifest';
+
+export interface CacheUsage {
+  bytes: number;
+  thumbnails: number;
+  images: number;
+  pages: number;
+}
+
+export interface CacheCleared {
+  bytes: number;
+  files: number;
+  failed: number;
+}
+
+export interface About {
+  version: string;
+  /** The full commit CI built this exe from; `null` for a local build. */
+  commit: string | null;
+  webview2: string | null;
+  data_folder: string;
+  data_bytes: number;
+  exe_sha256: string | null;
+}
+
+/** D8: what "Delete all deadloader data" removes. */
+export interface WipeSummary {
+  library: { mods: number; files: number; bytes: number };
+  profiles: { names: string[]; bytes: number };
+  logs: { files: number; oldest: string | null; bytes: number };
+  cache_bytes: number;
+  settings: { backups: number; bytes: number };
+  other_bytes: number;
+  total_bytes: number;
+}
+
+/** The setup step's checks (S1 step 6). */
+export interface SetupCheck {
+  game_root: string | null;
+  installations: number;
+  gameinfo: GameinfoState;
+  foreign: ForeignFile[];
+  exe_folder: string;
+  exe_location: 'downloads' | 'desktop' | 'permanent';
+  data_volume: string | null;
+  game_volume: string | null;
+  same_volume: boolean | null;
+}
+
+/** What "Open folder" shows. */
+export type FolderPlace =
+  | { place: 'data' }
+  | { place: 'logs' }
+  | { place: 'cache' }
+  | { place: 'exe' }
+  | { place: 'game'; root: string };
+
+export type CatalogChoice = 'catalog' | 'local_mode';
+
+export const maintenance = {
+  /** "Reset all settings" (100, 156): the dated backup's name and the settings now. */
+  reset: () => call<{ backup: string | null; settings: Settings }>('settings_reset'),
+  fileText: (file: EditedFile) => call<string>('settings_file_text', { file }),
+  /** "Check and save" in Advanced: nothing is written when the text is refused. */
+  saveFile: (file: EditedFile, text: string) => call<EditResult>('settings_file_save', { file, text }),
+  cacheUsage: () => call<CacheUsage>('cache_usage'),
+  clearCache: () => call<CacheCleared>('cache_clear'),
+  installations: () => call<InstallationView[]>('installations'),
+  /** The folder dialog; with `select` the selected profile uses the chosen installation. `null` when cancelled. */
+  gameFolderDialog: (text: DialogText, select: boolean) =>
+    call<string | null>('game_folder_dialog', { text, select }),
+  removeInstallation: (gameRoot: string) => call<Settings>('installation_remove', { gameRoot }),
+  openFolder: (place: FolderPlace) => call<null>('open_folder', { place }),
+  about: () => call<About>('about'),
+  rollbackPreview: () => call<RollbackPreview>('rollback_preview'),
+  rollback: (removeForeign: boolean) => call<RolledBack>('rollback', { removeForeign }),
+  wipeSummary: () => call<WipeSummary>('wipe_summary'),
+  /** D8 confirmed: the app closes and its data folder is deleted. */
+  deleteAllData: (rollback: boolean) => call<RolledBack[]>('delete_all_data', { rollback }),
+  setupCheck: () => call<SetupCheck>('setup_check'),
+  acknowledgeNotice: (version: number, language: string, catalog: CatalogChoice, checkAppUpdates: boolean) =>
+    call<Settings>('acknowledge_notice', { version, language, catalog, checkAppUpdates }),
+  /** F13: the catalog on (after its network step) or off (local mode). */
+  chooseCatalog: (enabled: boolean) => call<Settings>('choose_catalog', { enabled }),
+};

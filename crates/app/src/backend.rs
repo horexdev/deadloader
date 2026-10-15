@@ -2,14 +2,17 @@
 //! decision 138 (edits to the applied profile take effect at once while the game is closed).
 
 use crate::events::Notice;
-use deadloader_core::log::{FileEvent, FileOp, Outcome};
+use deadloader_core::log::{Clock, FileEvent, FileOp, Outcome};
 use deadloader_core::message::{Area, MessageId, ToUserMessage, UserMessage, from_io};
 use deadloader_core::profiles::ProfileError;
 use deadloader_core::remove::{Delete, Permanently, RemovalPlan, RemoveError, Removed, Target};
 use deadloader_core::session::{
+    Detected, EditRefused, EditSaved, InstallationView, RollbackPreview, RolledBack,
+};
+use deadloader_core::session::{
     ImportOutcome, LibraryView, ProfileImported, Session, SessionError, SharedLog,
 };
-use deadloader_core::settings::{Deletion, Settings};
+use deadloader_core::settings::{CatalogChoice, Deletion, Lang, Settings};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -22,6 +25,18 @@ pub trait Game: Send + Sync {
     /// Starts Deadlock the way Steam does.
     fn launch(&self) -> std::io::Result<()>;
     fn move_to_recycle_bin(&self, path: &Path) -> std::io::Result<()>;
+    /// The installations Steam knows, with their library and build (Settings → Game).
+    fn detected(&self) -> Vec<Detected> {
+        self.installations()
+            .into_iter()
+            .map(|game_root| Detected {
+                game_root,
+                library: None,
+                build_id: None,
+            })
+            .collect()
+    }
+
     /// Hands a request to Windows: Steam's check of the game files, or a file shown in Explorer or Notepad.
     fn shell(&self, request: &ShellRequest) -> std::io::Result<()>;
 }
@@ -1027,6 +1042,179 @@ impl Backend {
     }
 }
 
+/// Settings → Game, Advanced and Reset, and the first-run notice (S8, S1, D7, D8; decisions 20, 100, 107–111, 156).
+impl Backend {
+    /// The folder Rollback works on: the selected profile's, else the first one Steam knows. E2 without either.
+    fn rollback_root(&self) -> Result<PathBuf, UserMessage> {
+        let first = self.game.installations().into_iter().next();
+        self.with(|s| Ok(s.game_root()))?
+            .or(first)
+            .ok_or_else(|| UserMessage::new(MessageId::E2))
+    }
+
+    /// D7: what Rollback would take out of the selected profile's game folder, and what stays.
+    pub fn rollback_preview(&self) -> Result<RollbackPreview, UserMessage> {
+        let root = self.rollback_root()?;
+        self.with(|s| Ok(s.rollback_preview(&root)?))
+    }
+
+    /// D7 / F11: our files and our `gameinfo.gi` line leave the selected profile's game folder (foreign files too when
+    /// asked). E13 while the game runs.
+    pub fn rollback(&self, remove_foreign: bool) -> Result<RolledBack, UserMessage> {
+        let root = self.rollback_root()?;
+        let running = self.game.running();
+        let done = self.with(|s| Ok(s.rollback(&root, remove_foreign, running)?))?;
+        self.edits_waiting.store(0, Ordering::Relaxed);
+        Ok(done)
+    }
+
+    /// The "roll back first" of D8: every game folder deadloader has files or its line in; foreign files stay.
+    pub fn rollback_all(&self) -> Result<Vec<RolledBack>, UserMessage> {
+        if self.game.running() {
+            return Err(UserMessage::new(MessageId::E13));
+        }
+        let mut known = self.game.installations();
+        let manual = self.settings()?.game.manual_installations;
+        known.extend(manual.into_iter().map(PathBuf::from));
+        self.with(|s| Ok(s.rollback_all(&known, false)?))
+    }
+
+    /// Settings → Game → Game installations.
+    pub fn installations(&self) -> Result<Vec<InstallationView>, UserMessage> {
+        let detected = self.game.detected();
+        self.with(|s| Ok(s.installations(&detected)))
+    }
+
+    /// "Add manually…" and the setup step's "Browse…": the Deadlock installation the chosen folder belongs to joins
+    /// the list (unless Steam lists it already). E2 when the folder holds no Deadlock installation.
+    pub fn add_installation(&self, chosen: &Path) -> Result<PathBuf, UserMessage> {
+        let root = deadloader_core::setup::game_root_of(&deadloader_core::fs::Disk, chosen)
+            .ok_or_else(|| UserMessage::new(MessageId::E2).arg("path", chosen.display()))?;
+        let text = root.display().to_string();
+        let same = |a: &str| a.eq_ignore_ascii_case(&text);
+        let detected = self
+            .game
+            .installations()
+            .iter()
+            .any(|d| same(&d.display().to_string()));
+        let mut settings = self.settings()?;
+        if !detected && !settings.game.manual_installations.iter().any(|m| same(m)) {
+            settings.game.manual_installations.push(text);
+            self.update_settings(settings)?;
+        }
+        Ok(root)
+    }
+
+    /// Takes a folder added by hand off the list; nothing in it changes.
+    pub fn remove_installation(&self, game_root: &str) -> Result<Settings, UserMessage> {
+        let mut settings = self.settings()?;
+        settings
+            .game
+            .manual_installations
+            .retain(|m| !m.eq_ignore_ascii_case(game_root));
+        self.update_settings(settings)
+    }
+
+    /// The game folder the selected profile uses, chosen in the setup step.
+    pub fn set_game_root(&self, game_root: Option<&Path>) -> Result<(), UserMessage> {
+        self.with(|s| Ok(s.set_game_root(game_root)?))
+    }
+
+    pub fn settings_text(&self) -> Result<String, UserMessage> {
+        self.with(|s| Ok(s.settings_text()))
+    }
+
+    pub fn manifest_text(&self) -> Result<String, UserMessage> {
+        self.with(|s| Ok(s.manifest_text()))
+    }
+
+    /// The Advanced save of `settings.json` (156): the inner error says why nothing was saved.
+    pub fn save_settings_text(
+        &self,
+        text: &str,
+    ) -> Result<Result<EditSaved, EditRefused>, UserMessage> {
+        let at = deadloader_core::log::SystemClock.now();
+        let result = self.with(|s| Ok(s.save_settings_text(text, at)))?;
+        if result.is_ok() {
+            self.tell_listeners()?;
+        }
+        Ok(result)
+    }
+
+    /// The Advanced save of `manifest.json` (156).
+    pub fn save_manifest_text(
+        &self,
+        text: &str,
+    ) -> Result<Result<EditSaved, EditRefused>, UserMessage> {
+        let at = deadloader_core::log::SystemClock.now();
+        self.with(|s| Ok(s.save_manifest_text(text, at)))
+    }
+
+    /// "Reset all settings" (100, 156): the dated backup, and the settings now.
+    pub fn reset_settings(&self) -> Result<(EditSaved, Settings), UserMessage> {
+        let at = deadloader_core::log::SystemClock.now();
+        let saved = self.with(|s| Ok(s.reset_settings(at)?))?;
+        let settings = self.tell_listeners()?;
+        Ok((saved, settings))
+    }
+
+    /// The first-run notice was acknowledged (107–111): its version, the language it was read in, the catalog choice
+    /// and the update-check answer (always off in local mode, 157).
+    pub fn acknowledge_notice(
+        &self,
+        version: u32,
+        language: Lang,
+        catalog: CatalogChoice,
+        check_app_updates: bool,
+    ) -> Result<Settings, UserMessage> {
+        let mut settings = self.settings()?;
+        settings.acknowledge_notice(
+            version,
+            deadloader_core::log::SystemClock.now(),
+            language,
+            catalog,
+        );
+        settings
+            .set_app_update_check(check_app_updates && catalog == CatalogChoice::Catalog)
+            .map_err(|e| UserMessage::new(MessageId::Internal).arg("detail", format!("{e:?}")))?;
+        self.update_settings(settings)
+    }
+
+    /// F13: the catalog on (after its network step was shown again) or off (local mode).
+    pub fn choose_catalog(&self, enabled: bool) -> Result<Settings, UserMessage> {
+        let mut settings = self.settings()?;
+        settings.choose_catalog(if enabled {
+            CatalogChoice::Catalog
+        } else {
+            CatalogChoice::LocalMode
+        });
+        self.update_settings(settings)
+    }
+
+    /// D8: what deleting all data removes.
+    pub fn wipe_summary(
+        &self,
+        data_dir: &Path,
+    ) -> Result<deadloader_core::wipe::Summary, UserMessage> {
+        self.with(|s| {
+            Ok(deadloader_core::wipe::summary(
+                data_dir,
+                s.manifest(),
+                &s.profile_names(),
+            ))
+        })
+    }
+
+    /// Tells the listeners about settings the session saved itself.
+    fn tell_listeners(&self) -> Result<Settings, UserMessage> {
+        let saved = self.settings()?;
+        for listener in self.lock_listeners().iter() {
+            listener(&saved);
+        }
+        Ok(saved)
+    }
+}
+
 /// A lock that outlives a panic elsewhere (the data is plain state).
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -2024,6 +2212,120 @@ pub(crate) mod tests {
             );
         }
         assert_eq!(game.shown.lock().expect("lock").len(), 5);
+    }
+
+    #[test]
+    fn rollback_takes_the_selected_profile_out_of_its_game_folder() {
+        let f = Fixture::new("rollback");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        backend.apply().expect("applied");
+        let preview = backend.rollback_preview().expect("preview");
+        assert_eq!(preview.files, 1);
+        game.running.store(true, Ordering::Relaxed);
+        assert_eq!(
+            backend.rollback(false).expect_err("running").id,
+            MessageId::E13
+        );
+        game.running.store(false, Ordering::Relaxed);
+        let done = backend.rollback(false).expect("rolled back");
+        assert_eq!(done.removed, 1);
+        assert!(!f.addons().join("pak01_dir.vpk").exists());
+        assert!(backend.library().expect("library").pending);
+    }
+
+    #[test]
+    fn rollback_without_a_game_says_deadlock_was_not_found() {
+        let f = Fixture::new("rollbacknogame");
+        let backend = f.backend(&FakeGame::default());
+        assert_eq!(
+            backend.rollback_preview().expect_err("no game").id,
+            MessageId::E2
+        );
+    }
+
+    #[test]
+    fn a_folder_added_by_hand_is_checked_and_listed() {
+        let f = Fixture::new("addinstall");
+        let backend = f.backend(&FakeGame::default());
+        let root = f.game();
+        let added = backend
+            .add_installation(&root.join("game").join("citadel"))
+            .expect("added");
+        assert_eq!(added, root);
+        assert_eq!(
+            backend
+                .settings()
+                .expect("settings")
+                .game
+                .manual_installations,
+            [root.display().to_string()]
+        );
+        // Adding it again doesn't list it twice; a folder without Deadlock is refused.
+        backend.add_installation(&root).expect("again");
+        assert_eq!(backend.installations().expect("list").len(), 1);
+        assert_eq!(
+            backend.add_installation(&f.dir).expect_err("no game").id,
+            MessageId::E2
+        );
+        backend
+            .remove_installation(&root.display().to_string())
+            .expect("removed");
+        assert!(backend.installations().expect("list").is_empty());
+    }
+
+    #[test]
+    fn the_notice_records_its_answers_and_local_mode_keeps_the_update_check_off() {
+        let f = Fixture::new("notice");
+        let backend = f.backend(&FakeGame::default());
+        let local = backend
+            .acknowledge_notice(1, Lang::De, CatalogChoice::LocalMode, true)
+            .expect("local");
+        assert!(local.is_local_mode());
+        assert!(!local.general.check_app_updates, "157");
+        let notice = local.acknowledgements.notice.expect("recorded");
+        assert_eq!((notice.version, notice.language), (1, Lang::De));
+        let on = backend.choose_catalog(true).expect("catalog");
+        assert!(!on.is_local_mode());
+        assert_eq!(
+            on.acknowledgements.notice.expect("kept").catalog,
+            CatalogChoice::Catalog
+        );
+    }
+
+    #[test]
+    fn a_reset_and_an_advanced_save_reach_the_listeners() {
+        let f = Fixture::new("resetlisteners");
+        let backend = f.backend(&FakeGame::default());
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let record = Arc::clone(&seen);
+        backend.on_settings(Box::new(move |s: &Settings| {
+            record.lock().expect("lock").push(s.network.retries);
+        }));
+        let mut settings = backend.settings().expect("settings");
+        settings.network.retries = 2;
+        backend.update_settings(settings).expect("saved");
+        let text = backend
+            .settings_text()
+            .expect("text")
+            .replace("\"retries\": 2", "\"retries\": 3");
+        assert!(backend.save_settings_text(&text).expect("ok").is_ok());
+        assert!(
+            backend
+                .save_settings_text("{ broken")
+                .expect("answered")
+                .is_err()
+        );
+        let (saved, after) = backend.reset_settings().expect("reset");
+        assert!(saved.backup.is_some());
+        assert_eq!(after.network.retries, 5);
+        assert_eq!(*seen.lock().expect("lock"), [2, 3, 5]);
     }
 
     #[test]

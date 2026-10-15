@@ -519,3 +519,26 @@ fn a_busy_foreign_image_host_does_not_stop_the_catalog() {
     );
     assert_eq!(h.catalog.status(), deadloader_catalog::Status::Online);
 }
+
+#[test]
+fn settings_see_what_the_cache_holds_and_can_clear_it() {
+    let h = Harness::new(&online_settings());
+    let thumb = listed(&h).items[0].thumbnail.expect("thumbnail");
+    h.on(THUMB_220, Reply::image("image/jpeg", JPEG));
+    h.catalog.image(&thumb.small).expect("thumbnail");
+    let usage = h.catalog.cache_usage().expect("usage");
+    assert_eq!(usage.thumbnails, 1);
+    assert_eq!(usage.pages, 1);
+    assert!(usage.sizes.thumbs >= JPEG.len() as u64);
+
+    let cleared = h.catalog.clear_cache().expect("cleared");
+    assert_eq!(cleared.files, 2);
+    let after = h.catalog.cache_usage().expect("usage");
+    assert_eq!(
+        (after.thumbnails, after.pages, after.sizes.total()),
+        (0, 0, 0)
+    );
+    // The picture is fetched again when it is needed.
+    h.catalog.image(&thumb.small).expect("fetched again");
+    assert_eq!(h.transport.count(), 3, "page + the thumbnail twice");
+}

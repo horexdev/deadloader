@@ -1108,6 +1108,15 @@ impl Settings {
         self.set_catalog_enabled(catalog == CatalogChoice::Catalog);
     }
 
+    /// F13: the catalog turned on from Settings after its network step was shown again, or turned off (local mode).
+    /// The choice recorded with the notice follows; the notice itself keeps its version and date.
+    pub fn choose_catalog(&mut self, choice: CatalogChoice) {
+        if let Some(notice) = &mut self.acknowledgements.notice {
+            notice.catalog = choice;
+        }
+        self.set_catalog_enabled(choice == CatalogChoice::Catalog);
+    }
+
     /// Whether the notice of `current_version` still has to be shown (never acknowledged, or an older version).
     pub fn needs_notice(&self, current_version: u32) -> bool {
         self.acknowledgements
@@ -1859,6 +1868,26 @@ mod tests {
         s.acknowledge_notice(2, at(13, 3), Lang::Uk, CatalogChoice::LocalMode);
         assert!(s.is_local_mode());
         assert!(!s.general.check_app_updates);
+    }
+
+    #[test]
+    fn choosing_the_catalog_later_updates_the_recorded_choice() {
+        let mut s = Settings::default();
+        s.acknowledge_notice(1, at(12, 3), Lang::En, CatalogChoice::LocalMode);
+        s.choose_catalog(CatalogChoice::Catalog);
+        assert!(!s.is_local_mode());
+        let notice = s.acknowledgements.notice.clone().expect("acknowledged");
+        assert_eq!(notice.catalog, CatalogChoice::Catalog);
+        assert_eq!(notice.version, 1, "the notice itself wasn't read again");
+        s.set_app_update_check(true).expect("catalog on");
+        s.choose_catalog(CatalogChoice::LocalMode);
+        assert!(s.is_local_mode());
+        assert!(!s.general.check_app_updates, "157");
+        // Before the notice was ever acknowledged there is nothing to update.
+        let mut fresh = Settings::default();
+        fresh.choose_catalog(CatalogChoice::Catalog);
+        assert!(fresh.acknowledgements.notice.is_none());
+        assert!(!fresh.is_local_mode());
     }
 
     #[test]

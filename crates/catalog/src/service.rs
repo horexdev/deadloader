@@ -383,6 +383,17 @@ where
         }
     }
 
+    /// Settings → Cache: bytes and entries per area of the picture and page cache.
+    pub fn cache_usage(&self) -> std::io::Result<deadloader_core::cache::Usage> {
+        self.inner.cache.usage()
+    }
+
+    /// Settings → Cache → "Clear cache": every cached picture and page goes (each deletion is logged); they are
+    /// fetched again when needed.
+    pub fn clear_cache(&self) -> std::io::Result<deadloader_core::cache::Cleared> {
+        self.inner.cache.clear()
+    }
+
     /// "Retry now" (E5): ends the wait after GameBanana said it was busy.
     pub fn retry_now(&self) {
         let before = self.status();
