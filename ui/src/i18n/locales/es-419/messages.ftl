@@ -134,13 +134,14 @@ e9 = El archivo comprimido es demasiado grande para descomprimirlo de forma segu
                     [one] Contiene { $found } archivo de mod y el límite es { $limit }.
                    *[other] Contiene { $found } archivos de mod y el límite es { $limit }.
                 }
-            [ratio] { $entry } está comprimido de forma sospechosa: más de { $limit } veces.
+            [ratio] { $entry } está comprimido de forma sospechosa: más de { $limit } veces. Es algo típico de un archivo comprimido malicioso.
             [memory] Para descomprimirlo se necesitan { $needed } de memoria y el límite es { $limit }.
            *[other] Supera uno de los límites de seguridad para archivos comprimidos.
         }
     .todo =
         { $reason ->
             [memory] Prueba con otro archivo de este mod.
+            [ratio] No lo instales salvo que confíes en su origen; solo entonces aumenta el límite en Configuración → Avanzado.
            *[other] Si confías en él, aumenta el límite en Configuración → Descargas.
         }
 e10 = No hay archivos de mod en este archivo comprimido.

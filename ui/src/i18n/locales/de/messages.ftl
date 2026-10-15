@@ -134,13 +134,14 @@ e9 = Das Archiv ist zu groß, um es sicher zu entpacken.
                     [one] Es enthält { $found } Mod-Datei, die Grenze liegt bei { $limit }.
                    *[other] Es enthält { $found } Mod-Dateien, die Grenze liegt bei { $limit }.
                 }
-            [ratio] { $entry } ist verdächtig stark komprimiert — mehr als { $limit }-fach.
+            [ratio] { $entry } ist verdächtig stark komprimiert — mehr als { $limit }-fach. Das ist typisch für ein schädliches Archiv.
             [memory] Zum Entpacken braucht es { $needed } Arbeitsspeicher, die Grenze liegt bei { $limit }.
            *[other] Es überschreitet eine der Sicherheitsgrenzen für Archive.
         }
     .todo =
         { $reason ->
             [memory] Versuche eine andere Datei dieses Mods.
+            [ratio] Installiere es nur, wenn du der Quelle vertraust; nur dann erhöhe die Grenze unter Einstellungen → Erweitert.
            *[other] Wenn du ihm vertraust, erhöhe die Grenze unter Einstellungen → Downloads.
         }
 e10 = Keine Mod-Dateien in diesem Archiv.

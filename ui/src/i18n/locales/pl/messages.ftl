@@ -148,13 +148,14 @@ e9 = Archiwum jest zbyt duże, by bezpiecznie je rozpakować.
                     [many] Zawiera { $found } plików modów, a limit to { $limit }.
                    *[other] Zawiera { $found } pliku modów, a limit to { $limit }.
                 }
-            [ratio] { $entry } jest podejrzanie mocno skompresowany — ponad { $limit }-krotnie.
+            [ratio] { $entry } jest podejrzanie mocno skompresowany — ponad { $limit }-krotnie. To typowa cecha złośliwego archiwum.
             [memory] Rozpakowanie wymaga { $needed } pamięci, a limit to { $limit }.
            *[other] Przekracza jeden z limitów bezpieczeństwa dla archiwów.
         }
     .todo =
         { $reason ->
             [memory] Spróbuj innego pliku tego moda.
+            [ratio] Nie instaluj go, jeśli nie ufasz źródłu; tylko wtedy zwiększ limit w sekcji Ustawienia → Zaawansowane.
            *[other] Jeśli mu ufasz, zwiększ limit w sekcji Ustawienia → Pobieranie.
         }
 e10 = W tym archiwum nie ma plików modów.

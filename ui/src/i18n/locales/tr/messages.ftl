@@ -134,13 +134,14 @@ e9 = Arşiv güvenle ayıklanamayacak kadar büyük.
                     [one] { $found } mod dosyası içeriyor, sınır ise { $limit }.
                    *[other] { $found } mod dosyası içeriyor, sınır ise { $limit }.
                 }
-            [ratio] { $entry } şüphe uyandıracak kadar çok sıkıştırılmış — { $limit } kattan fazla.
+            [ratio] { $entry } şüphe uyandıracak kadar çok sıkıştırılmış — { $limit } kattan fazla. Bu, kötü amaçlı bir arşivin tipik özelliğidir.
             [memory] Ayıklamak için { $needed } bellek gerekiyor, sınır ise { $limit }.
            *[other] Arşivler için belirlenen güvenlik sınırlarından birini aşıyor.
         }
     .todo =
         { $reason ->
             [memory] Bu modun başka bir dosyasını deneyin.
+            [ratio] Kaynağına güvenmiyorsanız yüklemeyin; yalnızca güveniyorsanız sınırı Ayarlar → Gelişmiş bölümünden yükseltin.
            *[other] Arşive güveniyorsanız Ayarlar → İndirmeler bölümünden sınırı yükseltin.
         }
 e10 = Bu arşivde mod dosyası yok.

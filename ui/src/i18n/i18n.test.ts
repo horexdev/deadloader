@@ -186,6 +186,17 @@ describe('a message from the core', () => {
     expect(many.why).toContain('256');
   });
 
+  it('warns that one over-compressed file is a sign of a malicious archive, and where its limit is (188)', () => {
+    const bomb = describeMessage({ id: 'E9', args: { reason: 'ratio', entry: 'pak01_dir.vpk', limit: '100' } });
+    expect(bomb.why).toContain('pak01_dir.vpk');
+    expect(bomb.why).toContain('malicious archive');
+    expect(bomb.todo).toContain('Settings → Advanced');
+    expect(bomb.todo).not.toContain('Settings → Downloads');
+    // The other limits are still raised in Settings → Downloads.
+    const big = describeMessage({ id: 'E9', args: { reason: 'too_large', limit: String(2048 * MiB) } });
+    expect(big.todo).toContain('Settings → Downloads');
+  });
+
   it('says what an archive over the size limit would unpack to, when its list tells', () => {
     const limit = String(2048 * MiB);
     const measured = describeMessage({
