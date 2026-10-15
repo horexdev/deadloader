@@ -157,8 +157,17 @@ export const TEXTS: Readonly<Record<string, TextSpec>> = {
       found: count,
       needed: size,
       entry: text,
+      // What the archive's own list says it unpacks to (display only; the limit is enforced on real bytes).
+      unpacked: size,
     },
-    selectors: { reason: reason('too_large', 'too_many_files', 'ratio', 'memory', 'other') },
+    selectors: {
+      reason: reason('too_large', 'too_many_files', 'ratio', 'memory', 'other'),
+      // A list that claims less than the limit is not believed: the limit was reached on bytes actually unpacked.
+      measured: {
+        values: ['yes', 'no'],
+        pick: (args) => (present(args, 'unpacked', 'limit') && Number(args.unpacked) > Number(args.limit) ? 'yes' : 'no'),
+      },
+    },
   },
   e10: {
     args: { contents: 'list' },

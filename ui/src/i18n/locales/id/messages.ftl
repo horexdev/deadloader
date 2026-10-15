@@ -100,7 +100,11 @@ e8 = Arsip tidak dapat diekstrak.
 e9 = Arsip terlalu besar untuk diekstrak dengan aman.
     .why =
         { $reason ->
-            [too_large] Setelah diekstrak, ukurannya melebihi { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] Setelah diekstrak, ukurannya akan menjadi { $unpacked }, sedangkan batasnya { $limit }.
+                   *[no] Setelah diekstrak, ukurannya melebihi { $limit }.
+                }
             [too_many_files] Arsip ini berisi { $found } file mod, sedangkan batasnya { $limit }.
             [ratio] { $entry } dikompresi secara mencurigakan — lebih dari { $limit } kali.
             [memory] Untuk mengekstraknya diperlukan memori { $needed }, sedangkan batasnya { $limit }.

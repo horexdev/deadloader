@@ -41,9 +41,23 @@ function task(
   };
 }
 
+/** The board's E9 (D12): a 412 MB archive whose list says 3.8 GB, over the 2 GB limit; the limits of the settings. */
 const E9: UserMessage = {
   id: 'E9',
-  args: { reason: 'too_large', limit: String(2 * 1024 ** 3), found: String(3.8 * 1024 ** 3), detail: 'unpacked size over the limit' },
+  args: {
+    reason: 'too_large',
+    limit: String(2 * 1024 ** 3),
+    entry: 'mina/pak01_dir.vpk',
+    entry_size: String(Math.round(1.6 * 1024 ** 3)),
+    unpacked: String(3892 * 1024 ** 2),
+    files: '41',
+    archive_size: String(412 * 1024 ** 2),
+    size_limit: String(2 * 1024 ** 3),
+    factor_limit: '20',
+    files_limit: '256',
+    ratio_limit: '100',
+    detail: 'the archive unpacks to more than 2.0 GB (stopped at "mina/pak01_dir.vpk")',
+  },
 };
 const E11: UserMessage = { id: 'E11', args: { detail: 'tar.exe: unsupported RAR version' } };
 

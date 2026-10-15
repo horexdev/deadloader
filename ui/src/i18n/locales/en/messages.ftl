@@ -124,7 +124,11 @@ e8 = The archive can’t be unpacked.
 e9 = The archive is too large to unpack safely.
     .why =
         { $reason ->
-            [too_large] It unpacks to more than { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] It would unpack to { $unpacked }; the limit is { $limit }.
+                   *[no] It unpacks to more than { $limit }.
+                }
             [too_many_files]
                 { $found ->
                     [one] It holds { $found } mod file, and the limit is { $limit }.

@@ -189,6 +189,29 @@ impl ToUserMessage for ImportError {
     fn user_message(&self) -> UserMessage {
         match self {
             Self::Archive(e) => e.user_message(),
+            Self::Limit(report) => {
+                let mut m = ArchiveError::Limit(report.exceeded.clone())
+                    .user_message()
+                    .arg("archive_size", report.archive_bytes)
+                    .arg("size_limit", report.size_limit)
+                    .arg("factor_limit", report.factor_limit)
+                    .arg("files_limit", report.files_limit)
+                    .arg("ratio_limit", report.ratio_limit);
+                if let LimitExceeded::TotalSize { entry, .. } = &report.exceeded {
+                    m = m.arg("entry", entry);
+                }
+                let known = [
+                    ("files", report.vpks.map(|n| n as u64)),
+                    ("unpacked", report.declared_bytes),
+                    ("entry_size", report.entry_bytes),
+                ];
+                for (key, value) in known {
+                    if let Some(value) = value {
+                        m = m.arg(key, value);
+                    }
+                }
+                m
+            }
             Self::NoModFiles { skipped } => {
                 UserMessage::new(MessageId::E10).arg("contents", skipped.join("\n"))
             }
@@ -453,6 +476,61 @@ mod tests {
             ImportError::Archive(ArchiveError::Rar).user_message().id,
             MessageId::E11
         );
+    }
+
+    #[test]
+    fn an_archive_over_a_limit_says_which_limit_which_entry_and_what_it_measured() {
+        let report = |exceeded| crate::import::LimitReport {
+            exceeded,
+            archive_bytes: 412 << 20,
+            vpks: Some(41),
+            declared_bytes: Some(3_900 << 20),
+            entry_bytes: Some(900 << 20),
+            size_limit: 2 << 30,
+            factor_limit: 20,
+            files_limit: 256,
+            ratio_limit: 100,
+        };
+        let big = ImportError::Limit(Box::new(report(LimitExceeded::TotalSize {
+            limit: 2 << 30,
+            entry: "mina/pak01_dir.vpk".into(),
+        })))
+        .user_message();
+        assert_eq!(big.id, MessageId::E9);
+        for (key, value) in [
+            ("reason", "too_large"),
+            ("limit", "2147483648"),
+            ("entry", "mina/pak01_dir.vpk"),
+            ("entry_size", "943718400"),
+            ("unpacked", "4089446400"),
+            ("archive_size", "432013312"),
+            ("files", "41"),
+            ("size_limit", "2147483648"),
+            ("factor_limit", "20"),
+            ("files_limit", "256"),
+            ("ratio_limit", "100"),
+        ] {
+            assert_eq!(arg(&big, key), Some(value), "{key}");
+        }
+        assert!(arg(&big, "detail").is_some());
+
+        let unknown = ImportError::Limit(Box::new(crate::import::LimitReport {
+            vpks: None,
+            declared_bytes: None,
+            entry_bytes: None,
+            ..report(LimitExceeded::Ratio {
+                limit: 100,
+                entry: "flat.vpk".into(),
+            })
+        }))
+        .user_message();
+        assert_eq!(
+            (arg(&unknown, "reason"), arg(&unknown, "entry")),
+            (Some("ratio"), Some("flat.vpk"))
+        );
+        for key in ["unpacked", "files", "entry_size"] {
+            assert_eq!(arg(&unknown, key), None, "{key} isn't known");
+        }
     }
 
     #[test]

@@ -100,7 +100,11 @@ e8 = 无法解压该压缩包。
 e9 = 压缩包过大，无法安全解压。
     .why =
         { $reason ->
-            [too_large] 解压后超过 { $limit }。
+            [too_large]
+                { $measured ->
+                    [yes] 解压后将达到 { $unpacked }，而上限为 { $limit }。
+                   *[no] 解压后超过 { $limit }。
+                }
             [too_many_files] 其中包含 { $found } 个模组文件，而上限为 { $limit } 个。
             [ratio] { $entry } 的压缩比高得可疑——超过 { $limit } 倍。
             [memory] 解压需要 { $needed } 内存，而上限为 { $limit }。

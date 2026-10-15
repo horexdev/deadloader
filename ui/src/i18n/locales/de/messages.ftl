@@ -124,7 +124,11 @@ e8 = Das Archiv kann nicht entpackt werden.
 e9 = Das Archiv ist zu groß, um es sicher zu entpacken.
     .why =
         { $reason ->
-            [too_large] Entpackt ist es größer als { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] Entpackt wäre es { $unpacked } groß; die Grenze liegt bei { $limit }.
+                   *[no] Entpackt ist es größer als { $limit }.
+                }
             [too_many_files]
                 { $found ->
                     [one] Es enthält { $found } Mod-Datei, die Grenze liegt bei { $limit }.

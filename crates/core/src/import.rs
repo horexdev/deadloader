@@ -10,7 +10,7 @@ use crate::fs::{Disk, FileOps};
 use crate::library::{Manifest, Mod, ModFile, ModelError, Source};
 use crate::overlap::{FileIndex, Grouping, group};
 use crate::vpk::{VpkError, read_index};
-pub use deadloader_archive::{ArchiveError, Hooks, Limits, NoHooks};
+pub use deadloader_archive::{ArchiveError, Hooks, LimitExceeded, Limits, NoHooks};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -42,17 +42,83 @@ pub struct Imported {
 #[derive(Debug)]
 pub enum ImportError {
     Archive(ArchiveError),
-    NoModFiles { skipped: Vec<String> },
-    NotAVpk { name: String, error: VpkError },
+    /// An archive went over a safety limit (decision 127, E9), with what it was measured at.
+    Limit(Box<LimitReport>),
+    NoModFiles {
+        skipped: Vec<String>,
+    },
+    NotAVpk {
+        name: String,
+        error: VpkError,
+    },
     InvalidModId(String),
     Manifest(ModelError),
     Io(io::Error),
+}
+
+/// What E9 tells about an archive that went over a limit: the limit it hit, the entry that hit it, and what the
+/// archive's own list says (display only: the limits are enforced on the bytes actually unpacked, ADR 0008).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LimitReport {
+    pub exceeded: LimitExceeded,
+    pub archive_bytes: u64,
+    /// `.vpk` entries in the archive; `None` when its list can't be read.
+    pub vpks: Option<usize>,
+    /// What those entries declare they unpack to.
+    pub declared_bytes: Option<u64>,
+    /// What the entry that stopped the extraction declares it unpacks to.
+    pub entry_bytes: Option<u64>,
+    /// The limits as Settings → Downloads shows them: the unpacked size, how many times the archive's size it may
+    /// unpack to (the total is the smaller of the two), mod files; then the ratio of one entry (not a setting).
+    pub size_limit: u64,
+    pub factor_limit: u64,
+    pub files_limit: usize,
+    pub ratio_limit: u64,
+}
+
+impl LimitReport {
+    fn measure(archive: &Path, limits: &Limits, exceeded: LimitExceeded) -> Self {
+        let archive_bytes = std::fs::metadata(archive).map_or(0, |m| m.len());
+        let listing = deadloader_archive::list(archive).ok();
+        let vpks: Option<Vec<deadloader_archive::Entry>> = listing.map(|l| {
+            l.entries
+                .into_iter()
+                .filter(deadloader_archive::Entry::is_vpk)
+                .collect()
+        });
+        let entry = match &exceeded {
+            LimitExceeded::TotalSize { entry, .. } | LimitExceeded::Ratio { entry, .. } => {
+                Some(entry.as_str())
+            }
+            LimitExceeded::TooManyVpks { .. } | LimitExceeded::Dictionary { .. } => None,
+        };
+        let entry_bytes = entry.and_then(|name| {
+            vpks.as_ref()?
+                .iter()
+                .find(|e| e.name == name)
+                .map(|e| e.size)
+        });
+        Self {
+            archive_bytes,
+            vpks: vpks.as_ref().map(Vec::len),
+            declared_bytes: vpks
+                .as_ref()
+                .map(|v| v.iter().fold(0u64, |sum, e| sum.saturating_add(e.size))),
+            entry_bytes,
+            size_limit: limits.max_total_bytes,
+            factor_limit: limits.max_total_factor,
+            files_limit: limits.max_vpk_entries,
+            ratio_limit: limits.max_entry_ratio,
+            exceeded,
+        }
+    }
 }
 
 impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Archive(e) => write!(f, "{e}"),
+            Self::Limit(report) => write!(f, "{}", report.exceeded),
             Self::NoModFiles { .. } => f.write_str("the file contains no .vpk mod files"),
             Self::NotAVpk { name, error } => {
                 write!(f, "{name} is named .vpk but can't be read as one: {error}")
@@ -139,8 +205,15 @@ fn fill(
             Vec::new(),
         )
     } else {
-        let x = deadloader_archive::extract_vpks(&req.source, out_dir, limits, hooks)
-            .map_err(ImportError::Archive)?;
+        let x =
+            deadloader_archive::extract_vpks(&req.source, out_dir, limits, hooks).map_err(|e| {
+                match e {
+                    ArchiveError::Limit(exceeded) => ImportError::Limit(Box::new(
+                        LimitReport::measure(&req.source, limits, exceeded),
+                    )),
+                    other => ImportError::Archive(other),
+                }
+            })?;
         let vpks = x
             .vpks
             .into_iter()
@@ -609,6 +682,85 @@ mod tests {
         )
         .expect_err("not supported");
         assert!(matches!(err, ImportError::Archive(_)), "{err:?}");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn an_archive_over_a_limit_is_measured_for_the_message() {
+        let dir = temp_dir("limit");
+        let data = dir.join("data");
+        let archive = dir.join("big.zip");
+        let (one, two) = (colour(1), colour(2));
+        zip(
+            &archive,
+            &[
+                ("pink/pak01_dir.vpk", &one),
+                ("readme.txt", b"hello"),
+                ("blue/pak01_dir.vpk", &two),
+            ],
+        );
+        let size = std::fs::metadata(&archive).expect("archive").len();
+        let limits = Limits {
+            max_total_bytes: one.len() as u64 + 10,
+            max_total_factor: 1000,
+            max_vpk_entries: 5,
+            max_entry_ratio: 60,
+            ..Limits::default()
+        };
+        let mut m = Manifest::default();
+        let err = import(&data, &mut m, &request(archive), &limits, &NoHooks)
+            .expect_err("over the size limit");
+        let ImportError::Limit(report) = err else {
+            panic!("{err:?}");
+        };
+        assert!(
+            matches!(&report.exceeded, LimitExceeded::TotalSize { entry, .. } if entry == "blue/pak01_dir.vpk"),
+            "{report:?}"
+        );
+        assert_eq!(report.archive_bytes, size);
+        assert_eq!(report.vpks, Some(2), "only mod files count");
+        assert_eq!(
+            report.declared_bytes,
+            Some((one.len() + two.len()) as u64),
+            "what the headers say it unpacks to"
+        );
+        assert_eq!(report.entry_bytes, Some(two.len() as u64));
+        assert_eq!(report.size_limit, one.len() as u64 + 10);
+        assert_eq!(report.factor_limit, 1000);
+        assert_eq!(report.files_limit, 5);
+        assert_eq!(report.ratio_limit, 60);
+        assert!(m.mods.is_empty(), "nothing joins the library");
+        assert!(!data.join("library").join("local-1").exists());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn too_many_mod_files_are_measured_too() {
+        let dir = temp_dir("limitcount");
+        let archive = dir.join("pack.zip");
+        let (one, two) = (colour(1), colour(2));
+        zip(&archive, &[("a.vpk", &one), ("b.vpk", &two)]);
+        let limits = Limits {
+            max_vpk_entries: 1,
+            ..Limits::default()
+        };
+        let err = import(
+            &dir.join("data"),
+            &mut Manifest::default(),
+            &request(archive),
+            &limits,
+            &NoHooks,
+        )
+        .expect_err("over the count");
+        let ImportError::Limit(report) = err else {
+            panic!("{err:?}");
+        };
+        assert_eq!(
+            report.exceeded,
+            LimitExceeded::TooManyVpks { limit: 1, found: 2 }
+        );
+        assert_eq!(report.entry_bytes, None, "no entry stopped it");
+        assert_eq!(report.vpks, Some(2));
         cleanup(&dir);
     }
 

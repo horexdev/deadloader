@@ -136,7 +136,11 @@ e8 = Archiv nelze rozbalit.
 e9 = Archiv je příliš velký na bezpečné rozbalení.
     .why =
         { $reason ->
-            [too_large] Po rozbalení má víc než { $limit }.
+            [too_large]
+                { $measured ->
+                    [yes] Po rozbalení by měl { $unpacked }, limit je { $limit }.
+                   *[no] Po rozbalení má víc než { $limit }.
+                }
             [too_many_files]
                 { $found ->
                     [one] Obsahuje { $found } soubor modu, limit je { $limit }.

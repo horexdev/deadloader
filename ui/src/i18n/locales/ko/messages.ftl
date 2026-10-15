@@ -100,7 +100,11 @@ e8 = 압축 파일을 풀 수 없습니다.
 e9 = 압축 파일이 너무 커서 안전하게 풀 수 없습니다.
     .why =
         { $reason ->
-            [too_large] 압축을 풀면 크기가 제한({ $limit })을 넘습니다.
+            [too_large]
+                { $measured ->
+                    [yes] 압축을 풀면 { $unpacked }가 되지만 제한은 { $limit }입니다.
+                   *[no] 압축을 풀면 크기가 제한({ $limit })을 넘습니다.
+                }
             [too_many_files] 모드 파일이 { $found }개 들어 있지만 제한은 { $limit }개입니다.
             [ratio] { $entry }의 압축률이 의심스러울 만큼 높습니다({ $limit }배 초과).
             [memory] 압축을 풀려면 메모리가 { $needed } 필요하지만 제한은 { $limit }입니다.

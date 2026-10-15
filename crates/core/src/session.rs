@@ -2780,7 +2780,7 @@ mod tests {
         w.finish().expect("finish");
         let err = s.import_file(&archive, "Two").expect_err("over the limit");
         assert!(
-            matches!(err, SessionError::Import(ImportError::Archive(_))),
+            matches!(err, SessionError::Import(ImportError::Limit(_))),
             "{err}"
         );
     }

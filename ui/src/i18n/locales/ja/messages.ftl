@@ -100,7 +100,11 @@ e8 = アーカイブを展開できません。
 e9 = アーカイブが大きすぎるため、安全に展開できません。
     .why =
         { $reason ->
-            [too_large] 展開後のサイズが{ $limit }を超えます。
+            [too_large]
+                { $measured ->
+                    [yes] 展開後は{ $unpacked }になりますが、上限は{ $limit }です。
+                   *[no] 展開後のサイズが{ $limit }を超えます。
+                }
             [too_many_files] MODファイルが{ $found }個含まれていますが、上限は{ $limit }個です。
             [ratio] { $entry }の圧縮率が不自然に高すぎます（{ $limit }倍超）。
             [memory] 展開に{ $needed }のメモリが必要ですが、上限は{ $limit }です。
