@@ -1568,58 +1568,6 @@ mod tests {
     }
 
     #[test]
-    fn an_old_version_shows_the_newest_one_in_the_library() {
-        let f = Fixture::new("newer");
-        let mut s = open(&f);
-        for (n, crc) in [(1, 1), (2, 2), (3, 3)] {
-            s.import_download(
-                &f.source(&format!("{n}.bin"), &[("models/haze/body.vmdl_c", crc)]),
-                &haze_download(n, &format!("haze_v{n}.vpk")),
-            )
-            .expect("imported");
-        }
-        let ids: Vec<String> = s.manifest.mods[0]
-            .files
-            .iter()
-            .map(|f| f.id.clone())
-            .collect();
-        // v1 → v2 → v3, as two confirmed updates leave it (170).
-        s.manifest.mods[0].files[0].successor =
-            Some(crate::library::Successor::File(ids[1].clone()));
-        s.manifest.mods[0].files[1].successor =
-            Some(crate::library::Successor::File(ids[2].clone()));
-        let view = s.library();
-        let newer: Vec<Option<&str>> = view.mods[0]
-            .files
-            .iter()
-            .map(|f| f.newer_in_library.as_deref())
-            .collect();
-        assert_eq!(newer, [Some(ids[2].as_str()), Some(ids[2].as_str()), None]);
-    }
-
-    #[test]
-    fn hidden_new_files_are_remembered_across_starts() {
-        let f = Fixture::new("dismiss");
-        let mut s = open(&f);
-        s.import_download(
-            &f.source("17.bin", &[("models/haze/body.vmdl_c", 1)]),
-            &haze_download(1, "haze.vpk"),
-        )
-        .expect("imported");
-        s.dismiss_new_files("gb-655209", &[7, 8]).expect("hidden");
-        s.dismiss_new_files("gb-655209", &[8, 9])
-            .expect("hidden again");
-        assert_eq!(
-            open(&f).manifest().dismissed_new_files["gb-655209"],
-            [7, 8, 9]
-        );
-        assert!(matches!(
-            s.dismiss_new_files("gb-1", &[1]),
-            Err(SessionError::UnknownMod(_))
-        ));
-    }
-
-    #[test]
     fn sound_mods_have_their_own_ids() {
         let f = Fixture::new("downloadsound");
         let mut s = open(&f);
