@@ -124,6 +124,18 @@ fn a_missing_content_type_is_taken_from_the_bytes_and_a_wrong_one_refused() {
 }
 
 #[test]
+fn a_generic_binary_content_type_is_taken_from_the_bytes() {
+    // Storage-backed hosts often label every file this way.
+    for declared in ["application/octet-stream", "binary/octet-stream"] {
+        let h = Harness::new(&online_settings());
+        let thumb = listed(&h).items[0].thumbnail.expect("thumbnail");
+        h.on(THUMB_220, Reply::image(declared, JPEG));
+        let blob = h.catalog.image(&thumb.small).expect(declared);
+        assert_eq!(blob.content_type, ImageType::Jpeg, "{declared}");
+    }
+}
+
+#[test]
 fn while_offline_thumbnails_come_only_from_the_cache() {
     let h = Harness::new(&online_settings());
     let thumb = listed(&h).items[0].thumbnail.expect("thumbnail");
