@@ -93,6 +93,25 @@ describe('the app state', () => {
     expect(app.game?.running).toBe(true);
   });
 
+  it('names the changes applied when the game was closed (N12)', async () => {
+    const library = app.library as LibraryView;
+    const [first, second] = library.mods;
+    app.handle({
+      event: 'applied_after_game',
+      data: {
+        changes: 5,
+        items: [
+          { mod_id: first?.id ?? '', name: first?.name ?? '', kind: 'enable' },
+          { mod_id: second?.id ?? '', name: second?.name ?? '', kind: 'disable' },
+        ],
+        library,
+      },
+    });
+    await vi.waitFor(() => expect(app.toasts.at(-1)?.title).toBe('Deadlock was closed — 2 changes applied.'));
+    expect(app.toasts.at(-1)?.text).toBe(`${first?.name} on and ${second?.name} off`);
+    expect(app.toasts.at(-1)?.action).toBeDefined();
+  });
+
   it('shows a failure as a toast', async () => {
     devtools.setGameRunning(true);
     await app.play();

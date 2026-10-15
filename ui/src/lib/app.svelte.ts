@@ -25,6 +25,7 @@ import {
   type Installed,
   type LibraryView,
   type LogKind,
+  type PendingChange,
   type Section,
   type Settings,
   type TaskSnapshot,
@@ -150,11 +151,7 @@ export class AppState {
         break;
       case 'applied_after_game':
         this.library = event.data.library;
-        this.toast({
-          kind: 'success',
-          title: describe({ id: 'N12', args: { count: Math.max(event.data.changes, 1) } }).what,
-          action: { label: t('library-undo'), icon: Undo2, onclick: () => void this.undoApplied() },
-        });
+        void this.appliedAfterGame(event.data.changes, event.data.items, event.data.library);
         break;
       case 'updates':
         this.updates = event.data;
@@ -400,6 +397,18 @@ export class AppState {
     } finally {
       this.checking = false;
     }
+  }
+
+  /** N12: the toast names what went in; the words come with the Library's code, loaded when first needed. */
+  private async appliedAfterGame(edits: number, items: PendingChange[], library: LibraryView): Promise<void> {
+    const { appliedSummary } = await import('../screens/library/applied');
+    const text = appliedSummary(items, library.mods);
+    this.toast({
+      kind: 'success',
+      title: describe({ id: 'N12', args: { count: items.length > 0 ? items.length : Math.max(edits, 1) } }).what,
+      ...(text ? { text } : {}),
+      action: { label: t('library-undo'), icon: Undo2, onclick: () => void this.undoApplied() },
+    });
   }
 
   /** Undo of what was applied when the game closed (N12, 147). */

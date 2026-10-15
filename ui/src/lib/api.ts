@@ -186,7 +186,8 @@ export type Notice =
 /** A push from the core (crates/app/src/events.rs `UiEvent`). */
 export type UiEvent =
   | { event: 'game'; data: { running: boolean } }
-  | { event: 'applied_after_game'; data: { changes: number; library: LibraryView } }
+  /** N12: `changes` counts the edits made while the game ran; `items` names what went in (S9's changes). */
+  | { event: 'applied_after_game'; data: { changes: number; items: PendingChange[]; library: LibraryView } }
   | { event: 'apply_after_game_failed'; data: { message: UserMessage } }
   | { event: 'drag_hover'; data: { over: boolean } }
   | { event: 'dropped'; data: { outcomes: ImportResult[] } }

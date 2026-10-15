@@ -226,6 +226,8 @@ pub enum UpdateStep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AfterGame {
     pub changes: usize,
+    /// What went in, by mod and aspect (N12 names them).
+    pub items: Vec<deadloader_core::pending::PendingChange>,
     pub library: LibraryView,
 }
 
@@ -313,12 +315,13 @@ impl Backend {
                 .filter(|_| !items.is_empty())
                 .map(|restore| AutoApplied {
                     restore,
-                    changes: items,
+                    changes: items.clone(),
                     at_unix_ms: now_unix_ms(),
                 });
         }
         Ok(changed.applied.then_some(AfterGame {
             changes,
+            items,
             library: changed.library,
         }))
     }
