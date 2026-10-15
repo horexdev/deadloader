@@ -8,11 +8,12 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts", "svelte.config.js", "eslint.config.js"]
+  "include": ["src/**/*.ts", "build/**/*.ts", "src/**/*.svelte", "vite.config.ts", "svelte.config.js", "eslint.config.js"]
 }
