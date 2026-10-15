@@ -1,5 +1,7 @@
 //! Start-up: the data folder, single instance, the log, and the main window with our WebView2 settings.
 
+use crate::backend::Backend;
+use crate::commands;
 use crate::paths::{DataDirError, DataLayout};
 use crate::webview;
 use deadloader_core::log::{DiskLogDir, Level, Logger, SystemClock};
@@ -67,12 +69,29 @@ pub fn run() -> Result<(), StartError> {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             focus_main_window(app);
         }))
+        .invoke_handler(tauri::generate_handler![
+            commands::library,
+            commands::set_enabled,
+            commands::move_mod,
+            commands::switch_variant,
+            commands::choose,
+            commands::select_profile,
+            commands::create_profile,
+            commands::profile_names,
+            commands::import_paths,
+            commands::apply,
+        ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;
 
     let log: Log = Arc::new(Logger::open(layout.logs()));
     app.manage(Arc::clone(&log));
     log_start(&log, &layout);
+    // Only after `build`: a second instance has exited by now, so it never touches the journal or the library.
+    app.manage(Arc::new(Backend::start(
+        layout.root(),
+        Box::new(commands::SteamGame),
+    )));
     if let Err(e) = open_main_window(&app, &layout, &log, started) {
         write(
             &log,
