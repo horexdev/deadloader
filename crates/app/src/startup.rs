@@ -271,6 +271,7 @@ pub fn run() -> Result<(), StartError> {
         backend: Arc::clone(&backend),
         outbox: Arc::clone(&outbox),
         cache_dir: layout.root().join("cache"),
+        downloads: downloads.clone(),
     };
     app.manage(network);
     app.manage(Arc::clone(&backend));
@@ -345,6 +346,8 @@ struct CatalogParts {
     backend: Arc<Backend>,
     outbox: Arc<Outbox>,
     cache_dir: PathBuf,
+    /// Its queued tasks show pictures the catalog has to know again.
+    downloads: Option<Arc<deadloader_downloads::Downloads>>,
 }
 
 /// Opens the cache and the catalog after the window, on their own thread: listing the image folders must not delay the
@@ -383,6 +386,9 @@ fn open_catalog(app: AppHandle, slot: Arc<CatalogSlot>, parts: CatalogParts, log
                     [("message", serde_json::to_value(message).unwrap_or_default())],
                 ),
             }
+            if let (Ok(catalog), Some(downloads)) = (&opened, &parts.downloads) {
+                renew_thumbnails(catalog, downloads);
+            }
             // Open for the UI first: the update check can take a while with many mods.
             slot.set(opened.clone());
             if let Ok(catalog) = &opened {
@@ -396,6 +402,15 @@ fn open_catalog(app: AppHandle, slot: Arc<CatalogSlot>, parts: CatalogParts, log
             "the catalog could not be opened",
             [("error", e.to_string().into())],
         );
+    }
+}
+
+/// The pictures of downloads queued before this start: the catalog issues their ids again from the saved mod pages
+/// (nothing is requested), so the rows show them.
+fn renew_thumbnails(catalog: &catalog::AppCatalog, downloads: &deadloader_downloads::Downloads) {
+    let tasks: Vec<_> = downloads.tasks().into_iter().map(|t| t.info).collect();
+    for (section, mod_id) in crate::downloads::with_thumbnails(&tasks) {
+        catalog.download_thumbnail(commands::updates::catalog_section(section), mod_id);
     }
 }
 

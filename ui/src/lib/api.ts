@@ -501,7 +501,7 @@ export interface TaskSnapshot {
   md5: string | null;
   size: number | null;
   initiator: 'user' | 'auto';
-  /** mod_id, file_id, mod_name, author, version, section. */
+  /** mod_id, file_id, mod_name, author, version, section; `thumbnail`: the mod's picture id (`imageUrl`), if any. */
   meta: Record<string, string>;
   state: TaskState;
   bytes: number;

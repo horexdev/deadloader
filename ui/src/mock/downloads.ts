@@ -2,6 +2,7 @@
 // the offline, disk-full and variant-choice states. Invented names, like the rest of the mock.
 
 import type { Changed, ModView, TaskSnapshot, TaskState, UiEvent, UserMessage } from '../lib/api';
+import { pictureId } from './fixtures';
 
 const MB = 1_000_000;
 
@@ -12,10 +13,12 @@ function task(
   file: string,
   size: number,
   state: TaskState,
-  extra: { bytes?: number; speed?: number; meta?: Record<string, string> } = {},
+  extra: { bytes?: number; speed?: number; meta?: Record<string, string>; picture?: boolean } = {},
 ): TaskSnapshot {
   const id = (nextId += 1);
   const modId = 700_000 + (id % 100);
+  // The mod's picture from its saved mod page; a download started without one shows the placeholder.
+  const picture: Record<string, string> = extra.picture === false ? {} : { thumbnail: pictureId(modId, 'small') };
   return {
     id,
     url: `https://gamebanana.com/dl/${id}`,
@@ -23,7 +26,14 @@ function task(
     md5: null,
     size,
     initiator: 'user',
-    meta: { section: 'mod', mod_id: String(modId), file_id: String(1_900_000 + id), mod_name: name, ...extra.meta },
+    meta: {
+      section: 'mod',
+      mod_id: String(modId),
+      file_id: String(1_900_000 + id),
+      mod_name: name,
+      ...picture,
+      ...extra.meta,
+    },
     state,
     bytes: extra.bytes ?? 0,
     total: size,
@@ -53,7 +63,7 @@ export function queue(): TaskSnapshot[] {
     task('Haze — Midnight Bloom', 'haze_midnight_cherry.rar', 2.7 * MB, { state: 'downloading' }, { bytes: 2.1 * MB, speed: 0.9 * MB }),
     task('Vindicta — Coral Reef', 'vindicta_coral_reef.zip', 38 * MB, { state: 'downloading' }, { bytes: 9.5 * MB, speed: 2.4 * MB }),
     task('Kelvin — Porcelain', 'kelvin_porcelain.zip', 24.3 * MB, { state: 'queued' }),
-    task('Always Show Item Icons', 'always_show_item_icons.zip', 0.4 * MB, { state: 'queued' }),
+    task('Always Show Item Icons', 'always_show_item_icons.zip', 0.4 * MB, { state: 'queued' }, { picture: false }),
     task('Lady Geist — Ember Coat', 'geist_ember_coat.zip', 412 * MB, { state: 'failed', message: E9 }, { bytes: 412 * MB }),
     task('Dynamo — Neon Rider', 'dynamo_neon_rider.rar', 61.3 * MB, { state: 'failed', message: E11 }, { bytes: 61.3 * MB }),
   ];
