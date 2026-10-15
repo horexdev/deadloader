@@ -203,6 +203,12 @@ e23 = deadloaderが自身のファイル{ $file }を読み取れません。
             [manifest] manifest.json.bakを復元するか、deadloaderをアップデートしてください。
            *[other] バックアップからファイルを復元するか、deadloaderをアップデートしてください。
         }
+e24 = このファイルはGameBananaにもうありません。
+    .why = 作者が削除または差し替えました（HTTP { $status }）。
+    .todo = MODのページを開いて別のファイルを選ぶか、MODのアップデートを確認してください。
+e25 = GameBananaがリクエストを拒否しました。
+    .why = サーバーがコード{ $status }で応答しました。通常は一時的なものです。
+    .todo = しばらくしてからもう一度お試しください。繰り返し起こる場合は、deadloaderのGitHubページで報告してください。
 internal = deadloaderの内部で問題が発生しました。
     .why = deadloader側の不具合であり、操作ミスによるものではありません。
     .todo = もう一度お試しください。繰り返し発生する場合は、[詳細]にあるログエントリを添えて報告してください。

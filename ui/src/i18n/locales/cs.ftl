@@ -251,6 +251,12 @@ e23 = deadloader nemůže přečíst svůj soubor { $file }.
             [manifest] Obnovte soubor manifest.json.bak nebo aktualizujte deadloader.
            *[other] Obnovte soubor ze zálohy nebo aktualizujte deadloader.
         }
+e24 = Soubor už na GameBanana není.
+    .why = Autor ho odstranil nebo nahradil (HTTP { $status }).
+    .todo = Otevřete stránku modu a vyberte jiný soubor, nebo zkontrolujte, zda mod nemá aktualizaci.
+e25 = GameBanana žádost odmítl.
+    .why = Server odpověděl kódem { $status }. Obvykle jde o dočasný problém.
+    .todo = Zkuste to později. Pokud se to opakuje, nahlaste to na stránce programu deadloader na GitHubu.
 internal = V programu deadloader se něco pokazilo.
     .why = Je to chyba programu deadloader, ne vaše.
     .todo = Zkuste to znovu. Pokud se to bude opakovat, nahlaste to i se záznamem protokolu z Podrobností.

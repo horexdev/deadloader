@@ -69,6 +69,10 @@ pub enum CatalogError {
     Blocked {
         message: UserMessage,
     },
+    /// GameBanana (or something in front of it) refused the request with a 4xx that is not an API answer (E25).
+    Refused {
+        message: UserMessage,
+    },
     /// GameBanana has no such submission (deleted, withheld), or it belongs to another game.
     NotFound {
         other_game: Option<u64>,
@@ -90,6 +94,7 @@ impl CatalogError {
             Self::RateLimited { message, .. }
             | Self::ApiChanged { message }
             | Self::Blocked { message }
+            | Self::Refused { message }
             | Self::Internal { message } => Some(message),
             Self::LocalMode
             | Self::Offline { .. }
@@ -109,6 +114,7 @@ impl fmt::Display for CatalogError {
             }
             Self::ApiChanged { .. } => f.write_str("GameBanana's API changed"),
             Self::Blocked { .. } => f.write_str("a request was blocked by the allowlist"),
+            Self::Refused { .. } => f.write_str("GameBanana refused the request"),
             Self::NotFound { .. } => f.write_str("GameBanana has no such submission"),
             Self::InvalidSearch { problem } => {
                 write!(f, "the search text is invalid ({problem:?})")
