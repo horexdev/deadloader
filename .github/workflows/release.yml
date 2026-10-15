@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  # A `vX.Y.Z` tag builds the release zip and opens a draft release for the maintainer to check and publish.
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  # A change to the release itself is built on its pull request too (no attestation, no release).
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - about.toml
+      - about.hbs
+      - ui/build/notices.ts
+      - ui/build/licences/**
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  PNPM_VERSION: 12.8.2
+  CARGO_ABOUT_VERSION: 0.9.2
+  GIT_CLIFF_VERSION: 2.14.2
+
+jobs:
+  release:
+    name: Release zip (exe, licence, third-party notices)
+    runs-on: windows-latest
+    permissions:
+      contents: write # the draft release
+      id-token: write # the build provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # git-cliff reads the history since the previous tag.
+          fetch-depth: 0
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ui/.node-version
+      - name: Install pnpm
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }}
+      - name: Version (a tag must match Cargo.toml)
+        shell: pwsh
+        run: |
+          $version = (cargo pkgid -p deadloader) -replace '.*[#@]', ''
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            "::error::tag $env:GITHUB_REF_NAME does not match the version in Cargo.toml ($version)"; exit 1
+          }
+          "VERSION=$version" >> $env:GITHUB_ENV
+      - name: Build the UI
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Build the release exe
+        run: cargo build --release -p deadloader --locked
+      - name: Exe size budget (12 MB)
+        shell: pwsh
+        run: |
+          $exe = Get-Item target/release/deadloader.exe
+          if ($exe.Length -gt 12MB) { "::error::deadloader.exe is over the 12 MB budget"; exit 1 }
+      - name: Third-party notices (decision 167)
+        shell: pwsh
+        run: |
+          cargo install cargo-about --locked --version $env:CARGO_ABOUT_VERSION --features cli
+          cargo about generate about.hbs -m crates/app/Cargo.toml -o "$env:RUNNER_TEMP/crates.txt"
+          Push-Location ui
+          pnpm licenses list --prod --json > "$env:RUNNER_TEMP/packages.json"
+          Pop-Location
+          node ui/build/notices.ts "$env:RUNNER_TEMP/crates.txt" "$env:RUNNER_TEMP/packages.json" `
+            "$env:RUNNER_TEMP/THIRD-PARTY-NOTICES.txt" $env:VERSION
+      - name: Release zip and its SHA-256
+        shell: pwsh
+        run: |
+          $name = "deadloader-$env:VERSION-windows-x64"
+          $dir = Join-Path $env:RUNNER_TEMP $name
+          New-Item -ItemType Directory $dir, dist | Out-Null
+          Copy-Item target/release/deadloader.exe, LICENSE, "$env:RUNNER_TEMP/THIRD-PARTY-NOTICES.txt" $dir
+          Compress-Archive -Path "$dir/*" -DestinationPath "dist/$name.zip"
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Set-Content -NoNewline "dist/$name.zip.sha256"
+          $exe = (Get-FileHash target/release/deadloader.exe -Algorithm SHA256).Hash.ToLower()
+          "ZIP=$name.zip" >> $env:GITHUB_ENV
+          "ZIP_SHA256=$hash" >> $env:GITHUB_ENV
+          "EXE_SHA256=$exe" >> $env:GITHUB_ENV
+          "$name.zip: $hash (deadloader.exe: $exe)" >> $env:GITHUB_STEP_SUMMARY
+      - name: Release notes (git-cliff)
+        shell: pwsh
+        run: |
+          # A tag: the changes since the previous one; a pull request: what the next release would list.
+          $range = if ($env:GITHUB_REF_TYPE -eq 'tag') { '--latest' } else { '--unreleased' }
+          pnpm dlx "git-cliff@$env:GIT_CLIFF_VERSION" $range --strip header -o "$env:RUNNER_TEMP/changes.md"
+          $intro = @(
+            "Unpack ``$env:ZIP`` into its own folder you can write to (see Install in the README) and run ``deadloader.exe``.",
+            '',
+            "- SHA-256 of the zip: ``$env:ZIP_SHA256``",
+            "- SHA-256 of deadloader.exe: ``$env:EXE_SHA256``",
+            "- Built by GitHub Actions from this tag; check it with ``gh attestation verify $env:ZIP --repo $env:GITHUB_REPOSITORY``.",
+            '- This release is not code-signed yet, so Windows may show "Windows protected your PC": choose "More info" →',
+            '  "Run anyway" after checking the hash.',
+            ''
+          )
+          ($intro + (Get-Content "$env:RUNNER_TEMP/changes.md")) | Set-Content "$env:RUNNER_TEMP/notes.md"
+          Get-Content "$env:RUNNER_TEMP/notes.md" | Select-Object -First 40 >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: github.ref_type == 'tag'
+        with:
+          subject-path: |
+            dist/*.zip
+            target/release/deadloader.exe
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create $env:GITHUB_REF_NAME (Get-ChildItem dist).FullName --draft --verify-tag
+          --title "deadloader $env:VERSION" --notes-file "$env:RUNNER_TEMP/notes.md"

@@ -13,21 +13,22 @@ A portable, transparent mod manager for [Deadlock](https://store.steampowered.co
 
 deadloader is not affiliated with Valve or GameBanana.
 
-> **Status:** in early development — there is no release yet.
+> **Status:** early development (0.x versions) — expect rough edges, and please report them.
 
 ## Download
-Get `deadloader.exe` from [Releases](https://github.com/horexdev/deadloader/releases). Each release lists the SHA-256
-of the file and is built by GitHub Actions with an
+Get `deadloader-<version>-windows-x64.zip` from [Releases](https://github.com/horexdev/deadloader/releases). It holds
+`deadloader.exe`, its licence and `THIRD-PARTY-NOTICES.txt`. Each release lists the SHA-256 of the zip and of the exe
+and is built by GitHub Actions with an
 [artifact attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations):
 ```
-gh attestation verify deadloader.exe --repo horexdev/deadloader
+gh attestation verify deadloader-0.1.0-windows-x64.zip --repo horexdev/deadloader
 ```
 Releases are not code-signed yet, so Windows may show "Windows protected your PC" — choose "More info → Run anyway"
 after checking the hash.
 
 ## Install
 deadloader is a single exe and needs no installation.
-1. Put `deadloader.exe` in its own folder **you can write to**, ideally on the same drive as Deadlock, e.g.
+1. Unpack the zip into its own folder **you can write to**, ideally on the same drive as Deadlock, e.g.
    `D:\Games\deadloader\`. Not `Program Files` (read-only for normal users), not Downloads or the Desktop.
 2. Run it. A short first-run guide explains what it does and lets you choose between the catalog and local mode.
 
