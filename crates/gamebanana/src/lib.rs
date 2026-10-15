@@ -4,11 +4,13 @@
 //! in recorded fixtures.
 
 pub mod error;
+pub mod link;
 pub mod parse;
 pub mod request;
 pub mod types;
 
 pub use error::{ApiChange, ApiChangeReason, Error, FetchError};
+pub use link::submission_from_url;
 pub use request::{ListQuery, SearchQuery, SearchTextError, Sort};
 pub use types::*;
 

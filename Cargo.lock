@@ -732,6 +732,7 @@ name = "deadloader-core"
 version = "0.1.0"
 dependencies = [
  "deadloader-archive",
+ "md-5",
  "serde",
  "serde_json",
  "sha2 0.11.0",

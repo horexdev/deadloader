@@ -522,6 +522,37 @@ export interface UpdateStarted {
   steps: UpdateStep[];
 }
 
+// ---- linking a mod imported from disk to its GameBanana page (F10, 171; crates/core/src/session.rs)
+
+export interface LinkedArchive {
+  archive_name: string;
+  files: string[];
+  /** The GameBanana file it is; `null` when nothing matched: offer "Link" by hand. */
+  remote_file_id: number | null;
+  matched_by: 'md5' | 'name' | null;
+}
+
+export interface LinkReport {
+  mod_id: string;
+  archives: LinkedArchive[];
+}
+
+/** Our own problems with the address (shown next to the field), a catalog answer, or a message. */
+export type LinkFailure =
+  | { kind: 'not_a_page' }
+  | { kind: 'removed'; reason: RemovedReason }
+  | CatalogError
+  | UserMessage;
+
+export const links = {
+  /** The GameBanana page address pasted for a mod imported from disk. */
+  link: (modId: string, url: string) => callCatalog<LinkReport>('mod_link', { modId, url }),
+  /** "Link" by hand for an archive nothing matched; `null` unlinks. */
+  linkFiles: (modId: string, files: string[], remoteFileId: number | null) =>
+    call<null>('mod_link_files', { modId, files, remoteFileId }),
+  rename: (modId: string, name: string) => call<LibraryView>('mod_rename', { modId, name }),
+};
+
 export function isUserMessage(value: unknown): value is UserMessage {
   return (
     typeof value === 'object' &&

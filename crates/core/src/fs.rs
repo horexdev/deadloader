@@ -34,6 +34,51 @@ pub struct DirEntry {
     pub len: u64,
 }
 
+#[cfg(test)]
+mod md5_tests {
+    #[test]
+    fn md5_of_known_inputs() {
+        assert_eq!(super::md5_hex(b""), "d41d8cd98f00b204e9800998ecf8427e");
+        assert_eq!(super::md5_hex(b"abc"), "900150983cd24fb0d6963f7d28e17f72");
+    }
+
+    #[test]
+    fn md5_of_a_file_is_streamed() {
+        let dir = crate::testing::temp_dir("fs", "md5");
+        let path = dir.join("x.bin");
+        std::fs::write(&path, vec![7u8; 3 * 65_536 + 5]).expect("write");
+        assert_eq!(
+            super::md5_file(&path).expect("read"),
+            super::md5_hex(&vec![7u8; 3 * 65_536 + 5])
+        );
+        crate::testing::remove_all(&dir);
+    }
+}
+
+/// Lowercase hex md5, as GameBanana lists it.
+pub fn md5_hex(bytes: &[u8]) -> String {
+    lower_hex(&md5::Md5::digest(bytes))
+}
+
+/// [`md5_hex`] of a file, read in chunks.
+pub fn md5_file(path: &Path) -> io::Result<String> {
+    let mut hasher = md5::Md5::new();
+    let mut file = std::fs::File::open(path)?;
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(lower_hex(&hasher.finalize()))
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 pub fn sha256(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
 }

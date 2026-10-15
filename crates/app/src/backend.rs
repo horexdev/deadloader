@@ -146,6 +146,35 @@ impl Backend {
         }))
     }
 
+    /// F10 + 171: link a mod imported from disk to its GameBanana page, matching its archives to the listed files.
+    pub fn link_mod(
+        &self,
+        mod_id: &str,
+        section: deadloader_core::library::Section,
+        gamebanana_id: u64,
+        listed: &[deadloader_core::updates::RemoteFile],
+    ) -> Result<deadloader_core::session::LinkReport, UserMessage> {
+        self.with(|s| Ok(s.link_mod(mod_id, section, gamebanana_id, listed)?))
+    }
+
+    /// "Link" by hand: these files of a linked mod came from GameBanana file `remote_file_id`.
+    pub fn link_files(
+        &self,
+        mod_id: &str,
+        files: &[String],
+        remote_file_id: Option<u64>,
+    ) -> Result<(), UserMessage> {
+        self.with(|s| Ok(s.link_files(mod_id, files, remote_file_id)?))
+    }
+
+    /// F10: the name a mod is shown under.
+    pub fn rename_mod(&self, mod_id: &str, name: &str) -> Result<LibraryView, UserMessage> {
+        self.with(|s| {
+            s.rename_mod(mod_id, name)?;
+            Ok(s.library())
+        })
+    }
+
     /// "Hide" on "new files available" (168).
     pub fn dismiss_new_files(&self, mod_id: &str, file_ids: &[u64]) -> Result<(), UserMessage> {
         self.with(|s| Ok(s.dismiss_new_files(mod_id, file_ids)?))
@@ -244,12 +273,14 @@ impl Backend {
         download: &deadloader_core::session::Download,
         replaced: u64,
     ) -> Result<UpdateStep, UserMessage> {
-        let new_files = self.with(|s| Ok(s.import_update_file(archive, download)?))?;
-        let mod_id = match download.section {
-            deadloader_core::library::Section::Mod => format!("gb-{}", download.mod_id),
-            deadloader_core::library::Section::Sound => format!("gb-sound-{}", download.mod_id),
-        };
-        self.update_with(&mod_id, replaced, new_files, download.version.clone())
+        // The library mod may be a local one linked to this GameBanana mod (F10), not `gb-<id>`.
+        let imported = self.with(|s| Ok(s.import_update_file(archive, download)?))?;
+        self.update_with(
+            &imported.mod_id,
+            replaced,
+            imported.new_files,
+            download.version.clone(),
+        )
     }
 
     /// The update's files are in the library already (downloaded before): the same as after a download.

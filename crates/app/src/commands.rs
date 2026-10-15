@@ -419,6 +419,42 @@ pub async fn update_map(
     .await
 }
 
+/// F10 + 171: the GameBanana page address pasted for a mod imported from disk.
+#[tauri::command]
+pub async fn mod_link(
+    slot: Slot<'_>,
+    backend: Shared<'_>,
+    mod_id: String,
+    url: String,
+) -> Result<deadloader_core::session::LinkReport, crate::updates::LinkFailure> {
+    let backend = Arc::clone(backend.inner());
+    on_catalog(slot, move |c| {
+        let catalog = c.wait()?;
+        crate::updates::link_to_page(&backend, &catalog, &mod_id, &url)
+    })
+    .await
+}
+
+/// "Link" by hand for an archive nothing matched: its files came from GameBanana file `remote_file_id`.
+#[tauri::command]
+pub async fn mod_link_files(
+    backend: Shared<'_>,
+    mod_id: String,
+    files: Vec<String>,
+    remote_file_id: Option<u64>,
+) -> Reply<()> {
+    blocking(backend, move |b| {
+        b.link_files(&mod_id, &files, remote_file_id)
+    })
+    .await
+}
+
+/// F10: rename a mod.
+#[tauri::command]
+pub async fn mod_rename(backend: Shared<'_>, mod_id: String, name: String) -> Reply<LibraryView> {
+    blocking(backend, move |b| b.rename_mod(&mod_id, &name)).await
+}
+
 /// Install (F2): the file of a mod page the UI showed becomes a download. `name` and `author` are what the page showed.
 #[tauri::command]
 pub async fn download_install(

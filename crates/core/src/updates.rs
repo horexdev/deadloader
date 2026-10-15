@@ -43,6 +43,8 @@ pub struct RemoteFile {
     pub date_added: Option<i64>,
     pub version: Option<String>,
     pub description: Option<String>,
+    /// Lowercase hex, as GameBanana lists it; matched against a linked local mod's archives (171).
+    pub md5: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -367,7 +369,7 @@ fn candidate(m: &Mod, listed: &ListedMod, name: &str) -> Option<Candidate> {
 }
 
 /// `cafevo_ea17d.zip` → `cafevo.zip`: drops a final `_` plus five hex digits before the extension.
-fn without_suffix(name: &str) -> String {
+pub(crate) fn without_suffix(name: &str) -> String {
     let (stem, ext) = match name.rfind('.') {
         Some(dot) => name.split_at(dot),
         None => (name, ""),
@@ -721,6 +723,7 @@ mod tests {
             sha256: [0; 32],
             version: None,
             successor: None,
+            archive_md5: None,
         }
     }
 
@@ -745,6 +748,7 @@ mod tests {
             date_added: Some(date),
             version: None,
             description: None,
+            md5: None,
         }
     }
 

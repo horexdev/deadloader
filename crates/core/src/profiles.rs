@@ -763,6 +763,7 @@ mod tests {
             sha256: sha,
             version: Some("1.2".into()),
             successor: None,
+            archive_md5: None,
         }
     }
 

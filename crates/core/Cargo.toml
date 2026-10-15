@@ -13,6 +13,9 @@ workspace = true
 [dependencies]
 deadloader-archive = { path = "../archive" }
 sha2 = "0.11"
+# The md5 of an imported archive is what GameBanana lists for its files: it links a mod imported from disk to its
+# GameBanana file (171). Already in the tree through the download queue, same digest family as sha2.
+md-5 = "0.11"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 time = { version = "0.3.55", default-features = false, features = ["std", "local-offset"] }

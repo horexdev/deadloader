@@ -307,6 +307,7 @@ mod tests {
             sha256: sha256(id.as_bytes()),
             version: None,
             successor: None,
+            archive_md5: None,
         }
     }
 

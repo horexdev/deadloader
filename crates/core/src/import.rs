@@ -115,6 +115,7 @@ fn fill(
         .archive_name
         .clone()
         .unwrap_or_else(|| source_name.clone());
+    let archive_md5 = crate::fs::md5_file(&req.source).map_err(ImportError::Io)?;
     // A download's own name decides: the queue stores a bare `.vpk` as `<n>.bin`.
     let (vpks, skipped) = if deadloader_archive::is_vpk_name(&archive_name) {
         let output = out_dir.join("0.vpk");
@@ -156,6 +157,7 @@ fn fill(
             sha256: *sha256,
             version: req.version.clone(),
             successor: None,
+            archive_md5: Some(archive_md5.clone()),
         });
     }
 
@@ -331,6 +333,36 @@ mod tests {
             "library files are read-only"
         );
         assert!(src.exists(), "the original is left where it was");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn every_file_records_the_md5_of_the_archive_it_came_from() {
+        let dir = temp_dir("md5");
+        let data = dir.join("data");
+        let archive = dir.join("haze-colours.zip");
+        zip(
+            &archive,
+            &[
+                ("pink/pak01_dir.vpk", &colour(1)),
+                ("blue/pak01_dir.vpk", &colour(2)),
+            ],
+        );
+        let expected = crate::fs::md5_hex(&std::fs::read(&archive).expect("archive"));
+        let mut m = Manifest::default();
+        let imported = import(
+            &data,
+            &mut m,
+            &request(archive),
+            &Limits::default(),
+            &NoHooks,
+        )
+        .expect("import");
+        for id in &imported.new_files {
+            let (_, f) = m.file(id).expect("recorded");
+            // 171: what links a mod imported from disk to its file on GameBanana.
+            assert_eq!(f.archive_md5.as_deref(), Some(expected.as_str()));
+        }
         cleanup(&dir);
     }
 

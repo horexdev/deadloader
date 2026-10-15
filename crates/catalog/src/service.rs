@@ -1524,6 +1524,7 @@ fn remote_mod_of(list: gamebanana::ModFileList) -> RemoteMod {
                 date_added: f.date_added,
                 version: f.version,
                 description: f.description,
+                md5: f.md5.map(|m| m.to_ascii_lowercase()),
             })
             .collect(),
         posts: Vec::new(),
