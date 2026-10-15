@@ -2,6 +2,7 @@
 //! responsive while files are copied; errors reach the UI as `{ id, args }` messages it translates.
 
 use crate::backend::{ApplyResult, Backend, Changed, Game};
+use crate::events::{Outbox, Sink, UiEvent};
 use deadloader_core::fs::Disk;
 use deadloader_core::message::MessageId;
 use deadloader_core::message::UserMessage;
@@ -11,6 +12,7 @@ use deadloader_core::settings::Settings;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
+use tauri::ipc::Channel;
 
 type Reply<T> = Result<T, UserMessage>;
 type Shared<'a> = State<'a, Arc<Backend>>;
@@ -24,6 +26,21 @@ async fn blocking<T: Send + 'static>(
     tauri::async_runtime::spawn_blocking(move || work(&backend))
         .await
         .map_err(|e| UserMessage::new(MessageId::Internal).arg("detail", e))?
+}
+
+/// The UI's channel for pushes (download progress, the game starting and closing, dropped files, start notices).
+/// Called once after the page loads, and again after a reload; the newest channel wins.
+#[tauri::command]
+pub fn subscribe(outbox: State<'_, Arc<Outbox>>, events: Channel<UiEvent>) {
+    outbox.connect(Box::new(ChannelSink(events)));
+}
+
+struct ChannelSink(Channel<UiEvent>);
+
+impl Sink for ChannelSink {
+    fn deliver(&self, event: &UiEvent) -> bool {
+        self.0.send(event.clone()).is_ok()
+    }
 }
 
 #[tauri::command]

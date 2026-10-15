@@ -5,10 +5,12 @@
 
 mod backend;
 mod commands;
+mod events;
 mod paths;
 #[cfg(test)]
 mod policy;
 mod protocol;
+mod push;
 mod startup;
 mod webview;
 
