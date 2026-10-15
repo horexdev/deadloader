@@ -1,4 +1,4 @@
-//! Extraction of mod archives (zip, 7z) with size, count and ratio limits. Only `.vpk` entries are
+//! Extraction of mod archives (zip, 7z, RAR) with size, count and ratio limits. Only `.vpk` entries are
 //! extracted, always under names chosen by us (ADR 0008).
 //!
 //! Archives come from strangers, so the design assumes hostile input:
@@ -7,12 +7,17 @@
 //! - limits are enforced on bytes as they are unpacked, never on sizes the headers declare;
 //! - output is written to temp names and renamed only when every VPK is complete; any failure removes it all.
 //!
-//! The format is recognised by the first bytes, not the file extension. RAR is detected and refused with
-//! [`ArchiveError::Rar`]: it is handled by a separate backend.
+//! The format is recognised by the first bytes, not the file extension. RAR is read by libarchive's RAR and RAR5
+//! readers compiled into the crate (ADR 0008); builds for targets other than MSVC refuse it with
+//! [`ArchiveError::Rar`].
 
 mod error;
+#[cfg(target_env = "msvc")]
+mod libarchive;
 mod limits;
 mod output;
+#[cfg(target_env = "msvc")]
+mod rar;
 mod sevenz;
 mod zip_format;
 
@@ -35,6 +40,7 @@ use std::path::Path;
 pub enum Format {
     Zip,
     SevenZip,
+    Rar,
 }
 
 /// One entry as the archive describes it.
@@ -87,6 +93,7 @@ pub fn list(archive: &Path) -> Result<Listing, ArchiveError> {
     let entries = match format {
         Format::Zip => zip_format::list(file)?,
         Format::SevenZip => sevenz::list(file)?,
+        Format::Rar => rar_list(file)?,
     };
     Ok(Listing { format, entries })
 }
@@ -112,6 +119,7 @@ pub fn extract_vpks(
     let (entries, vpks) = match format {
         Format::Zip => zip_format::extract(file, &job)?,
         Format::SevenZip => sevenz::extract(file, &job)?,
+        Format::Rar => rar_extract(file, &job)?,
     };
     let skipped = entries
         .into_iter()
@@ -150,13 +158,26 @@ fn format_of(head: &[u8]) -> Result<Format, ArchiveError> {
     {
         Ok(Format::Zip)
     } else if head.starts_with(b"Rar!\x1A\x07") {
-        Err(ArchiveError::Rar)
+        Ok(Format::Rar)
     } else {
         Err(ArchiveError::NotAnArchive)
     }
 }
 
-/// What both backends need for one extraction.
+#[cfg(target_env = "msvc")]
+use rar::{extract as rar_extract, list as rar_list};
+
+#[cfg(not(target_env = "msvc"))]
+fn rar_list(_: File) -> Result<Vec<Entry>, ArchiveError> {
+    Err(ArchiveError::Rar)
+}
+
+#[cfg(not(target_env = "msvc"))]
+fn rar_extract(_: File, _: &Job<'_>) -> Result<(Vec<Entry>, Vec<ExtractedVpk>), ArchiveError> {
+    Err(ArchiveError::Rar)
+}
+
+/// What every backend needs for one extraction.
 pub(crate) struct Job<'a> {
     pub(crate) limits: &'a Limits,
     pub(crate) archive_size: u64,
@@ -243,10 +264,14 @@ mod tests {
             format_of(b"7z\xBC\xAF\x27\x1C\0\x04").expect("7z"),
             Format::SevenZip
         );
-        assert!(matches!(
-            format_of(b"Rar!\x1A\x07\x01\x00"),
-            Err(ArchiveError::Rar)
-        ));
+        assert_eq!(
+            format_of(b"Rar!\x1A\x07\x01\x00").expect("rar5"),
+            Format::Rar
+        );
+        assert_eq!(
+            format_of(b"Rar!\x1A\x07\x00\xcf").expect("rar4"),
+            Format::Rar
+        );
         assert!(matches!(
             format_of(b"<html>"),
             Err(ArchiveError::NotAnArchive)
@@ -264,8 +289,8 @@ mod tests {
             extract_vpks(&html, &dir.path().join("out"), &Limits::default(), &NoHooks),
             Err(ArchiveError::NotAnArchive)
         ));
-        let rar = dir.file("mod.rar", b"Rar!\x1A\x07\x01\x00more");
-        assert!(matches!(list(&rar), Err(ArchiveError::Rar)));
+        let rar = dir.file("mod.zip", b"Rar!\x1A\x07\x01\x00more");
+        assert_eq!(detect(&rar).expect("rar"), Format::Rar);
     }
 
     #[test]
