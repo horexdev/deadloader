@@ -218,8 +218,6 @@ export function settingsHandlers(shared: Shared): Record<string, (args: Record<s
       return structuredClone(s);
     },
     open_folder: () => null,
-    // A stand-in until the Catalog screen brings its own (D1).
-    open_link: () => null,
     about: (): About => ({
       version: '0.1.0',
       commit: '3f9c2ab0d7e14c5b9a6f8e2d1c0b9a8f7e6d5c4b',
