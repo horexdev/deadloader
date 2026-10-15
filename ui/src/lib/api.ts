@@ -20,6 +20,8 @@ export interface FileView {
   version: string | null;
   len: number;
   damaged: boolean;
+  /** A newer version of this file is in the library (170): hint "Switch to" when this old one is active. */
+  newer_in_library: string | null;
 }
 
 export interface VariantGroupView {
@@ -481,6 +483,8 @@ export interface UpdateReport {
 export const updates = {
   /** "Check for updates" (38). */
   check: () => callCatalog<UpdateReport>('updates_check'),
+  /** "Hide" on "new files available" (168). */
+  dismiss: (modId: string, fileIds: number[]) => call<null>('updates_dismiss', { modId, fileIds }),
 };
 
 export function isUserMessage(value: unknown): value is UserMessage {

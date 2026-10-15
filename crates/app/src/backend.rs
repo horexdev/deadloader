@@ -130,6 +130,11 @@ impl Backend {
         }))
     }
 
+    /// "Hide" on "new files available" (168).
+    pub fn dismiss_new_files(&self, mod_id: &str, file_ids: &[u64]) -> Result<(), UserMessage> {
+        self.with(|s| Ok(s.dismiss_new_files(mod_id, file_ids)?))
+    }
+
     /// A copy of the library's manifest, for the update check.
     pub fn manifest(&self) -> Result<deadloader_core::library::Manifest, UserMessage> {
         self.with(|s| Ok(s.manifest().clone()))
@@ -689,6 +694,7 @@ pub(crate) mod tests {
                 "id",
                 "inner_path",
                 "len",
+                "newer_in_library",
                 "version"
             ]
         );

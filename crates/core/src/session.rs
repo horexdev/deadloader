@@ -182,6 +182,9 @@ pub struct FileView {
     pub len: u64,
     /// Missing from the library or no longer readable (E14).
     pub damaged: bool,
+    /// The newest library file that replaced this one through confirmed updates; the UI hints at it when this old
+    /// version is the active one (170).
+    pub newer_in_library: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -549,6 +552,28 @@ impl Session {
         })
     }
 
+    /// "Hide" on "new files available" (168): these GameBanana files of the mod are not reported again.
+    pub fn dismiss_new_files(
+        &mut self,
+        mod_id: &str,
+        file_ids: &[u64],
+    ) -> Result<(), SessionError> {
+        if !self.manifest.mods.iter().any(|m| m.id == mod_id) {
+            return Err(SessionError::UnknownMod(mod_id.to_owned()));
+        }
+        let mut updated = self.manifest.clone();
+        let hidden = updated
+            .dismissed_new_files
+            .entry(mod_id.to_owned())
+            .or_default();
+        hidden.extend(file_ids);
+        hidden.sort_unstable();
+        hidden.dedup();
+        save_manifest(&self.manifest_path(), &updated)?;
+        self.manifest = updated;
+        Ok(())
+    }
+
     /// The user's pick in D4: `chosen` become the active variants; the mod's add-ons are enabled with them.
     pub fn choose(&mut self, mod_id: &str, chosen: &[String]) -> Result<(), SessionError> {
         let grouping = self.grouping(mod_id)?;
@@ -868,6 +893,25 @@ impl Session {
     }
 
     fn mod_view(&self, mod_id: &str, entry: Option<&ProfileEntry>) -> Option<ModView> {
+        fn newest_successor(
+            m: &crate::library::Mod,
+            f: &crate::library::ModFile,
+        ) -> Option<String> {
+            let mut newest: Option<&str> = None;
+            let mut at = f;
+            // The manifest refuses successor loops; the bound only guards against a damaged one.
+            for _ in 0..m.files.len() {
+                let Some(crate::library::Successor::File(next)) = &at.successor else {
+                    break;
+                };
+                let Some(file) = m.files.iter().find(|x| &x.id == next) else {
+                    break;
+                };
+                newest = Some(&file.id);
+                at = file;
+            }
+            newest.map(str::to_owned)
+        }
         let m = self.manifest.mods.iter().find(|m| m.id == mod_id)?;
         let grouping = self.grouping(mod_id).ok()?;
         let active =
@@ -888,6 +932,7 @@ impl Session {
                     version: f.version.clone(),
                     len: f.len,
                     damaged: self.damaged.contains(&f.id),
+                    newer_in_library: newest_successor(m, f),
                 })
                 .collect(),
             variant_groups: grouping
@@ -1184,6 +1229,58 @@ mod tests {
         let view = s.library();
         assert_eq!(view.mods.len(), 1, "one GameBanana mod (144)");
         assert_eq!(view.mods[0].files.len(), 2);
+    }
+
+    #[test]
+    fn an_old_version_shows_the_newest_one_in_the_library() {
+        let f = Fixture::new("newer");
+        let mut s = open(&f);
+        for (n, crc) in [(1, 1), (2, 2), (3, 3)] {
+            s.import_download(
+                &f.source(&format!("{n}.bin"), &[("models/haze/body.vmdl_c", crc)]),
+                &haze_download(n, &format!("haze_v{n}.vpk")),
+            )
+            .expect("imported");
+        }
+        let ids: Vec<String> = s.manifest.mods[0]
+            .files
+            .iter()
+            .map(|f| f.id.clone())
+            .collect();
+        // v1 → v2 → v3, as two confirmed updates leave it (170).
+        s.manifest.mods[0].files[0].successor =
+            Some(crate::library::Successor::File(ids[1].clone()));
+        s.manifest.mods[0].files[1].successor =
+            Some(crate::library::Successor::File(ids[2].clone()));
+        let view = s.library();
+        let newer: Vec<Option<&str>> = view.mods[0]
+            .files
+            .iter()
+            .map(|f| f.newer_in_library.as_deref())
+            .collect();
+        assert_eq!(newer, [Some(ids[2].as_str()), Some(ids[2].as_str()), None]);
+    }
+
+    #[test]
+    fn hidden_new_files_are_remembered_across_starts() {
+        let f = Fixture::new("dismiss");
+        let mut s = open(&f);
+        s.import_download(
+            &f.source("17.bin", &[("models/haze/body.vmdl_c", 1)]),
+            &haze_download(1, "haze.vpk"),
+        )
+        .expect("imported");
+        s.dismiss_new_files("gb-655209", &[7, 8]).expect("hidden");
+        s.dismiss_new_files("gb-655209", &[8, 9])
+            .expect("hidden again");
+        assert_eq!(
+            open(&f).manifest().dismissed_new_files["gb-655209"],
+            [7, 8, 9]
+        );
+        assert!(matches!(
+            s.dismiss_new_files("gb-1", &[1]),
+            Err(SessionError::UnknownMod(_))
+        ));
     }
 
     #[test]

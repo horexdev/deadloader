@@ -152,7 +152,11 @@ describe('api', () => {
   it('checks for mod updates through the catalog failure path', async () => {
     invoke.mockResolvedValue({ checks: [], available: 0, stopped: null });
     await updates.check();
-    expect(invoke.mock.calls).toEqual([['updates_check', {}]]);
+    await updates.dismiss('gb-655209', [7, 8]);
+    expect(invoke.mock.calls).toEqual([
+      ['updates_check', {}],
+      ['updates_dismiss', { modId: 'gb-655209', fileIds: [7, 8] }],
+    ]);
     invoke.mockRejectedValue({ id: 'E1', args: {} });
     await expect(updates.check()).rejects.toEqual({ id: 'E1', args: {} });
   });

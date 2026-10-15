@@ -114,6 +114,7 @@ pub fn run() -> Result<(), StartError> {
             commands::downloads,
             commands::download_control,
             commands::updates_check,
+            commands::updates_dismiss,
         ])
         .build(tauri::generate_context!())
         .map_err(StartError::Window)?;

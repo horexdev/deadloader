@@ -166,9 +166,13 @@ pub fn check<'a>(
                 Source::GameBanana { section, mod_id } => remote(section, mod_id),
                 Source::Local { .. } => None,
             };
+            let dismissed = manifest
+                .dismissed_new_files
+                .get(&m.id)
+                .map_or(&[][..], Vec::as_slice);
             ModCheck {
                 mod_id: m.id.clone(),
-                status: check_mod(m, answer),
+                status: check_mod_with(m, answer, dismissed),
             }
         })
         .collect()
@@ -176,6 +180,11 @@ pub fn check<'a>(
 
 /// One mod against GameBanana's answer for it.
 pub fn check_mod(m: &Mod, remote: Option<&RemoteMod>) -> Status {
+    check_mod_with(m, remote, &[])
+}
+
+/// [`check_mod`], leaving out new files the user hid (`dismissed`, GameBanana file ids, 168).
+pub fn check_mod_with(m: &Mod, remote: Option<&RemoteMod>, dismissed: &[u64]) -> Status {
     if matches!(m.source, Source::Local { .. }) {
         return Status::Local;
     }
@@ -185,7 +194,12 @@ pub fn check_mod(m: &Mod, remote: Option<&RemoteMod>) -> Status {
         Some(RemoteMod::Listed(listed)) => listed,
     };
     let downloads = current_downloads(m);
-    if downloads.is_empty() {
+    // 172: a file kept without a replacement comes back as replaced once a listed file of its name is new to us.
+    let returned: Vec<Download<'_>> = retired_downloads(m)
+        .into_iter()
+        .filter(|d| candidate(m, listed, d.archive_name).is_some_and(|c| c.in_library.is_empty()))
+        .collect();
+    if downloads.is_empty() && returned.is_empty() {
         return Status::Untracked;
     }
     if listed.files.is_empty() {
@@ -194,9 +208,10 @@ pub fn check_mod(m: &Mod, remote: Option<&RemoteMod>) -> Status {
         };
     }
     let is_listed = |id: u64| listed.files.iter().any(|f| f.id == id);
-    let (kept, gone): (Vec<_>, Vec<_>) = downloads.into_iter().partition(|d| is_listed(d.id));
+    let (kept, mut gone): (Vec<_>, Vec<_>) = downloads.into_iter().partition(|d| is_listed(d.id));
+    gone.extend(returned);
     if gone.is_empty() {
-        return new_files(m, listed, &kept);
+        return new_files(m, listed, &kept, dismissed);
     }
 
     let replaced: Vec<Replaced> = gone
@@ -258,8 +273,17 @@ struct Download<'a> {
 /// The mod's library files that are current (no successor) and know their GameBanana file, per GameBanana file,
 /// in library order.
 fn current_downloads(m: &Mod) -> Vec<Download<'_>> {
+    downloads_where(m, |f| f.successor.is_none())
+}
+
+/// The mod's GameBanana files that were removed and kept without a replacement (`Successor::None`).
+fn retired_downloads(m: &Mod) -> Vec<Download<'_>> {
+    downloads_where(m, |f| f.successor == Some(Successor::None))
+}
+
+fn downloads_where(m: &Mod, keep: impl Fn(&ModFile) -> bool) -> Vec<Download<'_>> {
     let mut downloads: Vec<Download<'_>> = Vec::new();
-    for f in m.files.iter().filter(|f| f.successor.is_none()) {
+    for f in m.files.iter().filter(|f| keep(f)) {
         let Some(id) = f.remote_file_id else { continue };
         match downloads.iter_mut().find(|d| d.id == id) {
             Some(d) => d.files.push(f.id.clone()),
@@ -283,7 +307,7 @@ fn in_library(m: &Mod, remote_id: u64) -> Vec<String> {
 
 /// Listed files that are not in the library and went up clearly after our newest listed file. Without upload dates
 /// nothing is called new: a missed notice costs less than a false one.
-fn new_files(m: &Mod, listed: &ListedMod, kept: &[Download<'_>]) -> Status {
+fn new_files(m: &Mod, listed: &ListedMod, kept: &[Download<'_>], dismissed: &[u64]) -> Status {
     let newest_ours = listed
         .files
         .iter()
@@ -296,7 +320,7 @@ fn new_files(m: &Mod, listed: &ListedMod, kept: &[Download<'_>]) -> Status {
     let files: Vec<RemoteFile> = listed
         .files
         .iter()
-        .filter(|f| in_library(m, f.id).is_empty())
+        .filter(|f| in_library(m, f.id).is_empty() && !dismissed.contains(&f.id))
         .filter(|f| {
             f.date_added
                 .is_some_and(|d| d > newest_ours + SAME_UPLOAD_SECONDS)
@@ -743,6 +767,69 @@ mod tests {
             files,
             posts,
         })
+    }
+
+    #[test]
+    fn hidden_new_files_stay_hidden_until_another_one_appears() {
+        let ours = 1_000;
+        let m = gb_mod(9, vec![lib_file("gb-9-1-0", Some(11), "base.zip")]);
+        let answer = listed(
+            "1.0",
+            vec![
+                remote(11, "base.zip", ours),
+                remote(12, "pink.zip", ours + 7_200),
+                remote(13, "blue.zip", ours + 7_200),
+            ],
+            Vec::new(),
+        );
+        // 168: the user hid the pink one.
+        let status = check_mod_with(&m, Some(&answer), &[12]);
+        let Status::NewFiles { files } = status else {
+            panic!("{status:?}");
+        };
+        assert_eq!(files.iter().map(|f| f.id).collect::<Vec<_>>(), [13]);
+        assert_eq!(
+            check_mod_with(&m, Some(&answer), &[12, 13]),
+            Status::UpToDate
+        );
+    }
+
+    #[test]
+    fn the_manifest_remembers_what_was_hidden() {
+        let mut manifest = Manifest {
+            mods: vec![gb_mod(9, vec![lib_file("gb-9-1-0", Some(11), "base.zip")])],
+            ..Manifest::default()
+        };
+        manifest
+            .dismissed_new_files
+            .insert("gb-9".to_owned(), vec![12]);
+        let answer = listed(
+            "1.0",
+            vec![remote(11, "base.zip", 1_000), remote(12, "pink.zip", 9_000)],
+            Vec::new(),
+        );
+        let checks = check(&manifest, |_, _| Some(&answer));
+        assert_eq!(checks[0].status, Status::UpToDate);
+    }
+
+    #[test]
+    fn a_file_kept_without_replacement_is_offered_again_when_its_name_returns() {
+        // 172: the author removed b.zip, the user kept the old one (no successor), later a new b.zip appears.
+        let mut retired = lib_file("gb-9-1-0", Some(20), "b.zip");
+        retired.successor = Some(Successor::None);
+        let m = gb_mod(9, vec![retired]);
+        let back = listed("2.0", vec![remote(21, "b.zip", 5_000)], Vec::new());
+        let Status::UpdateAvailable(update) = check_mod(&m, Some(&back)) else {
+            panic!("an update");
+        };
+        assert_eq!(update.replaced[0].remote_file_id, 20);
+        assert_eq!(
+            update.replaced[0].candidate.as_ref().map(|c| c.file.id),
+            Some(21)
+        );
+        // Still gone: nothing to report.
+        let other = listed("2.0", vec![remote(22, "c.zip", 5_000)], Vec::new());
+        assert_eq!(check_mod(&m, Some(&other)), Status::Untracked);
     }
 
     /// Manhattan Cafe after v5.3: every file re-uploaded, four "new suitcase" variants added.
