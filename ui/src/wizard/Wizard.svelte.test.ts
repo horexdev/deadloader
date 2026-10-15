@@ -1,5 +1,6 @@
 import { flushSync, tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
+import wizardCss from './wizard.css?raw';
 
 // The wizard talks to the mock core, the same one `pnpm dev:mock` uses.
 vi.mock('@tauri-apps/api/core', () => import('../mock/core'));
@@ -38,6 +39,13 @@ async function start(scenario: string): Promise<void> {
 }
 
 const title = () => one(document.body, '#wz-title').textContent;
+
+/** The declarations of a top-level rule of a style sheet, e.g. `display:flex;min-width:0`. */
+function rule(css: string, selector: string): string {
+  const start = css.split('\n').find((line) => line.startsWith(`${selector}{`));
+  return start?.slice(selector.length + 1, start.indexOf('}')) ?? '';
+}
+
 const text = () => document.body.textContent ?? '';
 
 /** Walks a first start to the step titled `last`, choosing `choice` on the network step. */
@@ -241,6 +249,21 @@ describe('E1, no write permission', () => {
     expect(target.textContent).toContain('deadloader can’t save its data.');
     expect(target.textContent).toContain('Not saved to the log');
     expect(one(target, '.dl-path__tip').textContent).toBe(String.raw`C:\Program Files\deadloader`);
+  });
+
+  it('keeps its column centred: a long folder path is cut, never widening the column (E1 board)', () => {
+    resetMock();
+    const folder = String.raw`C:\Users\Alex\AppData\Local\Temp\a-very-long-folder-name-0123456789abcdef0123456789abcdef\deadloader`;
+    const { target } = render(NoWrite, { ...props, folder });
+    // The column sits alone in the stage, which centres it (`place-items`), at most 620 px wide.
+    const column = one(target, '.wz-stage > .wz-nw');
+    expect(rule(wizardCss, '.wz-nw')).toMatch(/max-width:620px/);
+    expect(rule(wizardCss, '.wz-stage')).toMatch(/place-items:safe center/);
+    expect(column.children).not.toHaveLength(0);
+    // The board's path box: a flex row that may shrink, so the path's minimum width is not the whole path's.
+    const path = one(column, '.wz-well .dl-path');
+    expect(path.parentElement?.className).toBe('wz-nw-path');
+    expect(rule(wizardCss, '.wz-nw-path')).toBe('display:flex;min-width:0');
   });
 
   it('copies the details, opens the folder and exits', async () => {

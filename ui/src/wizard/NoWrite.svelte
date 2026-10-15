@@ -47,7 +47,7 @@
       <p>{t('wizard-nw-why-a')} <span class="wz-code">deadloader.exe</span> {t('wizard-nw-why-b')}</p>
       <div class="wz-well">
         <span class="wz-well__label">{t('wizard-nw-path')}</span>
-        <div><PathTooltip path={folder} /></div>
+        <div class="wz-nw-path"><PathTooltip path={folder} /></div>
       </div>
       <div class="wz-nw-do">
         <h2>{t('wizard-nw-do')}</h2>
