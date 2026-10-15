@@ -35,6 +35,9 @@ If deadloader says it can't save its data, the folder is read-only: move the fol
 Everything is in `deadloader-data\` next to the exe: library, profiles, settings, cache, logs and the WebView2
 profile. Nothing is written to `%APPDATA%` or the registry.
 
+One exception: when the folder is read-only, deadloader can't keep anything there, so the window that tells you so
+keeps the WebView2 profile in `%TEMP%\deadloader-webview-<process id>` and deletes it on exit.
+
 In the game, deadloader only adds mod files to `game\citadel\addons\` and one line to `game\citadel\gameinfo.gi`.
 
 ## Uninstall
