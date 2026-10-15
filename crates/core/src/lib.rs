@@ -4,6 +4,7 @@
 
 pub mod addons;
 pub mod apply;
+pub mod cache;
 pub mod engine;
 pub mod fs;
 pub mod gamedir;
@@ -15,6 +16,9 @@ pub mod library;
 pub mod log;
 pub mod overlap;
 pub mod place;
+pub mod profiles;
+pub mod remove;
+pub mod settings;
 pub mod steam;
 pub mod vdf;
 pub mod vpk;
