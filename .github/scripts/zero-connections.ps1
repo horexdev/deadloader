@@ -3,13 +3,18 @@ Starts deadloader.exe from a fresh folder, watches the TCP connections of its wh
 WebView2 processes it starts) for a while, and fails if any of them has a remote endpoint. Also fails if the window
 never loaded its page, so "no connections" cannot come from a webview that did not start.
 
+Then it starts the exe a second time on the same data folder: the first start creates the WebView2 profile, a one-time
+cost that decision 166 exempts from the 800 ms first-frame budget; the second start is the regular one and must load
+its page within -MaxWarmStartMs.
+
 The process tree is built from the parent PID *and* the creation time: Windows never clears ParentProcessId and reuses
 PIDs, so an unrelated older process can look like our child.
 #>
 param(
     [Parameter(Mandatory)] [string] $Exe,
     [int] $Seconds = 20,
-    [int] $MaxIdlePrivateMB = 200
+    [int] $MaxIdlePrivateMB = 200,
+    [int] $MaxWarmStartMs = 800
 )
 
 $ErrorActionPreference = 'Stop'
@@ -117,11 +122,38 @@ $runtime = ($log | Where-Object msg -EQ 'webview2 runtime' | Select-Object -Firs
 $profileWarning = $log | Where-Object msg -EQ 'webview2 profile folder is not where deadloader put it'
 if ($profileWarning) { $failures.Add('the app reported that the WebView2 profile folder was moved') }
 
-# Stop only our own tree, children first.
-[array]::Reverse($tree)
-foreach ($p in $tree) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
-Start-Sleep -Seconds 2
+function Stop-Tree([object[]] $processes) {
+    # Only our own tree, children first.
+    [array]::Reverse($processes)
+    foreach ($p in $processes) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 2
+}
+
+function Get-PageLoads {
+    @(Get-ChildItem (Join-Path $runDir 'deadloader-data\logs') -Filter 'app-*.jsonl' -ErrorAction SilentlyContinue |
+            Get-Content | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object msg -EQ 'page loaded')
+}
+
+Stop-Tree $tree
+
+# The regular start: the profile exists now.
+$before = (Get-PageLoads).Count
+$warm = Start-Process -FilePath $runExe -WorkingDirectory $runDir -PassThru
+Write-Host "started deadloader.exe again, pid $($warm.Id)"
+$warmMs = $null
+$until = (Get-Date).AddSeconds(30)
+while ((Get-Date) -lt $until) {
+    $loads = Get-PageLoads
+    if ($loads.Count -gt $before) { $warmMs = [int]$loads[-1].fields.ms_since_start; break }
+    Start-Sleep -Milliseconds 200
+}
+Stop-Tree (Get-Tree $warm.Id)
 Remove-Item -Recurse -Force $runDir -ErrorAction SilentlyContinue
+if ($null -eq $warmMs) {
+    $failures.Add('the second start never finished loading its page')
+} elseif ($MaxWarmStartMs -gt 0 -and $warmMs -gt $MaxWarmStartMs) {
+    $failures.Add("the regular start loaded its page after $warmMs ms (budget $MaxWarmStartMs ms)")
+}
 
 foreach ($r in $remote) { $failures.Add("remote connection: $($r.Process) -> $($r.Remote) [$($r.State)] at $($r.At)") }
 
@@ -134,7 +166,8 @@ $summary = @(
     "| processes in the tree | $($tree.Count) ($($webviews.Count) WebView2) |"
     "| watched | $Seconds s |"
     "| remote TCP connections | $($remote.Count) |"
-    "| page loaded after start | $($loaded.fields.ms_since_start) ms |"
+    "| page loaded, first start (creates the WebView2 profile) | $($loaded.fields.ms_since_start) ms |"
+    "| page loaded, regular start | $warmMs ms |"
     "| private memory at the end | $privateMB MB |"
     ''
 )
