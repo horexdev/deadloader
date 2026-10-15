@@ -91,6 +91,7 @@ pub fn run() -> Result<(), StartError> {
     app.manage(Arc::new(Backend::start(
         layout.root(),
         Box::new(commands::SteamGame),
+        Arc::clone(&log) as deadloader_core::session::SharedLog,
     )));
     if let Err(e) = open_main_window(&app, &layout, &log, started) {
         write(
