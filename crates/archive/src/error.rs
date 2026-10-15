@@ -7,9 +7,9 @@ use std::io;
 
 #[derive(Debug)]
 pub enum ArchiveError {
-    /// The file starts like neither a zip nor a 7z archive.
+    /// The file starts like none of zip, 7z and RAR.
     NotAnArchive,
-    /// A RAR archive; RAR goes through a separate backend (ADR 0008), not this crate.
+    /// A RAR archive in a build without the RAR readers (targets other than MSVC).
     Rar,
     /// Broken structure or data: a truncated download, a bad checksum, a malformed header.
     Damaged {
@@ -54,10 +54,13 @@ impl fmt::Display for ArchiveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotAnArchive => f.write_str(
-                "the file is not a zip or 7z archive; the download may be incomplete or the file is \
-                 not a mod — download it again",
+                "the file is not a zip, 7z or RAR archive; the download may be incomplete or the file \
+                 is not a mod — download it again",
             ),
-            Self::Rar => f.write_str("the file is a RAR archive, which this extractor does not read"),
+            Self::Rar => f.write_str(
+                "the file is a RAR archive, which this build of deadloader cannot read; unpack it with \
+                 another program and add the .vpk as a local mod",
+            ),
             Self::Damaged { entry, detail } => {
                 f.write_str("the archive is damaged")?;
                 if let Some(entry) = entry {

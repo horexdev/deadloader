@@ -26,7 +26,7 @@ use serde::de::{self, DeserializeOwned, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::fmt;
-use std::io::{self, Write};
+use std::io;
 use std::path::Path;
 use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
 
@@ -157,7 +157,6 @@ pub struct Downloads {
     /// KiB/s; `None` = no limit.
     pub speed_limit_kib_per_s: Option<u32>,
     pub keep_archives: bool,
-    pub rar_method: RarMethod,
     /// Archive limits (127): at most min(this, factor × archive size) unpacked from one archive.
     pub max_extracted_mib: u32,
     pub max_extracted_factor: u32,
@@ -278,21 +277,6 @@ pub enum Deletion {
 pub enum OldVersions {
     #[default]
     KeepAll,
-}
-
-/// How RAR archives are opened. Not decided yet: the implementation spike of 123 picks between compiled-in readers
-/// and external programs, so `Auto` (try them in 123's order) is the default and the explicit choices may change.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RarMethod {
-    #[default]
-    Auto,
-    Builtin,
-    /// Windows' `tar.exe`.
-    Tar,
-    SevenZip,
-    #[serde(rename = "winrar")]
-    WinRar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -474,7 +458,6 @@ impl Default for Downloads {
             parallel: 4,
             speed_limit_kib_per_s: None,
             keep_archives: false,
-            rar_method: RarMethod::Auto,
             max_extracted_mib: 2048,
             max_extracted_factor: 20,
             max_vpk_files: 256,
@@ -1301,17 +1284,7 @@ pub fn to_json(settings: &Settings) -> Result<String, SettingsError> {
 
 /// Writes atomically: temp file, flushed, previous version kept as `.bak`, then renamed into place.
 pub fn save(path: &Path, settings: &Settings) -> Result<(), SettingsError> {
-    let text = to_json(settings)?;
-    let tmp = path.with_extension("json.tmp");
-    {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        f.sync_all()?;
-    }
-    if path.exists() {
-        std::fs::copy(path, path.with_extension("json.bak"))?;
-    }
-    std::fs::rename(&tmp, path)?;
+    crate::fs::write_atomic(path, &to_json(settings)?)?;
     Ok(())
 }
 
@@ -1391,7 +1364,6 @@ mod tests {
                 "parallel": 4,                        // 44
                 "speed_limit_kib_per_s": null,        // 99: none
                 "keep_archives": false,               // 45
-                "rar_method": "auto",                 // 43/123: undecided until the spike
                 "max_extracted_mib": 2048,            // 127: 2 GB
                 "max_extracted_factor": 20,           // 127: 20 x archive size
                 "max_vpk_files": 256,                 // 127
@@ -1455,7 +1427,6 @@ mod tests {
         s.library.deletion = Deletion::RecycleBin;
         s.downloads.parallel = 8;
         s.downloads.speed_limit_kib_per_s = Some(2048);
-        s.downloads.rar_method = RarMethod::SevenZip;
         s.network.proxy = Proxy::Manual {
             address: "http://127.0.0.1:8080".to_owned(),
         };

@@ -124,6 +124,26 @@ impl FileOps for Disk {
     }
 }
 
+/// Replaces `path` with `text` so a crash leaves either version: a flushed `<name>.tmp`, the current file copied to
+/// `<name>.bak`, then a rename over it. For the JSON files users may read and edit (manifest, profiles, settings).
+pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
+    let with_suffix = |suffix: &str| {
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(suffix);
+        path.with_file_name(name)
+    };
+    let tmp = with_suffix(".tmp");
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()?;
+    }
+    if path.exists() {
+        std::fs::copy(path, with_suffix(".bak"))?;
+    }
+    std::fs::rename(&tmp, path)
+}
+
 #[cfg(test)]
 pub mod fake {
     //! An in-memory filesystem with volumes (to provoke cross-volume links), filesystems without hard links,
@@ -380,6 +400,26 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("deadloader-fs-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn an_atomic_write_keeps_the_previous_version_as_bak() {
+        let dir = temp_dir("atomic");
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("manifest.json");
+        write_atomic(&path, "one").expect("first");
+        assert!(
+            !dir.join("manifest.json.bak").exists(),
+            "nothing to back up yet"
+        );
+        write_atomic(&path, "two").expect("second");
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), "two");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("manifest.json.bak")).expect("bak"),
+            "one"
+        );
+        assert!(!dir.join("manifest.json.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

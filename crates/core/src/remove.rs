@@ -373,6 +373,7 @@ mod tests {
             mod_id: mod_id.into(),
             variants: variants.iter().map(|s| s.to_string()).collect(),
             add_ons: add_ons.iter().map(|s| s.to_string()).collect(),
+            enabled: true,
         }
     }
 

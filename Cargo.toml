@@ -11,7 +11,8 @@ repository = "https://github.com/horexdev/deadloader"
 publish = false
 
 [workspace.lints.rust]
-# Denied everywhere; the only exception is FFI in platform-windows, allowed per module with SAFETY comments.
+# Denied everywhere; the exceptions are FFI modules (platform-windows, the RAR reader in archive), allowed per
+# module with SAFETY comments.
 unsafe_code = "deny"
 missing_debug_implementations = "warn"
 

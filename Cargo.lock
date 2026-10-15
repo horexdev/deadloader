@@ -696,6 +696,7 @@ dependencies = [
 name = "deadloader-archive"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "sevenz-rust2",
  "sha2 0.11.0",
  "zip",
