@@ -35,6 +35,71 @@ use std::sync::Arc;
 /// Where the session reports file operations (the files log).
 pub type SharedLog = Arc<dyn FileLog + Send + Sync>;
 
+/// What linking a mod to its GameBanana page found, per archive of the mod (F10, 171).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LinkReport {
+    pub mod_id: String,
+    pub archives: Vec<LinkedArchive>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LinkedArchive {
+    pub archive_name: String,
+    /// The library files extracted from it.
+    pub files: Vec<String>,
+    /// The GameBanana file it is; `None` when nothing matched (link it by hand).
+    pub remote_file_id: Option<u64>,
+    pub matched_by: Option<LinkMatch>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkMatch {
+    /// The same bytes: certain.
+    Md5,
+    /// The same name (ignoring case, and GameBanana's `_xxxxx` suffix): likely.
+    Name,
+}
+
+/// The one listed file an archive is: by md5, else by name. Several equally good ones are left to the user.
+fn match_listed(
+    listed: &[updates::RemoteFile],
+    md5: Option<&str>,
+    name: &str,
+) -> Option<(u64, LinkMatch)> {
+    let unique = |hits: Vec<&updates::RemoteFile>| match hits.as_slice() {
+        [one] => Some(one.id),
+        _ => None,
+    };
+    if let Some(md5) = md5 {
+        let hits = listed
+            .iter()
+            .filter(|l| {
+                l.md5
+                    .as_deref()
+                    .is_some_and(|m| m.eq_ignore_ascii_case(md5))
+            })
+            .collect();
+        if let Some(id) = unique(hits) {
+            return Some((id, LinkMatch::Md5));
+        }
+    }
+    let same = |a: &str, b: &str| a.to_lowercase() == b.to_lowercase();
+    let exact = listed
+        .iter()
+        .filter(|l| same(&l.file_name, name))
+        .collect::<Vec<_>>();
+    if !exact.is_empty() {
+        return unique(exact).map(|id| (id, LinkMatch::Name));
+    }
+    let bare = updates::without_suffix(name);
+    let hits = listed
+        .iter()
+        .filter(|l| same(&updates::without_suffix(&l.file_name), &bare))
+        .collect();
+    unique(hits).map(|id| (id, LinkMatch::Name))
+}
+
 /// Where a file of a replaced download goes (D5).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UpdateProposal {
@@ -130,6 +195,10 @@ pub enum SessionError {
     UnknownMod(String),
     UnknownFile(String),
     Update(UpdateError),
+    /// Linking files to GameBanana needs a mod linked to a GameBanana page first.
+    NotLinked(String),
+    /// A mod name can't be empty.
+    EmptyName,
     /// The game folder has no `gameinfo.gi` (moved, uninstalled, or its drive is gone): nothing is written there (E2).
     GameNotFound(PathBuf),
     Io(io::Error),
@@ -147,6 +216,8 @@ impl std::fmt::Display for SessionError {
             Self::UnknownMod(id) => write!(f, "the mod \"{id}\" is not in the library"),
             Self::UnknownFile(id) => write!(f, "the file \"{id}\" is not in the library"),
             Self::Update(e) => write!(f, "{e}"),
+            Self::NotLinked(id) => write!(f, "the mod \"{id}\" is not linked to a GameBanana page"),
+            Self::EmptyName => f.write_str("a mod name can't be empty"),
             Self::GameNotFound(root) => {
                 write!(f, "no Deadlock installation in {}", root.display())
             }
@@ -171,7 +242,7 @@ impl ToUserMessage for SessionError {
                 .arg("path", root.display())
                 .arg("detail", self),
             Self::Update(e) => e.user_message(),
-            Self::UnknownMod(_) | Self::UnknownFile(_) => {
+            Self::UnknownMod(_) | Self::UnknownFile(_) | Self::NotLinked(_) | Self::EmptyName => {
                 UserMessage::new(MessageId::Internal).arg("detail", self)
             }
         }
@@ -529,22 +600,7 @@ impl Session {
         path: &Path,
         download: &Download,
     ) -> Result<ImportOutcome, SessionError> {
-        let mod_id = match download.section {
-            Section::Mod => format!("gb-{}", download.mod_id),
-            Section::Sound => format!("gb-sound-{}", download.mod_id),
-        };
-        let req = ImportRequest {
-            source: path.to_path_buf(),
-            mod_id,
-            name: download.mod_name.clone(),
-            mod_source: Source::GameBanana {
-                section: download.section,
-                mod_id: download.mod_id,
-            },
-            version: download.version.clone(),
-            remote_file_id: Some(download.file_id),
-            archive_name: Some(download.file_name.clone()),
-        };
+        let req = self.download_request(path, download);
         self.import_request(&req, download.author.as_deref(), true)
     }
 
@@ -554,18 +610,27 @@ impl Session {
         &mut self,
         path: &Path,
         download: &Download,
-    ) -> Result<Vec<String>, SessionError> {
+    ) -> Result<ImportOutcome, SessionError> {
         let req = self.download_request(path, download);
-        Ok(self
-            .import_request(&req, download.author.as_deref(), false)?
-            .new_files)
+        self.import_request(&req, download.author.as_deref(), false)
     }
 
+    /// The library mod of a GameBanana mod: one linked to it already (a local mod linked in F10), else `gb-<id>`.
     fn download_request(&self, path: &Path, download: &Download) -> ImportRequest {
-        let mod_id = match download.section {
-            Section::Mod => format!("gb-{}", download.mod_id),
-            Section::Sound => format!("gb-sound-{}", download.mod_id),
+        let source = Source::GameBanana {
+            section: download.section,
+            mod_id: download.mod_id,
         };
+        let mod_id = self
+            .manifest
+            .mods
+            .iter()
+            .find(|m| m.source == source)
+            .map(|m| m.id.clone())
+            .unwrap_or_else(|| match download.section {
+                Section::Mod => format!("gb-{}", download.mod_id),
+                Section::Sound => format!("gb-sound-{}", download.mod_id),
+            });
         ImportRequest {
             source: path.to_path_buf(),
             mod_id,
@@ -740,6 +805,112 @@ impl Session {
             choices,
             skipped: imported.skipped,
         })
+    }
+
+    /// F10 + 171: a mod imported from disk is linked to its GameBanana page. Each of its archives is matched to a
+    /// listed file by md5, else by name (ignoring case and GameBanana's `_xxxxx` suffix); a matched archive's files get
+    /// that file's id, so the update check can follow them. What nothing matches stays unlinked ([`Session::link_files`]).
+    pub fn link_mod(
+        &mut self,
+        mod_id: &str,
+        section: Section,
+        gamebanana_id: u64,
+        listed: &[updates::RemoteFile],
+    ) -> Result<LinkReport, SessionError> {
+        let mut updated = self.manifest.clone();
+        let m = updated
+            .mods
+            .iter_mut()
+            .find(|m| m.id == mod_id)
+            .ok_or_else(|| SessionError::UnknownMod(mod_id.to_owned()))?;
+        m.source = Source::GameBanana {
+            section,
+            mod_id: gamebanana_id,
+        };
+        let mut archives: Vec<LinkedArchive> = Vec::new();
+        let mut md5s: Vec<Option<String>> = Vec::new();
+        for f in &m.files {
+            let key = (f.archive_md5.clone(), f.archive_name.clone());
+            match archives
+                .iter_mut()
+                .zip(&md5s)
+                .find(|(a, md5)| (*md5).clone() == key.0 && a.archive_name == key.1)
+            {
+                Some((a, _)) => a.files.push(f.id.clone()),
+                None => {
+                    archives.push(LinkedArchive {
+                        archive_name: f.archive_name.clone(),
+                        files: vec![f.id.clone()],
+                        remote_file_id: None,
+                        matched_by: None,
+                    });
+                    md5s.push(key.0);
+                }
+            }
+        }
+        for (archive, md5) in archives.iter_mut().zip(&md5s) {
+            let found = match_listed(listed, md5.as_deref(), &archive.archive_name);
+            if let Some((id, by)) = found {
+                archive.remote_file_id = Some(id);
+                archive.matched_by = Some(by);
+                for f in m.files.iter_mut().filter(|f| archive.files.contains(&f.id)) {
+                    f.remote_file_id = Some(id);
+                }
+            }
+        }
+        save_manifest(&self.manifest_path(), &updated)?;
+        self.manifest = updated;
+        Ok(LinkReport {
+            mod_id: mod_id.to_owned(),
+            archives,
+        })
+    }
+
+    /// "Link" by hand (171): these files of a linked mod came from GameBanana file `remote_file_id` (`None` unlinks).
+    pub fn link_files(
+        &mut self,
+        mod_id: &str,
+        files: &[String],
+        remote_file_id: Option<u64>,
+    ) -> Result<(), SessionError> {
+        let mut updated = self.manifest.clone();
+        let m = updated
+            .mods
+            .iter_mut()
+            .find(|m| m.id == mod_id)
+            .ok_or_else(|| SessionError::UnknownMod(mod_id.to_owned()))?;
+        if !matches!(m.source, Source::GameBanana { .. }) {
+            return Err(SessionError::NotLinked(mod_id.to_owned()));
+        }
+        for id in files {
+            let f = m
+                .files
+                .iter_mut()
+                .find(|f| &f.id == id)
+                .ok_or_else(|| SessionError::UnknownFile(id.clone()))?;
+            f.remote_file_id = remote_file_id;
+        }
+        save_manifest(&self.manifest_path(), &updated)?;
+        self.manifest = updated;
+        Ok(())
+    }
+
+    /// F10: the name a mod is shown under.
+    pub fn rename_mod(&mut self, mod_id: &str, name: &str) -> Result<(), SessionError> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(SessionError::EmptyName);
+        }
+        let mut updated = self.manifest.clone();
+        let m = updated
+            .mods
+            .iter_mut()
+            .find(|m| m.id == mod_id)
+            .ok_or_else(|| SessionError::UnknownMod(mod_id.to_owned()))?;
+        m.name = name.to_owned();
+        save_manifest(&self.manifest_path(), &updated)?;
+        self.manifest = updated;
+        Ok(())
     }
 
     /// "Hide" on "new files available" (168): these GameBanana files of the mod are not reported again.
@@ -1437,7 +1608,7 @@ mod tests {
                 &haze_download(2, "haze.vpk"),
             )
             .expect("v2");
-        (s, v1, new)
+        (s, v1, new.new_files)
     }
 
     #[test]
@@ -1565,6 +1736,139 @@ mod tests {
             s.dismiss_new_files("gb-1", &[1]),
             Err(SessionError::UnknownMod(_))
         ));
+    }
+
+    fn listed_file(id: u64, name: &str, md5: Option<String>) -> crate::updates::RemoteFile {
+        crate::updates::RemoteFile {
+            id,
+            file_name: name.to_owned(),
+            size_bytes: 1,
+            date_added: None,
+            version: None,
+            description: None,
+            md5,
+        }
+    }
+
+    const HAZE: (crate::library::Section, u64) = (crate::library::Section::Mod, 655_209);
+
+    #[test]
+    fn a_local_mod_is_linked_by_the_md5_of_its_archive() {
+        let f = Fixture::new("linkmd5");
+        let mut s = open(&f);
+        // Downloaded by hand in a browser and renamed: only the md5 can tell.
+        let source = f.source("my haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        let md5 = crate::fs::md5_file(&source).expect("md5");
+        s.import_file(&source, "Haze").expect("imported");
+        let listed = [
+            listed_file(101, "haze_v2.vpk", Some(md5)),
+            listed_file(102, "other.vpk", Some("00".repeat(16))),
+        ];
+        let report = s
+            .link_mod("local-1", HAZE.0, HAZE.1, &listed)
+            .expect("linked");
+        assert_eq!(report.archives.len(), 1);
+        assert_eq!(report.archives[0].remote_file_id, Some(101));
+        assert_eq!(report.archives[0].matched_by, Some(LinkMatch::Md5));
+        let reopened = open(&f);
+        let m = &reopened.manifest().mods[0];
+        assert_eq!(
+            m.source,
+            Source::GameBanana {
+                section: HAZE.0,
+                mod_id: HAZE.1
+            }
+        );
+        assert_eq!(m.files[0].remote_file_id, Some(101));
+    }
+
+    #[test]
+    fn without_a_matching_md5_the_archive_name_links_it() {
+        let f = Fixture::new("linkname");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("Haze_V2.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("imported");
+        let listed = [
+            listed_file(101, "haze_v2_ea17d.vpk", Some("11".repeat(16))),
+            listed_file(102, "other.vpk", None),
+        ];
+        let report = s
+            .link_mod("local-1", HAZE.0, HAZE.1, &listed)
+            .expect("linked");
+        assert_eq!(report.archives[0].remote_file_id, Some(101));
+        assert_eq!(report.archives[0].matched_by, Some(LinkMatch::Name));
+    }
+
+    #[test]
+    fn an_archive_nothing_matches_is_linked_by_hand() {
+        let f = Fixture::new("linkhand");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("repack.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("imported");
+        let listed = [listed_file(101, "haze_v2.vpk", None)];
+        let report = s
+            .link_mod("local-1", HAZE.0, HAZE.1, &listed)
+            .expect("linked");
+        assert_eq!(report.archives[0].remote_file_id, None);
+        assert_eq!(report.archives[0].matched_by, None);
+        let files = report.archives[0].files.clone();
+        s.link_files("local-1", &files, Some(101))
+            .expect("linked by hand");
+        assert_eq!(
+            open(&f).manifest().mods[0].files[0].remote_file_id,
+            Some(101)
+        );
+        // A file of another mod, or a mod that is still local, is refused.
+        assert!(
+            s.link_files("local-1", &["local-9-1-0".to_owned()], Some(1))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn a_linked_mod_takes_its_later_downloads() {
+        let f = Fixture::new("linkjoin");
+        let mut s = open(&f);
+        s.import_file(
+            &f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]),
+            "Haze",
+        )
+        .expect("imported");
+        s.link_mod(
+            "local-1",
+            HAZE.0,
+            HAZE.1,
+            &[listed_file(101, "haze.vpk", None)],
+        )
+        .expect("linked");
+        let outcome = s
+            .import_download(
+                &f.source("7.bin", &[("models/haze/hands.vmdl_c", 1)]),
+                &haze_download(102, "hands.vpk"),
+            )
+            .expect("downloaded");
+        assert_eq!(
+            outcome.mod_id, "local-1",
+            "one library mod per GameBanana mod (144)"
+        );
+        assert_eq!(s.library().mods.len(), 1);
+    }
+
+    #[test]
+    fn a_mod_can_be_renamed() {
+        let f = Fixture::new("rename");
+        let mut s = open(&f);
+        s.import_file(&f.source("x.vpk", &[("models/haze/body.vmdl_c", 1)]), "x")
+            .expect("imported");
+        s.rename_mod("local-1", "  Haze, blue  ").expect("renamed");
+        assert_eq!(open(&f).library().mods[0].name, "Haze, blue");
+        assert!(s.rename_mod("local-1", "   ").is_err(), "a name is needed");
     }
 
     #[test]

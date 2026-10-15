@@ -311,6 +311,7 @@ mod tests {
             sha256: [0; 32],
             version: None,
             successor: None,
+            archive_md5: None,
         }
     }
 

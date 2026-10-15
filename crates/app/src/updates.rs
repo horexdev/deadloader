@@ -213,6 +213,55 @@ pub fn plan_picks(
     })
 }
 
+/// Why a pasted address can't link a mod (F10); the UI says it next to the field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum LinkProblem {
+    /// Not the address of a GameBanana mod or sound page.
+    NotAPage,
+    /// The page exists no more, or is hidden.
+    Removed { reason: updates::RemovedReason },
+}
+
+/// A failed link: our own problem, the catalog's answer (local mode, offline…), or a message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum LinkFailure {
+    Problem(LinkProblem),
+    Catalog(CatalogError),
+    Message(deadloader_core::message::UserMessage),
+}
+
+impl From<deadloader_core::message::UserMessage> for LinkFailure {
+    fn from(m: deadloader_core::message::UserMessage) -> Self {
+        Self::Message(m)
+    }
+}
+
+/// F10 + 171: the pasted page address → its listed files → the mod's archives matched to them.
+pub fn link_to_page(
+    backend: &crate::backend::Backend,
+    remote: &dyn Remote,
+    library_mod: &str,
+    address: &str,
+) -> Result<deadloader_core::session::LinkReport, LinkFailure> {
+    let (section, id) = deadloader_gamebanana::submission_from_url(address)
+        .ok_or(LinkFailure::Problem(LinkProblem::NotAPage))?;
+    let section = match section {
+        deadloader_catalog::Section::Mod => Section::Mod,
+        deadloader_catalog::Section::Sound => Section::Sound,
+    };
+    match remote.remote_mod(section, id, Initiator::User) {
+        Ok(RemoteMod::Listed(listed)) => {
+            Ok(backend.link_mod(library_mod, section, id, &listed.files)?)
+        }
+        Ok(RemoteMod::Removed(reason)) => {
+            Err(LinkFailure::Problem(LinkProblem::Removed { reason }))
+        }
+        Err(e) => Err(LinkFailure::Catalog(e)),
+    }
+}
+
 /// Errors that would repeat for every other mod.
 fn stops_the_check(e: &CatalogError) -> bool {
     matches!(
@@ -242,6 +291,7 @@ mod tests {
             sha256: [0; 32],
             version: None,
             successor: None,
+            archive_md5: None,
         }
     }
 
@@ -271,6 +321,7 @@ mod tests {
                     date_added: None,
                     version: None,
                     description: None,
+                    md5: None,
                 })
                 .collect(),
             posts: Vec::new(),
@@ -433,6 +484,66 @@ mod tests {
                 }]
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn a_pasted_page_links_a_local_mod() {
+        use crate::backend::tests::{FakeGame, Fixture};
+        let f = Fixture::new("linkpage");
+        let backend = f.backend(&FakeGame::default());
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let table = Table {
+            answers: HashMap::from([(655_209, Ok(listed(&[(101, "haze.vpk")])))]),
+            asked: RefCell::new(Vec::new()),
+        };
+        let report = link_to_page(
+            &backend,
+            &table,
+            "local-1",
+            "https://gamebanana.com/mods/655209",
+        )
+        .expect("linked");
+        assert_eq!(report.archives[0].remote_file_id, Some(101));
+        assert_eq!(*table.asked.borrow(), ["files 655209"]);
+        let manifest = backend.manifest().expect("manifest");
+        assert!(matches!(
+            manifest.mods[0].source,
+            Source::GameBanana {
+                mod_id: 655_209,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn a_bad_address_or_a_removed_page_is_said_plainly() {
+        use crate::backend::tests::{FakeGame, Fixture};
+        let f = Fixture::new("linkbad");
+        let backend = f.backend(&FakeGame::default());
+        let table = Table {
+            answers: HashMap::from([(7, Ok(RemoteMod::Removed(RemovedReason::Trashed)))]),
+            asked: RefCell::new(Vec::new()),
+        };
+        assert_eq!(
+            link_to_page(&backend, &table, "local-1", "https://example.org/mods/7"),
+            Err(LinkFailure::Problem(LinkProblem::NotAPage))
+        );
+        assert!(
+            table.asked.borrow().is_empty(),
+            "nothing asked for a bad address"
+        );
+        assert_eq!(
+            link_to_page(&backend, &table, "local-1", "gamebanana.com/mods/7"),
+            Err(LinkFailure::Problem(LinkProblem::Removed {
+                reason: RemovedReason::Trashed
+            }))
+        );
+        assert_eq!(
+            serde_json::to_value(LinkFailure::Problem(LinkProblem::NotAPage)).expect("json"),
+            serde_json::json!({"kind": "not_a_page"})
         );
     }
 

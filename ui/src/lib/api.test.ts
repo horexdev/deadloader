@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   Channel: FakeChannel,
 }));
 
-const { api, catalog, downloads, imageUrl, isUserMessage, subscribe, updates } = await import('./api');
+const { api, catalog, downloads, imageUrl, isUserMessage, links, subscribe, updates } = await import('./api');
 
 describe('api', () => {
   beforeEach(() => {
@@ -172,6 +172,20 @@ describe('api', () => {
     ]);
     invoke.mockRejectedValue({ id: 'E1', args: {} });
     await expect(updates.check()).rejects.toEqual({ id: 'E1', args: {} });
+  });
+
+  it('links mods imported from disk to GameBanana (F10)', async () => {
+    invoke.mockResolvedValue({});
+    await links.link('local-1', 'https://gamebanana.com/mods/655209');
+    await links.linkFiles('local-1', ['local-1-1-0'], 101);
+    await links.rename('local-1', 'Haze');
+    expect(invoke.mock.calls).toEqual([
+      ['mod_link', { modId: 'local-1', url: 'https://gamebanana.com/mods/655209' }],
+      ['mod_link_files', { modId: 'local-1', files: ['local-1-1-0'], remoteFileId: 101 }],
+      ['mod_rename', { modId: 'local-1', name: 'Haze' }],
+    ]);
+    invoke.mockRejectedValue({ kind: 'not_a_page' });
+    await expect(links.link('local-1', 'nope')).rejects.toEqual({ kind: 'not_a_page' });
   });
 
   it('builds picture addresses on the image protocol only', () => {

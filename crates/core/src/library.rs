@@ -76,6 +76,10 @@ pub struct ModFile {
     /// version and is no longer checked for updates.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub successor: Option<Successor>,
+    /// Lowercase hex md5 of the archive (or bare `.vpk`) the file came from: matched against GameBanana's listed md5
+    /// when a mod imported from disk is linked to its page (171). `None` for files imported before it was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive_md5: Option<String>,
 }
 
 /// What replaced a library file after an update.
@@ -371,6 +375,7 @@ mod tests {
             sha256: [7; 32],
             version: Some("1".to_owned()),
             successor: None,
+            archive_md5: None,
         }
     }
 
