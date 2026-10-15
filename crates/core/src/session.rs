@@ -9,7 +9,7 @@ use crate::apply::{Direction, Wanted, layout};
 use crate::engine::{Engine, EngineError};
 use crate::fs::{Disk, Logged};
 use crate::gamedir::{GuardOutcome, ensure_mods_load};
-use crate::import::{ImportError, ImportRequest, Limits, NoHooks, import};
+use crate::import::{ImportError, ImportRequest, NoHooks, import, limits_from};
 use crate::journal::{FileJournal, Recovery};
 use crate::library::{
     Manifest, ModelError, Profile, ProfileEntry, Section, Source, load_manifest, save_manifest,
@@ -756,7 +756,8 @@ impl Session {
             &self.data_dir,
             &mut updated,
             req,
-            &Limits::default(),
+            // The limits the user set (127), not the defaults.
+            &limits_from(&self.settings.downloads),
             &NoHooks,
         )
         .map_err(SessionError::Import)?;
@@ -1869,6 +1870,31 @@ mod tests {
         s.rename_mod("local-1", "  Haze, blue  ").expect("renamed");
         assert_eq!(open(&f).library().mods[0].name, "Haze, blue");
         assert!(s.rename_mod("local-1", "   ").is_err(), "a name is needed");
+    }
+
+    #[test]
+    fn imports_keep_to_the_archive_limits_in_the_settings() {
+        use std::io::Write as _;
+        let f = Fixture::new("limits");
+        let mut s = open(&f);
+        let mut settings = s.settings().clone();
+        settings.downloads.max_vpk_files = 1;
+        s.update_settings(settings).expect("saved");
+        let archive = f.dir.join("two.zip");
+        let mut w = zip::ZipWriter::new(std::fs::File::create(&archive).expect("zip"));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for name in ["a/pak01_dir.vpk", "b/pak01_dir.vpk"] {
+            w.start_file(name, opts).expect("entry");
+            w.write_all(&vpk(&[("models/haze/body.vmdl_c", 1)]))
+                .expect("write");
+        }
+        w.finish().expect("finish");
+        let err = s.import_file(&archive, "Two").expect_err("over the limit");
+        assert!(
+            matches!(err, SessionError::Import(ImportError::Archive(_))),
+            "{err}"
+        );
     }
 
     #[test]

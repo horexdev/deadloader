@@ -67,6 +67,18 @@ impl std::fmt::Display for ImportError {
 impl std::error::Error for ImportError {}
 
 /// Adds the mod files in `req.source` to `manifest` (the caller saves it).
+/// The archive limits the user set in Settings → Downloads (decision 127). The ratio floor and the 7z dictionary cap
+/// are not settings and keep their defaults.
+pub fn limits_from(settings: &crate::settings::Downloads) -> Limits {
+    Limits {
+        max_total_bytes: u64::from(settings.max_extracted_mib) << 20,
+        max_total_factor: u64::from(settings.max_extracted_factor),
+        max_vpk_entries: usize::try_from(settings.max_vpk_files).unwrap_or(usize::MAX),
+        max_entry_ratio: u64::from(settings.max_entry_ratio),
+        ..Limits::default()
+    }
+}
+
 pub fn import(
     data_dir: &Path,
     manifest: &mut Manifest,
@@ -300,6 +312,32 @@ mod tests {
             ("models/heroes/haze/body.vmdl_c", crc),
             ("materials/haze/body.vtex_c", crc),
         ])
+    }
+
+    #[test]
+    fn the_settings_set_the_archive_limits() {
+        let defaults = crate::settings::Settings::default().downloads;
+        assert_eq!(
+            limits_from(&defaults),
+            Limits::default(),
+            "decision 127 in both places"
+        );
+        let custom = crate::settings::Downloads {
+            max_extracted_mib: 100,
+            max_extracted_factor: 5,
+            max_vpk_files: 3,
+            max_entry_ratio: 40,
+            ..defaults
+        };
+        let limits = limits_from(&custom);
+        assert_eq!(limits.max_total_bytes, 100 << 20);
+        assert_eq!(limits.max_total_factor, 5);
+        assert_eq!(limits.max_vpk_entries, 3);
+        assert_eq!(limits.max_entry_ratio, 40);
+        assert_eq!(
+            limits.ratio_floor_bytes,
+            Limits::default().ratio_floor_bytes
+        );
     }
 
     #[test]
