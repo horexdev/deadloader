@@ -1,7 +1,7 @@
 //! Running processes, to know whether Deadlock is running (changes wait until it exits, decision 17).
 //!
-//! Uses a ToolHelp snapshot of the process list: read-only, no access to other processes is opened. This module is
-//! the one place in deadloader that needs `unsafe` (Win32 FFI); every call states why it is sound.
+//! Uses a ToolHelp snapshot of the process list: read-only, no access to other processes is opened. This module needs
+//! `unsafe` (Win32 FFI); every call states why it is sound.
 
 #![allow(unsafe_code)]
 
