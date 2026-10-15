@@ -186,7 +186,8 @@ export type Notice =
 /** A push from the core (crates/app/src/events.rs `UiEvent`). */
 export type UiEvent =
   | { event: 'game'; data: { running: boolean } }
-  | { event: 'applied_after_game'; data: { changes: number; library: LibraryView } }
+  /** N12: `changes` counts the edits made while the game ran; `items` names what went in (S9's changes). */
+  | { event: 'applied_after_game'; data: { changes: number; items: PendingChange[]; library: LibraryView } }
   | { event: 'apply_after_game_failed'; data: { message: UserMessage } }
   | { event: 'drag_hover'; data: { over: boolean } }
   | { event: 'dropped'; data: { outcomes: ImportResult[] } }
@@ -198,6 +199,7 @@ export type UiEvent =
   | { event: 'updates'; data: UpdateReport }
   | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } }
   | { event: 'log'; data: { kinds: LogKind[] } }
+  | { event: 'applying'; data: Applying }
   /** How many network requests are running now (the sidebar's live count). */
   | { event: 'network'; data: { running: number } };
 
@@ -674,6 +676,24 @@ export type Change =
 
 export type PendingChange = { mod_id: string; name: string } & Change;
 
+/** How far a running apply is (crates/app/src/progress.rs `Applying`): the Library's applying banner. */
+export interface Applying {
+  /** Steps of the change done and planned (files placed under temporary names, renamed into place, removed). */
+  done: number;
+  total: number;
+  /** Files placed so far: hard links (no time, no space) and copies. */
+  linked: number;
+  copied: number;
+  /** Size of the files placed so far (a copy as far as written), of all files to place, and of what was copied. */
+  bytes_done: number;
+  bytes_total: number;
+  bytes_copied: number;
+  /** The time the rest takes at the copy rate so far; null without copies or too early to tell. */
+  left_ms: number | null;
+  /** The apply ended: the banner goes. */
+  finished: boolean;
+}
+
 /** The part of a mod a change is about; what "Undo this change" takes back. */
 export type Aspect = 'enabled' | 'files' | 'order';
 
@@ -690,6 +710,21 @@ export interface FolderSummary {
   removed: number;
   renumbered: number;
   addons: string | null;
+  /** Each of those files (S9 "Show the file list"): added in slot order, then removed, then renumbered. */
+  files: FolderFile[];
+}
+
+/** One of our files in the game's `addons` folder that applying adds, removes or moves to another pak slot. */
+export interface FolderFile {
+  kind: 'added' | 'removed' | 'renumbered';
+  /** The library file. */
+  file: string;
+  /** Its library mod; null when the library no longer has it. */
+  mod_id: string | null;
+  name: string | null;
+  /** Its slot now (null: added) and after applying (null: removed). */
+  from_slot: number | null;
+  to_slot: number | null;
 }
 
 export interface Pending {

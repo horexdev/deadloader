@@ -111,3 +111,19 @@ library-d5-confirm-map = 使用这些文件
 library-update-downloading = 正在下载 { $name } 的更新——下载完成后会安装。
 library-updated = 已更新 { $name }。
 library-updated-text = 在所有使用旧版本的配置方案中生效。旧版本会保留——你可以在模组详情中切换回去。
+
+## N12: the changes applied when Deadlock was closed, each in a few words
+library-n12-on = { $name }：开
+library-n12-off = { $name }：关
+library-n12-above = { $name }：移到 { $other } 之上
+library-n12-below = { $name }：移到 { $other } 之下
+library-n12-switched = { $name }：切换为 { $to }
+library-n12-files = { $name }：文件已更改
+
+## S9: the file list of a pending apply
+library-show-file-list = 显示文件列表
+library-hide-file-list = 隐藏文件列表
+library-file-list = 游戏文件夹中的文件
+library-files-added = 添加 · { $count }
+library-files-removed = 移除 · { $count }
+library-files-renumbered = 重新编号 · { $count }

@@ -172,15 +172,22 @@ pub struct Backend {
     settings_listeners: Mutex<Vec<SettingsListener>>,
     /// The last automatic apply after the game closed, until the next change (147).
     auto: Mutex<Option<AutoApplied>>,
+    /// Where a failed command is written (the app log), so its message can name the entry; known after the start.
+    error_log: std::sync::OnceLock<std::sync::Arc<dyn deadloader_catalog::AppLog>>,
     /// The pending changes undo the automatic apply of this time.
     undoing: Mutex<Option<i64>>,
     /// N6 was looked for (once per start).
     foreign_told: std::sync::atomic::AtomicBool,
+    /// Told how far a running apply is (the applying banner), thinned out by [`crate::progress::Throttle`].
+    apply_listener: Mutex<Option<ApplyListener>>,
+    /// The throttle's quiet start and spacing.
+    progress_timing: Mutex<(std::time::Duration, std::time::Duration)>,
     /// Where the last profile export of this session went.
     last_export: Mutex<Option<PathBuf>>,
 }
 
 pub type SettingsListener = Box<dyn Fn(&Settings) + Send + Sync>;
+pub type ApplyListener = Box<dyn Fn(&crate::progress::Applying) + Send + Sync>;
 
 /// The result of a change in the library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -230,6 +237,8 @@ pub enum UpdateStep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AfterGame {
     pub changes: usize,
+    /// What went in, by mod and aspect (N12 names them).
+    pub items: Vec<deadloader_core::pending::PendingChange>,
     pub library: LibraryView,
 }
 
@@ -262,8 +271,11 @@ impl Backend {
                 edits_waiting: AtomicUsize::new(0),
                 settings_listeners: Mutex::new(Vec::new()),
                 auto: Mutex::new(None),
+                error_log: std::sync::OnceLock::new(),
                 undoing: Mutex::new(None),
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
+                apply_listener: Mutex::new(None),
+                progress_timing: Mutex::new((crate::progress::QUIET, crate::progress::EVERY)),
                 last_export: Mutex::new(None),
             },
             Err(e) => Self {
@@ -275,10 +287,49 @@ impl Backend {
                 edits_waiting: AtomicUsize::new(0),
                 settings_listeners: Mutex::new(Vec::new()),
                 auto: Mutex::new(None),
+                error_log: std::sync::OnceLock::new(),
                 undoing: Mutex::new(None),
                 foreign_told: std::sync::atomic::AtomicBool::new(false),
+                apply_listener: Mutex::new(None),
+                progress_timing: Mutex::new((crate::progress::QUIET, crate::progress::EVERY)),
                 last_export: Mutex::new(None),
             },
+        }
+    }
+
+    /// Failed commands are written to `log` from now on.
+    pub fn log_errors_to(&self, log: std::sync::Arc<dyn deadloader_catalog::AppLog>) {
+        let _ = self.error_log.set(log);
+    }
+
+    /// A command failed: the app log gets the message (an internal error as an error, a refusal as a warning) and the
+    /// message gets the entry's id as `log_id`, so D12 can link to it in Activity. A message naming its own entry
+    /// already (E4) is left as it is.
+    pub fn reported(&self, message: UserMessage) -> UserMessage {
+        let Some(log) = self.error_log.get() else {
+            return message;
+        };
+        if message.args.contains_key("log_id") {
+            return message;
+        }
+        let level = if message.id == MessageId::Internal {
+            deadloader_core::log::Level::Error
+        } else {
+            deadloader_core::log::Level::Warn
+        };
+        let fields = serde_json::Map::from_iter([
+            (
+                "message".to_owned(),
+                serde_json::to_value(message.id).unwrap_or_default(),
+            ),
+            (
+                "args".to_owned(),
+                serde_json::to_value(&message.args).unwrap_or_default(),
+            ),
+        ]);
+        match log.write(level, "command failed", fields) {
+            Some(id) => message.arg("log_id", id),
+            None => message,
         }
     }
 
@@ -319,12 +370,13 @@ impl Backend {
                 .filter(|_| !items.is_empty())
                 .map(|restore| AutoApplied {
                     restore,
-                    changes: items,
+                    changes: items.clone(),
                     at_unix_ms: now_unix_ms(),
                 });
         }
         Ok(changed.applied.then_some(AfterGame {
             changes,
+            items,
             library: changed.library,
         }))
     }
@@ -742,7 +794,7 @@ impl Backend {
                     match (&target, live, only_here, root) {
                         (Target::Mod(id), true, true, Some(root)) => {
                             s.set_enabled(id, false)?;
-                            s.apply(&root, false)?;
+                            self.apply_session(s, &root, false)?;
                             Ok(s.remove(&target, deleter)?)
                         }
                         _ => Err(SessionError::Remove(RemoveError::StillInGame(roots)).into()),
@@ -920,6 +972,42 @@ impl Backend {
         self.with(|s| Ok(s.set_favourite(favourite, on)?))
     }
 
+    /// `listener` hears how far every apply from now on is (Apply, Play, an edit, the apply after the game closed).
+    pub fn on_apply_progress(&self, listener: ApplyListener) {
+        *lock(&self.apply_listener) = Some(listener);
+    }
+
+    /// How long an apply stays quiet and how far apart its reports are.
+    #[cfg(test)]
+    pub fn set_progress_timing(&self, quiet: std::time::Duration, every: std::time::Duration) {
+        *lock(&self.progress_timing) = (quiet, every);
+    }
+
+    /// [`Session::apply`] with its progress told to the listener.
+    fn apply_session(
+        &self,
+        s: &mut Session,
+        root: &Path,
+        running: bool,
+    ) -> Result<deadloader_core::session::Applied, SessionError> {
+        let listener = lock(&self.apply_listener);
+        let Some(listener) = listener.as_ref() else {
+            return s.apply(root, running);
+        };
+        let (quiet, every) = *lock(&self.progress_timing);
+        let mut throttle = crate::progress::Throttle::new(quiet, every);
+        let started = std::time::Instant::now();
+        let result = s.apply_reporting(root, running, &mut |p| {
+            if let Some(a) = throttle.report(p, started.elapsed()) {
+                listener(&a);
+            }
+        });
+        if let Some(a) = throttle.finish() {
+            listener(&a);
+        }
+        result
+    }
+
     /// `listener` hears every saved settings change from now on.
     pub fn on_settings(&self, listener: SettingsListener) {
         self.lock_listeners().push(listener);
@@ -974,7 +1062,7 @@ impl Backend {
                 .game_root()
                 .or_else(|| installations.first().cloned())
                 .ok_or_else(|| UserMessage::new(MessageId::E2))?;
-            let applied = s.apply(&root, running)?;
+            let applied = self.apply_session(s, &root, running)?;
             self.edits_waiting.store(0, Ordering::Relaxed);
             *lock(&self.undoing) = None;
             Ok(ApplyResult {
@@ -1026,7 +1114,7 @@ impl Backend {
                     waiting_for_game: true,
                 }),
                 (true, Some(root)) => {
-                    s.apply(&root, false)?;
+                    self.apply_session(s, &root, false)?;
                     self.edits_waiting.store(0, Ordering::Relaxed);
                     Ok(Changed {
                         library: s.library(),
@@ -1755,6 +1843,78 @@ pub(crate) mod tests {
             status.root.as_deref(),
             Some(f.game().display().to_string().as_str())
         );
+    }
+
+    /// Every progress report the backend lets through, with no quiet start and no spacing.
+    fn every_report(backend: &Backend) -> Arc<std::sync::Mutex<Vec<crate::progress::Applying>>> {
+        let heard = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = Arc::clone(&heard);
+        backend.on_apply_progress(Box::new(move |a| sink.lock().expect("lock").push(*a)));
+        backend.set_progress_timing(std::time::Duration::ZERO, std::time::Duration::ZERO);
+        heard
+    }
+
+    #[test]
+    fn apply_reports_its_progress_and_its_end() {
+        let f = Fixture::new("progress");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[
+                f.mod_file("haze.vpk", "models/haze/body.vmdl_c"),
+                f.mod_file("wraith.vpk", "models/wraith/body.vmdl_c"),
+            ])
+            .expect("imported");
+        let heard = every_report(&backend);
+        backend.apply().expect("applied");
+        let heard = heard.lock().expect("lock").clone();
+        let (last, running) = heard.split_last().expect("reports");
+        assert!(last.finished);
+        assert_eq!(last.progress.done, last.progress.total);
+        assert_eq!(last.progress.linked + last.progress.copied, 2);
+        assert!(running.iter().all(|a| !a.finished));
+        assert_eq!(running.first().map(|a| a.progress.done), Some(0));
+    }
+
+    #[test]
+    fn the_apply_after_the_game_closed_reports_its_progress_too() {
+        let f = Fixture::new("progressafter");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = backend.apply().expect("applied").library.mods[0].id.clone();
+        game.running.store(true, Ordering::Relaxed);
+        backend.set_enabled(&id, false).expect("waits");
+        let heard = every_report(&backend);
+        game.running.store(false, Ordering::Relaxed);
+        backend
+            .game_closed()
+            .expect("applied")
+            .expect("something applied");
+        let heard = heard.lock().expect("lock").clone();
+        assert!(heard.last().is_some_and(|a| a.finished), "{heard:?}");
+    }
+
+    #[test]
+    fn an_apply_without_a_listener_works_as_before() {
+        let f = Fixture::new("progressnone");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        assert!(backend.apply().expect("applied").changed);
     }
 
     #[test]
@@ -2498,6 +2658,64 @@ pub(crate) mod tests {
                 .expect_err("not a known installation")
                 .id,
             MessageId::E2
+        );
+    }
+
+    /// The app log of these tests: every line it was given, ids `app-1`, `app-2`…
+    #[derive(Default)]
+    struct Lines(std::sync::Mutex<Vec<(deadloader_core::log::Level, String, serde_json::Value)>>);
+
+    impl deadloader_catalog::AppLog for Lines {
+        fn write(
+            &self,
+            level: deadloader_core::log::Level,
+            msg: &str,
+            fields: serde_json::Map<String, serde_json::Value>,
+        ) -> Option<String> {
+            let mut lines = self.0.lock().expect("lines");
+            lines.push((level, msg.to_owned(), serde_json::Value::Object(fields)));
+            Some(format!("app-{}", lines.len()))
+        }
+    }
+
+    #[test]
+    fn a_failed_command_is_logged_and_its_message_names_the_entry() {
+        use deadloader_core::log::Level;
+        let f = Fixture::new("reported");
+        let backend = f.backend(&FakeGame::default());
+        let lines = Arc::new(Lines::default());
+        // Before the log is known (start): the message goes back as it is.
+        let early = backend.reported(UserMessage::new(MessageId::E13));
+        assert!(!early.args.contains_key("log_id"));
+
+        backend.log_errors_to(Arc::clone(&lines) as Arc<dyn deadloader_catalog::AppLog>);
+        let refused = backend.reported(UserMessage::new(MessageId::E13).arg("profile", "Evening"));
+        assert_eq!(
+            refused.args.get("log_id").map(String::as_str),
+            Some("app-1")
+        );
+        assert_eq!(
+            refused.args.get("profile").map(String::as_str),
+            Some("Evening")
+        );
+        let broken = backend.reported(UserMessage::new(MessageId::Internal).arg("detail", "boom"));
+        assert_eq!(broken.args.get("log_id").map(String::as_str), Some("app-2"));
+        // A message that names its own entry already (E4) isn't logged twice.
+        let named = UserMessage::new(MessageId::E4).arg("log_id", "net-7");
+        assert_eq!(backend.reported(named.clone()), named);
+
+        let got = lines.0.lock().expect("lines").clone();
+        assert_eq!(got.len(), 2);
+        assert_eq!(
+            (got[0].0, got[0].1.as_str()),
+            (Level::Warn, "command failed")
+        );
+        assert_eq!(got[0].2["message"], "E13");
+        assert_eq!(got[0].2["args"]["profile"], "Evening");
+        assert_eq!(
+            got[1].0,
+            Level::Error,
+            "an internal error is an error, a refusal a warning"
         );
     }
 

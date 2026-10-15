@@ -9,6 +9,7 @@
   import type { ModView, Pending, PendingChange } from '../../lib/api';
   import { Button, Count, EmptyState } from '../../lib/components';
   import { formatNumber, formatTime, t } from '../../i18n';
+  import FolderFiles from './FolderFiles.svelte';
   import { fileLabel, versionText, type Context } from './model';
 
   interface Props {
@@ -97,6 +98,8 @@
   });
   const dot = $derived(mode === 'applied' ? 'success' : running ? 'warning' : 'info');
   const folder = $derived(pending?.folder ?? null);
+  /** "Show the file list" is open. */
+  let listOpen = $state(false);
 
   /** The end of a long path, as the design shows it: "…\Deadlock\game\citadel\addons". */
   function tail(path: string): string {
@@ -158,6 +161,14 @@
           <span class="body">{t('library-folder-summary', { added: folder.added, removed: folder.removed, renumbered: folder.renumbered })}</span>
           {#if folder.addons}
             <span class="dl-mono path" title={folder.addons}>{tail(folder.addons)}</span>
+          {/if}
+          {#if folder.files.length > 0}
+            <button type="button" class="dl-link show" aria-expanded={listOpen ? 'true' : 'false'} onclick={() => (listOpen = !listOpen)}>
+              {listOpen ? t('library-hide-file-list') : t('library-show-file-list')}
+            </button>
+            {#if listOpen}
+              <FolderFiles files={folder.files} {mods} />
+            {/if}
           {/if}
         </div>
       {/if}
@@ -356,6 +367,14 @@
   .body {
     font: var(--type-body-sm);
     color: var(--ink);
+  }
+
+  .show {
+    justify-self: start;
+    padding: 0;
+    font: var(--type-caption);
+    background: none;
+    border: 0;
   }
 
   .path {

@@ -146,3 +146,19 @@ library-d5-confirm-map = Use these files
 library-update-downloading = Downloading the update of { $name } — it is installed when it arrives.
 library-updated = { $name } updated.
 library-updated-text = Active in every profile that used the old version. The old version is kept — you can switch back in the mod details.
+
+## N12: the changes applied when Deadlock was closed, each in a few words
+library-n12-on = { $name } on
+library-n12-off = { $name } off
+library-n12-above = { $name } moved above { $other }
+library-n12-below = { $name } moved below { $other }
+library-n12-switched = { $name } switched to { $to }
+library-n12-files = { $name }: files changed
+
+## S9: the file list of a pending apply
+library-show-file-list = Show the file list
+library-hide-file-list = Hide the file list
+library-file-list = Files in the game folder
+library-files-added = Added · { $count }
+library-files-removed = Removed · { $count }
+library-files-renumbered = Renumbered · { $count }

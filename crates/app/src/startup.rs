@@ -224,6 +224,7 @@ pub fn run() -> Result<(), StartError> {
         Box::new(crate::game::SteamGame),
         Arc::clone(&log) as deadloader_core::session::SharedLog,
     ));
+    backend.log_errors_to(Arc::clone(&log) as Arc<dyn deadloader_catalog::AppLog>);
     let outbox = Arc::new(Outbox::new());
     wire_activity(&app, &log, &layout, &backend, &outbox);
     // Nothing is requested until the catalog or a download asks; local mode until the first-run choice (108).
@@ -234,6 +235,10 @@ pub fn run() -> Result<(), StartError> {
     let follow = Arc::clone(&network);
     backend.on_settings(Box::new(move |settings| follow.apply(settings)));
     crate::network::relay_running(network.client(), Arc::clone(&outbox));
+    let progress_outbox = Arc::clone(&outbox);
+    backend.on_apply_progress(Box::new(move |applying| {
+        progress_outbox.send_live(UiEvent::Applying(*applying));
+    }));
     let settings = backend.settings().unwrap_or_default();
     let queue = crate::downloads::open(
         layout.root().join("downloads"),

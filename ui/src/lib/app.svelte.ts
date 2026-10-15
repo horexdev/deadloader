@@ -16,6 +16,7 @@ import {
   subscribe,
   updates as updatesApi,
   type ApplyResult,
+  type Applying,
   type ImportResult,
   type UpdateStep,
   type ApplyPreview,
@@ -25,6 +26,7 @@ import {
   type Installed,
   type LibraryView,
   type LogKind,
+  type PendingChange,
   type Section,
   type Settings,
   type TaskSnapshot,
@@ -107,6 +109,9 @@ export class AppState {
   pendingOpen = $state(false);
   /** Apply (S9) is putting the selected profile into the game folder. */
   applying = $state(false);
+  /** How far the running apply is (any apply: Apply, Play, an edit, the one after the game closed); null when none
+   *  runs or it ends too quickly to report. */
+  progress: Applying | null = $state(null);
   /** The last apply or Play found gameinfo.gi changed by another program (D10). */
   gameinfoForeign = $state(false);
   /** An update that arrived needs the user to map its files (D5, 169). */
@@ -150,11 +155,7 @@ export class AppState {
         break;
       case 'applied_after_game':
         this.library = event.data.library;
-        this.toast({
-          kind: 'success',
-          title: describe({ id: 'N12', args: { count: Math.max(event.data.changes, 1) } }).what,
-          action: { label: t('library-undo'), icon: Undo2, onclick: () => void this.undoApplied() },
-        });
+        void this.appliedAfterGame(event.data.changes, event.data.items, event.data.library);
         break;
       case 'updates':
         this.updates = event.data;
@@ -207,6 +208,9 @@ export class AppState {
         for (const listener of this.#logListeners) {
           listener(event.data.kinds);
         }
+        break;
+      case 'applying':
+        this.progress = event.data.finished ? null : event.data;
         break;
       default:
         break;
@@ -348,6 +352,7 @@ export class AppState {
       this.fail(error);
     } finally {
       this.applying = false;
+      this.progress = null;
     }
   }
 
@@ -402,6 +407,18 @@ export class AppState {
     }
   }
 
+  /** N12: the toast names what went in; the words come with the Library's code, loaded when first needed. */
+  private async appliedAfterGame(edits: number, items: PendingChange[], library: LibraryView): Promise<void> {
+    const { appliedSummary } = await import('../screens/library/applied');
+    const text = appliedSummary(items, library.mods);
+    this.toast({
+      kind: 'success',
+      title: describe({ id: 'N12', args: { count: items.length > 0 ? items.length : Math.max(edits, 1) } }).what,
+      ...(text ? { text } : {}),
+      action: { label: t('library-undo'), icon: Undo2, onclick: () => void this.undoApplied() },
+    });
+  }
+
   /** Undo of what was applied when the game closed (N12, 147). */
   async undoApplied(): Promise<void> {
     try {
@@ -452,6 +469,7 @@ export class AppState {
       this.fail(error);
     } finally {
       this.playing = false;
+      this.progress = null;
     }
   }
 
@@ -464,11 +482,17 @@ export class AppState {
     this.toasts = this.toasts.filter((t) => t.id !== id);
   }
 
-  /** A core message as an error toast with what happened and what to do. */
+  /** A core message as an error toast with what happened and what to do; its "Details" opens D12 (155), which links
+   *  to the failure's log entry in Activity. */
   fail(error: unknown): void {
     const message: UserMessage = isUserMessage(error) ? error : { id: 'Internal', args: { detail: String(error) } };
     const text = describe(message);
-    this.toast({ kind: 'error', title: text.what, text: [text.why, text.todo].filter(Boolean).join(' ') });
+    this.toast({
+      kind: 'error',
+      title: text.what,
+      text: [text.why, text.todo].filter(Boolean).join(' '),
+      action: { label: t('errors-details'), onclick: () => this.showError(message) },
+    });
   }
 
   /** D12: the whole story of an error (what, why, what to do, Details) with its actions. Open it on the user's

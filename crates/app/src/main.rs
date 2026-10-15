@@ -14,6 +14,7 @@ mod network;
 mod paths;
 #[cfg(test)]
 mod policy;
+mod progress;
 mod protocol;
 mod push;
 mod setup;
