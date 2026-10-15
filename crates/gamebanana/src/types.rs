@@ -112,14 +112,12 @@ impl Image {
     /// The URL a catalog card of `card_width_px` CSS pixels should load at `display_scale` (decision 152): the 220 px
     /// variant while it is not upscaled, otherwise 530 px. A missing variant is replaced by the nearest larger one,
     /// then the nearest smaller one; the original is the last resort.
+    ///
+    /// A card may fall back to a smaller variant: an original in a grid of hundreds of cards costs far more traffic and
+    /// memory than a soft thumbnail. A picture shown on its own uses [`Self::sharp_url`].
     pub fn thumbnail_url(&self, card_width_px: u32, display_scale: f64) -> &str {
         use ImageSize::{W100, W220, W530, W800};
-        let scale = if display_scale.is_finite() && display_scale > 0.0 {
-            display_scale
-        } else {
-            1.0
-        };
-        let order: [ImageSize; 4] = if f64::from(card_width_px) * scale <= 220.0 {
+        let order: [ImageSize; 4] = if f64::from(card_width_px) * sane(display_scale) <= 220.0 {
             [W220, W530, W800, W100]
         } else {
             [W530, W800, W220, W100]
@@ -128,6 +126,38 @@ impl Image {
             .iter()
             .find_map(|&size| self.variant(size))
             .map_or(self.original_url.as_str(), |v| v.url.as_str())
+    }
+
+    /// The URL of a picture shown `width_px` CSS pixels wide at `display_scale`: the smallest variant at least that
+    /// many device pixels wide, otherwise the original. It is never stretched from a smaller variant.
+    pub fn sharp_url(&self, width_px: u32, display_scale: f64) -> &str {
+        let needed = f64::from(width_px) * sane(display_scale);
+        self.variants
+            .iter()
+            .filter(|v| f64::from(v.size.width()) >= needed)
+            .min_by_key(|v| v.size)
+            .map_or(self.original_url.as_str(), |v| v.url.as_str())
+    }
+}
+
+impl ImageSize {
+    /// The width GameBanana resizes to.
+    pub fn width(self) -> u32 {
+        match self {
+            Self::W100 => 100,
+            Self::W220 => 220,
+            Self::W530 => 530,
+            Self::W800 => 800,
+        }
+    }
+}
+
+/// A display scale that makes sense; anything else counts as 1.
+fn sane(display_scale: f64) -> f64 {
+    if display_scale.is_finite() && display_scale > 0.0 {
+        display_scale
+    } else {
+        1.0
     }
 }
 
@@ -352,6 +382,52 @@ mod tests {
                 expected,
                 "sizes {sizes:?}, width {width}, scale {scale}"
             );
+        }
+    }
+
+    fn sharp(sizes: &[ImageSize], width: u32, scale: f64) -> String {
+        image(sizes)
+            .sharp_url(width, scale)
+            .trim_start_matches("https://images.example/")
+            .to_owned()
+    }
+
+    #[test]
+    fn a_sharp_picture_is_never_smaller_than_it_is_shown() {
+        use ImageSize::{W100, W220, W530, W800};
+        let all = [W100, W220, W530, W800];
+        let cases: &[(&[ImageSize], u32, f64, &str)] = &[
+            // The smallest variant at least as wide as the device pixels shown…
+            (&all, 530, 1.0, "W530"),
+            (&all, 200, 1.0, "W220"),
+            (&all, 100, 1.0, "W100"),
+            (&all, 530, 1.25, "W800"),
+            (&all, 530, 1.5, "W800"),
+            (&all, 400, 2.0, "W800"),
+            // …and the original once no variant is: at 175 % or 200 % for a 530 px gallery.
+            (&all, 530, 1.75, "original"),
+            (&all, 530, 2.0, "original"),
+            // A missing variant is replaced by a larger one, never by a smaller one.
+            (&[W100, W800], 530, 1.0, "W800"),
+            (&[W100, W220], 530, 1.0, "original"),
+            (&[W100], 530, 1.0, "original"),
+            (&[W100, W220, W530], 800, 1.0, "original"),
+            (&[], 530, 1.0, "original"),
+        ];
+        for &(sizes, width, scale, expected) in cases {
+            assert_eq!(
+                sharp(sizes, width, scale),
+                expected,
+                "sizes {sizes:?}, width {width}, scale {scale}"
+            );
+        }
+    }
+
+    #[test]
+    fn nonsense_scale_counts_as_one_for_a_sharp_picture() {
+        use ImageSize::{W530, W800};
+        for scale in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(sharp(&[W530, W800], 530, scale), "W530", "scale {scale}");
         }
     }
 

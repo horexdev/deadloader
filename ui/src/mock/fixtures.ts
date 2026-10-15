@@ -12,8 +12,11 @@ const STYLES: [string, ...string[]] = ['Midnight Bloom', 'Ember Coat', 'Porcelai
 const AUTHORS: [string, ...string[]] = ['lumen', 'kestrel_mods', 'velvet.paw', 'nightjar', 'orbit'];
 
 /** A stable picture id for a mod and a size, 32 hex digits like the core's. */
-export function pictureId(seed: number, size: 'small' | 'large' | 'gallery' | 'original'): string {
-  const tag = { small: 1, large: 2, gallery: 3, original: 4 }[size];
+export function pictureId(
+  seed: number,
+  size: 'small' | 'large' | 'gallery' | 'original' | 'gallery-large' | 'gallery-full',
+): string {
+  const tag = { small: 1, large: 2, gallery: 3, original: 4, 'gallery-large': 5, 'gallery-full': 6 }[size];
   return ((seed * 2654435761 + tag * 97) >>> 0).toString(16).padStart(8, '0').repeat(4);
 }
 
@@ -144,6 +147,8 @@ export function modPage(i: number): ModPage {
     category_path: [c.root_category, c.subcategory].filter((x): x is NonNullable<typeof x> => x !== null),
     gallery: [0, 1, 2].map((g) => ({
       preview: pictureId(i * 10 + g, 'gallery'),
+      large: pictureId(i * 10 + g, 'gallery-large'),
+      full: pictureId(i * 10 + g, 'gallery-full'),
       original: pictureId(i * 10 + g, 'original'),
       caption: g === 0 ? 'In game' : null,
     })),

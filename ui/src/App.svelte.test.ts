@@ -113,4 +113,39 @@ describe('the app', () => {
     expect(app.toasts.filter((toast) => toast.kind === 'error')).toEqual([]);
     expect(router.current).toBe('catalog');
   });
+
+  it('asks before opening a link from the first-run wizard, over the wizard (D1)', async () => {
+    history.replaceState(null, '', '/?scenario=wizard#/catalog');
+    resetMock();
+    router.go('catalog');
+    const { target } = render(App, {});
+    await settle();
+    await shown(target, '.wz-window');
+    const source = [...target.querySelectorAll<HTMLElement>('a, button')].find((e) => e.textContent?.includes('Source code'));
+    source?.click();
+    // D1 shows at once, while the wizard is still on screen.
+    const dialog = await shown(target, '.dl-dialog');
+    expect(dialog.textContent).toContain('github.com');
+    expect(target.querySelector('.wz-window')).not.toBeNull();
+    const cancel = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Cancel');
+    cancel?.click();
+    flushSync();
+    expect(target.querySelector('.dl-dialog')).toBeNull();
+  });
+
+  it('shows one D1 in the main window, not one per frame', async () => {
+    history.replaceState(null, '', '/#/catalog');
+    resetMock();
+    router.go('catalog');
+    const { target } = render(App, {});
+    await settle();
+    await shown(target, '.dl-sidebar, nav');
+    const { openLink } = await import('./lib/links');
+    void openLink('https://gamebanana.com/');
+    await shown(target, '.dl-dialog');
+    expect(target.querySelectorAll('.dl-dialog')).toHaveLength(1);
+    const { prompts } = await import('./lib/prompts.svelte');
+    prompts.answerLink({ open: false, always: false });
+    flushSync();
+  });
 });

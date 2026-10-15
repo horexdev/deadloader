@@ -1,7 +1,7 @@
 // What the catalog and the mod page derive from the core's data: the library mod of a GameBanana mod, what each file
 // of a mod page offers (136, 144), card bylines, search limits and relative dates. Pure functions, no DOM.
 
-import type { Card, LibraryView, ModView, Section, TaskSnapshot, UpdateReport } from '../../lib/api';
+import type { Card, GalleryImage, ImageId, LibraryView, ModView, Section, TaskSnapshot, UpdateReport } from '../../lib/api';
 import { language } from '../../i18n';
 
 /** The library mod made from a GameBanana mod (downloaded or linked, one per GameBanana mod, 144). */
@@ -139,4 +139,20 @@ export function relativeTime(unixSeconds: number, now: Date = new Date()): strin
 /** The exact moment for a tooltip: "11 October 2026, 14:20". */
 export function exactTime(unixSeconds: number): string {
   return new Intl.DateTimeFormat(language(), { dateStyle: 'long', timeStyle: 'short' }).format(unixSeconds * 1000);
+}
+
+/** The gallery's widest size in CSS pixels (the design's 530 px column). */
+export const GALLERY_WIDTH = 530;
+
+/**
+ * The gallery picture to show at `width` CSS pixels and `displayScale` (Windows scaling times the zoom): the smallest
+ * one at least that many device pixels wide (530, 800, then the original), so it is never stretched.
+ */
+export function galleryPicture(image: GalleryImage, width: number, displayScale: number): ImageId {
+  const scale = Number.isFinite(displayScale) && displayScale > 0 ? displayScale : 1;
+  const needed = (width > 0 ? width : GALLERY_WIDTH) * scale;
+  if (needed <= 530) {
+    return image.preview;
+  }
+  return needed <= 800 ? image.large : image.full;
 }

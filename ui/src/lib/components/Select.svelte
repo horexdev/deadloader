@@ -7,6 +7,7 @@
   import { flushSync, onDestroy, tick } from 'svelte';
   import FieldError from './FieldError.svelte';
   import Spinner from './Spinner.svelte';
+  import { placeMenu, type MenuPlace } from './menu-place';
   import { edgeEnabled, stepEnabled, typeahead } from './roving';
 
   export interface SelectOption {
@@ -69,6 +70,9 @@
   let root: HTMLElement | undefined = $state();
   let trigger: HTMLButtonElement | undefined = $state();
   let filterInput: HTMLInputElement | undefined = $state();
+  let menuEl: HTMLElement | undefined = $state();
+  /** Where the open menu sits in the window (fixed, so it never makes the page or a panel scroll). */
+  let place: MenuPlace | null = $state(null);
   let typed = '';
   let typedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -109,12 +113,31 @@
     active = current >= 0 && from === 'selected' ? current : edgeEnabled(steppable, from === 'last' ? 'last' : 'first');
     // Render the menu now so the filter input can take focus within this key or click.
     flushSync();
+    measure();
     filterInput?.focus();
     scrollActiveIntoView();
   }
 
+  /** Opens the menu below its trigger, or above when there is more room there. */
+  function measure() {
+    if (!trigger || !menuEl) {
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    place = placeMenu(rect, menuEl.scrollHeight, { width: window.innerWidth, height: window.innerHeight }, menuEl.offsetWidth);
+    flushSync();
+  }
+
+  /** A fixed menu would drift from its trigger when anything around it scrolls: close it, like a native select. */
+  function handleScroll(event: Event) {
+    if (open && !(event.target instanceof Node && menuEl?.contains(event.target))) {
+      closeMenu(false);
+    }
+  }
+
   function closeMenu(refocus = true) {
     open = false;
+    place = null;
     active = -1;
     if (refocus) {
       trigger?.focus();
@@ -204,6 +227,7 @@
 </script>
 
 <svelte:document onpointerdown={handleDocumentPointerDown} />
+<svelte:window onscrollcapture={handleScroll} onresize={() => open && closeMenu(false)} />
 
 <div class="dl-select" bind:this={root}>
   <button
@@ -231,7 +255,16 @@
 
   {#if open}
     {#if filterLabel}
-      <div class="dl-menu menu">
+      <div
+        class="dl-menu menu"
+        bind:this={menuEl}
+        data-placement={place?.above ? 'above' : 'below'}
+        style:top={place?.top === undefined ? undefined : `${place.top}px`}
+        style:bottom={place?.bottom === undefined ? undefined : `${place.bottom}px`}
+        style:left={place ? `${place.left}px` : undefined}
+        style:min-width={place ? `${place.minWidth}px` : undefined}
+        style:max-height={place ? `${place.maxHeight}px` : undefined}
+      >
         <div class="dl-input filter">
           <input
             bind:this={filterInput}
@@ -251,7 +284,19 @@
         </div>
       </div>
     {:else}
-      <div class="dl-menu menu" id={listId} role="listbox" aria-label={label}>
+      <div
+        class="dl-menu menu"
+        id={listId}
+        role="listbox"
+        aria-label={label}
+        bind:this={menuEl}
+        data-placement={place?.above ? 'above' : 'below'}
+        style:top={place?.top === undefined ? undefined : `${place.top}px`}
+        style:bottom={place?.bottom === undefined ? undefined : `${place.bottom}px`}
+        style:left={place ? `${place.left}px` : undefined}
+        style:min-width={place ? `${place.minWidth}px` : undefined}
+        style:max-height={place ? `${place.maxHeight}px` : undefined}
+      >
         {@render body()}
       </div>
     {/if}
@@ -303,11 +348,10 @@
 {/snippet}
 
 <style>
-  /* Placement from the design's screens: below the trigger, left-aligned, 4px apart. */
+  /* Below the trigger, left-aligned, 4px apart (the design's screens) — or above when there is more room there.
+     Fixed to the window (menu-place.ts), so an open menu never makes the page or a panel scroll. */
   .menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
+    position: fixed;
   }
 
   .filter {

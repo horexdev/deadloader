@@ -261,6 +261,38 @@ fn nsfw_pages_are_flagged_and_hidden_ones_show_no_pictures() {
 }
 
 #[test]
+fn the_gallery_never_stretches_a_smaller_variant() {
+    let h = harness("text", false, NsfwMode::Hidden);
+    let page = h
+        .catalog
+        .details(Section::Mod, MOD, None, Initiator::User)
+        .expect("page");
+    // The first picture has a 530 px variant but no 800 px one: larger displays get the original.
+    let first = &page.gallery[0];
+    assert_ne!(first.preview, first.large);
+    assert_eq!(first.large, first.full);
+    // The second has only 100 px: every display gets the original, never 100 px stretched to the gallery.
+    let second = &page.gallery[1];
+    assert_eq!(second.preview, second.large);
+    assert_eq!(second.large, second.full);
+    let original = "https://images.gamebanana.com/img/ss/mods/aaaa0002.jpg";
+    h.on(original, Reply::image("image/jpeg", JPEG));
+    h.catalog.image(&second.preview).expect("preview");
+    assert_eq!(
+        h.transport.calls().last().map(String::as_str),
+        Some(original)
+    );
+    assert_eq!(
+        h.net_log.all().last().map(|r| r.initiator),
+        Some(Initiator::Auto),
+        "shown with the page, not on a click"
+    );
+    // "View original" afterwards is the same file: served from the cache.
+    h.catalog.image(&second.original).expect("original");
+    assert_eq!(h.transport.calls().len(), 2);
+}
+
+#[test]
 fn the_gallery_has_a_preview_and_the_original_of_each_image() {
     let h = harness("text", false, NsfwMode::Hidden);
     let page = h

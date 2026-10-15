@@ -41,6 +41,10 @@ const MAX_BACK_OFF: Duration = Duration::from_secs(3600);
 /// needs up to 50 of them, and they come from a CDN.
 const IMAGE_REQUESTS: usize = 4;
 const MIB: u64 = 1024 * 1024;
+/// The mod page's gallery is at most 530 CSS pixels wide; `GalleryImage::preview` is sharp at that width and scale 1.
+const GALLERY_WIDTH: u32 = 530;
+/// Device pixels `GalleryImage::large` is sharp up to (530 px at 125–150 %).
+const GALLERY_LARGE: u32 = 800;
 
 /// Runs background work (refreshes of stale pages, prefetching) off the caller's thread.
 pub trait Spawn: Send + Sync {
@@ -1485,13 +1489,14 @@ fn card(item: CatalogItem, nsfw: bool, registry: &mut Registry) -> Card {
 }
 
 fn gallery_image(image: &Image, registry: &mut Registry) -> Option<GalleryImage> {
+    let mut shown = |url: &str| register_gamebanana(registry, Kind::Gallery, url, Initiator::Auto);
+    let preview = shown(image.sharp_url(GALLERY_WIDTH, 1.0))?;
+    let large = shown(image.sharp_url(GALLERY_LARGE, 1.0))?;
+    let full = shown(&image.original_url)?;
     Some(GalleryImage {
-        preview: register_gamebanana(
-            registry,
-            Kind::Gallery,
-            image.thumbnail_url(530, 1.0),
-            Initiator::Auto,
-        )?,
+        preview,
+        large,
+        full,
         original: register_gamebanana(
             registry,
             Kind::Original,
