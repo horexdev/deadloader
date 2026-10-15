@@ -62,6 +62,24 @@ impl<F: Fetch> Client<F> {
         parse::parse_details(section, &body)
     }
 
+    /// What an update check needs about one submission: its current files and whether it is still shown.
+    pub fn file_list(&self, section: Section, id: u64) -> Result<ModFileList, Error> {
+        let body = self.get(
+            parse::file_list_endpoint(section),
+            &request::file_list_url(section, id),
+        )?;
+        parse::parse_file_list(section, &body)
+    }
+
+    /// One page of a submission's update posts, newest first.
+    pub fn updates(&self, section: Section, id: u64, page: u32) -> Result<UpdatePage, Error> {
+        let body = self.get(
+            parse::updates_endpoint(section),
+            &request::updates_url(section, id, page),
+        )?;
+        parse::parse_updates(section, &body)
+    }
+
     fn get(&self, endpoint: &'static str, url: &str) -> Result<Vec<u8>, Error> {
         self.fetch
             .get(url)
@@ -145,6 +163,52 @@ mod tests {
             "Seven"
         );
         assert_eq!(urls(&client), vec![request::details_url(Section::Sound, 7)]);
+    }
+
+    #[test]
+    fn file_list_and_updates_request_their_endpoints() {
+        let client = Canned::new(Ok(
+            br#"{"_idRow": 7, "_sName": "Seven", "_bIsWithheld": true}"#,
+        ));
+        let list = client.file_list(Section::Mod, 7).expect("list");
+        assert_eq!(list.availability, Availability::Withheld);
+        assert_eq!(urls(&client), vec![request::file_list_url(Section::Mod, 7)]);
+
+        let client = Canned::new(Ok(
+            br#"{"_aMetadata": {"_nRecordCount": 0, "_bIsComplete": true},
+            "_aRecords": []}"#,
+        ));
+        assert!(
+            client
+                .updates(Section::Mod, 7, 2)
+                .expect("page")
+                .posts
+                .is_empty()
+        );
+        assert_eq!(
+            urls(&client),
+            vec![request::updates_url(Section::Mod, 7, 2)]
+        );
+    }
+
+    #[test]
+    fn a_deleted_mod_is_not_found_for_update_checks() {
+        // Recorded: `Mod/999999999/Updates` answers 404 with GameBanana's error document.
+        let gone = || {
+            Canned::new(Err(FetchError::Status {
+                status: 404,
+                body: br#"{"_sErrorCode": "NO_SUCH_RECORD", "_sErrorMessage": "This Mod doesn't exist"}"#
+                    .to_vec(),
+            }))
+        };
+        assert_eq!(
+            gone().updates(Section::Mod, 999_999_999, 1),
+            Err(Error::NotFound)
+        );
+        assert_eq!(
+            gone().file_list(Section::Mod, 999_999_999),
+            Err(Error::NotFound)
+        );
     }
 
     #[test]

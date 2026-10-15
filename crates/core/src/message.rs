@@ -13,13 +13,14 @@ use crate::place::PlaceError;
 use crate::profiles::ProfileError;
 use crate::remove::RemoveError;
 use crate::settings::SettingsError;
+use crate::updates::UpdateError;
 use deadloader_archive::{ArchiveError, LimitExceeded};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io;
 
 /// Ids of spec `04-messages`. `Internal` is a mistake of deadloader itself, never blamed on the user.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MessageId {
     E1,
     E2,
@@ -51,7 +52,7 @@ pub enum MessageId {
     Internal,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserMessage {
     pub id: MessageId,
     pub args: BTreeMap<String, String>,
@@ -207,6 +208,13 @@ impl ToUserMessage for RemoveError {
     }
 }
 
+impl ToUserMessage for UpdateError {
+    fn user_message(&self) -> UserMessage {
+        // D5 builds the mapping from the mod's own files; an invalid one is a mistake of deadloader.
+        internal(self)
+    }
+}
+
 impl ToUserMessage for ProfileError {
     fn user_message(&self) -> UserMessage {
         match self {
@@ -288,6 +296,7 @@ mod tests {
     use crate::profiles::ProfileError;
     use crate::remove::RemoveError;
     use crate::settings::SettingsError;
+    use crate::updates::UpdateError;
     use crate::vpk::VpkError;
     use deadloader_archive::{ArchiveError, LimitExceeded};
     use std::io;
@@ -306,6 +315,18 @@ mod tests {
             json,
             serde_json::json!({"id": "E12", "args": {"needed": "10", "drive": "D:"}})
         );
+    }
+
+    #[test]
+    fn a_message_reads_back_from_json() {
+        // Queued downloads keep their last error across restarts (downloads/queue.json).
+        let m = UserMessage::new(MessageId::E7).arg("reason", "checksum");
+        let json = serde_json::to_string(&m).expect("json");
+        assert_eq!(
+            serde_json::from_str::<UserMessage>(&json).expect("parse"),
+            m
+        );
+        assert!(serde_json::from_str::<UserMessage>(r#"{"id":"E99","args":{}}"#).is_err());
     }
 
     #[test]
@@ -530,5 +551,10 @@ mod tests {
                 .id,
             MessageId::Internal
         );
+        // D5 only offers files of the mod; a mapping it can't apply is a bug of the dialog, not the user's.
+        let wrong = UpdateError::NotInMod("x".into());
+        let m = wrong.user_message();
+        assert_eq!(m.id, MessageId::Internal);
+        assert_eq!(arg(&m, "detail"), Some(wrong.to_string().as_str()));
     }
 }

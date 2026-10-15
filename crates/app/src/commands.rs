@@ -136,6 +136,79 @@ pub async fn update_settings(backend: Shared<'_>, settings: Settings) -> Reply<S
     blocking(backend, move |b| b.update_settings(settings)).await
 }
 
+/// The texts of a system file dialog, translated by the UI (no user-visible English in Rust).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DialogText {
+    pub title: String,
+    /// The name of the file-type filter, e.g. "Mod files".
+    pub filter: String,
+}
+
+/// Add from disk (134): the system dialog for `.vpk` / archives, then the import of each chosen file.
+#[tauri::command]
+pub async fn add_from_disk(
+    window: tauri::WebviewWindow,
+    backend: Shared<'_>,
+    text: DialogText,
+) -> Reply<Vec<Result<ImportOutcome, UserMessage>>> {
+    blocking(backend, move |b| {
+        let picked = rfd::FileDialog::new()
+            .set_parent(&window)
+            .set_title(&text.title)
+            .add_filter(&text.filter, &["vpk", "zip", "7z", "rar"])
+            .pick_files();
+        match picked {
+            Some(paths) => b.import_paths(&paths),
+            None => Ok(Vec::new()),
+        }
+    })
+    .await
+}
+
+/// Profiles → Export: the system save dialog, proposing `<name>.json`. `false` if the user cancelled.
+#[tauri::command]
+pub async fn export_profile_dialog(
+    window: tauri::WebviewWindow,
+    backend: Shared<'_>,
+    name: String,
+    text: DialogText,
+) -> Reply<bool> {
+    blocking(backend, move |b| {
+        let chosen = rfd::FileDialog::new()
+            .set_parent(&window)
+            .set_title(&text.title)
+            .set_file_name(format!("{name}.json"))
+            .add_filter(&text.filter, &["json"])
+            .save_file();
+        match chosen {
+            Some(path) => b.export_profile_to(&name, &path).map(|()| true),
+            None => Ok(false),
+        }
+    })
+    .await
+}
+
+/// Profiles → Import: the system open dialog for a `.json`. `None` if the user cancelled.
+#[tauri::command]
+pub async fn import_profile_dialog(
+    window: tauri::WebviewWindow,
+    backend: Shared<'_>,
+    text: DialogText,
+) -> Reply<Option<ProfileImported>> {
+    blocking(backend, move |b| {
+        let chosen = rfd::FileDialog::new()
+            .set_parent(&window)
+            .set_title(&text.title)
+            .add_filter(&text.filter, &["json"])
+            .pick_file();
+        match chosen {
+            Some(path) => b.import_profile_from(&path).map(Some),
+            None => Ok(None),
+        }
+    })
+    .await
+}
+
 /// Deadlock on this PC, found through Steam.
 pub struct SteamGame;
 

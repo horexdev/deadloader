@@ -68,6 +68,7 @@ pub struct Request {
     initiator: Initiator,
     range: Option<ByteRange>,
     headers: Vec<(String, String)>,
+    consented_image_host: Option<Host>,
 }
 
 impl Request {
@@ -78,7 +79,17 @@ impl Request {
             initiator,
             range: None,
             headers: Vec::new(),
+            consented_image_host: None,
         }
+    }
+
+    /// The user consented to load this one description image from `host` without allowing the host for good
+    /// (dialog D2 with "always allow" unchecked, decision 122). The host is allowed for this request only, only for
+    /// [`Purpose::DescriptionImage`], and only that exact host: a redirect elsewhere is still checked against the
+    /// allowlist. It is logged as `user-image`.
+    pub fn consented_image_host(mut self, host: Host) -> Self {
+        self.consented_image_host = Some(host);
+        self
     }
 
     pub fn range(mut self, range: ByteRange) -> Self {
@@ -387,7 +398,17 @@ impl Client {
                 .allowlist
                 .read()
                 .unwrap_or_else(PoisonError::into_inner)
-                .check(url.host(), request.purpose);
+                .check(url.host(), request.purpose)
+                .or_else(|denied| match &request.consented_image_host {
+                    Some(host)
+                        if denied == Denied::NotListed
+                            && request.purpose == Purpose::DescriptionImage
+                            && host == url.host() =>
+                    {
+                        Ok(HostSource::UserImage)
+                    }
+                    _ => Err(denied),
+                });
             let source = match checked {
                 Ok(source) => source,
                 Err(denied) => {
@@ -1173,6 +1194,49 @@ mod tests {
             h.log.records()[0].outcome,
             HopOutcome::Blocked(BlockReason::NotHttps)
         );
+    }
+
+    #[test]
+    fn a_host_consented_for_one_image_is_allowed_for_that_request_only() {
+        let img = "https://i.imgur.com/a.png";
+        let other = "https://cdn.example.org/b.png";
+        let h = harness(fake().on(img, 200, &[], b"png").redirect(img, other));
+        let once = || {
+            Request::new(Purpose::DescriptionImage, Initiator::User, img)
+                .consented_image_host(host("i.imgur.com"))
+        };
+
+        let response = h.client.get(&once()).expect("consented for this request");
+        assert_eq!(response.host_source, HostSource::UserImage);
+        assert_eq!(h.log.records()[0].host_source, Some(HostSource::UserImage));
+
+        // The same image without the consent, and the consent on a request of another purpose, are refused.
+        let plain = Request::new(Purpose::DescriptionImage, Initiator::User, img);
+        assert!(matches!(
+            h.client.get(&plain),
+            Err(NetError::HostNotAllowed {
+                denied: Denied::NotListed,
+                ..
+            })
+        ));
+        let download = download(img).consented_image_host(host("i.imgur.com"));
+        assert!(matches!(
+            h.client.get(&download),
+            Err(NetError::HostNotAllowed {
+                purpose: Purpose::Download,
+                ..
+            })
+        ));
+        assert_eq!(h.transport.urls(), [img]);
+
+        // The consent covers its host, not a redirect target elsewhere.
+        let err = h.client.get(&once()).expect_err("redirect to another host");
+        assert!(
+            matches!(&err, NetError::HostNotAllowed { host: blocked, .. } if blocked.as_str() == "cdn.example.org"),
+            "{err:?}"
+        );
+        // The client's allowlist is unchanged.
+        assert_eq!(h.client.allowlist().image_hosts().count(), 0);
     }
 
     #[test]

@@ -310,6 +310,7 @@ mod tests {
             len,
             sha256: [0; 32],
             version: None,
+            successor: None,
         }
     }
 

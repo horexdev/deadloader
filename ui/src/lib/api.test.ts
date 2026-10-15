@@ -31,6 +31,10 @@ describe('api', () => {
     await api.importProfile('{}');
     await api.settings();
     await api.updateSettings({ general: { zoom_percent: 110 } });
+    const text = { title: 'Add mods', filter: 'Mod files' };
+    await api.addFromDisk(text);
+    await api.exportProfileDialog('B', text);
+    await api.importProfileDialog(text);
     expect(invoke.mock.calls).toEqual([
       ['library', {}],
       ['set_enabled', { modId: 'local-1', enabled: false }],
@@ -51,6 +55,9 @@ describe('api', () => {
       ['import_profile', { text: '{}' }],
       ['settings', {}],
       ['update_settings', { settings: { general: { zoom_percent: 110 } } }],
+      ['add_from_disk', { text }],
+      ['export_profile_dialog', { name: 'B', text }],
+      ['import_profile_dialog', { text }],
     ]);
   });
 

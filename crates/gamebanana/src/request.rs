@@ -5,6 +5,7 @@
 //! is fixed, which keeps URLs stable in the network log and lets tests compare them as plain strings.
 
 use crate::types::Section;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// GameBanana's id for Deadlock.
@@ -21,7 +22,8 @@ pub const SEARCH_MAX_BYTES: usize = 100;
 const BASE: &str = "https://gamebanana.com/apiv11";
 
 /// Catalog orderings GameBanana supports. There is no alphabetical order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Sort {
     Newest,
     LatestUpdated,
@@ -200,6 +202,31 @@ pub fn details_url(section: Section, id: u64) -> String {
     url(&format!("{}/{id}/ProfilePage", model(section)), &[])
 }
 
+/// Update posts per page. A check needs the few newest posts, so one page is normally enough.
+pub const UPDATES_PAGE_SIZE: u32 = 10;
+
+/// The properties an update check reads; GameBanana sends only these, about a quarter of `ProfilePage`.
+const FILE_LIST_PROPERTIES: &str =
+    "_idRow,_sName,_sVersion,_tsDateUpdated,_aFiles,_bIsWithheld,_bIsTrashed,_bIsPrivate";
+
+/// `section/{id}?_csvProperties=…`: a submission's current files and whether it is still shown.
+pub fn file_list_url(section: Section, id: u64) -> String {
+    url(
+        &format!("{}/{id}", model(section)),
+        &[("_csvProperties", FILE_LIST_PROPERTIES)],
+    )
+}
+
+/// `section/{id}/Updates`: a submission's update posts, newest first; `page` is 1-based (0 means 1).
+pub fn updates_url(section: Section, id: u64, page: u32) -> String {
+    let page = page.max(1).to_string();
+    let per_page = UPDATES_PAGE_SIZE.to_string();
+    url(
+        &format!("{}/{id}/Updates", model(section)),
+        &[("_nPage", page.as_str()), ("_nPerpage", per_page.as_str())],
+    )
+}
+
 /// Percent-encodes a query key or value: RFC 3986 unreserved characters stay, every other UTF-8 byte becomes `%XX`.
 /// Small enough that a URL crate is not worth its size here.
 pub fn encode_component(text: &str) -> String {
@@ -363,6 +390,30 @@ mod tests {
         assert_eq!(
             details_url(Section::Sound, 94_152),
             "https://gamebanana.com/apiv11/Sound/94152/ProfilePage"
+        );
+    }
+
+    #[test]
+    fn file_list_urls_ask_only_for_what_an_update_check_needs() {
+        assert_eq!(
+            file_list_url(Section::Mod, 638_388),
+            "https://gamebanana.com/apiv11/Mod/638388?_csvProperties=_idRow%2C_sName%2C_sVersion\
+             %2C_tsDateUpdated%2C_aFiles%2C_bIsWithheld%2C_bIsTrashed%2C_bIsPrivate"
+        );
+        assert!(
+            file_list_url(Section::Sound, 7).starts_with("https://gamebanana.com/apiv11/Sound/7?")
+        );
+    }
+
+    #[test]
+    fn updates_urls() {
+        assert_eq!(
+            updates_url(Section::Mod, 638_388, 1),
+            "https://gamebanana.com/apiv11/Mod/638388/Updates?_nPage=1&_nPerpage=10"
+        );
+        assert_eq!(
+            updates_url(Section::Sound, 7, 0),
+            "https://gamebanana.com/apiv11/Sound/7/Updates?_nPage=1&_nPerpage=10"
         );
     }
 

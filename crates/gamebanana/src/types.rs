@@ -1,15 +1,20 @@
 //! deadloader's own view of GameBanana content. Nothing here mirrors GameBanana's field names, so the rest of the
 //! app keeps compiling unchanged when the API does. Timestamps are Unix seconds, as GameBanana sends them.
+//!
+//! The types are serialisable so the catalog can keep them in its on-disk cache; that JSON is ours, not GameBanana's.
+
+use serde::{Deserialize, Serialize};
 
 /// The GameBanana sections the catalog shows (decision 131).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Section {
     Mod,
     Sound,
 }
 
 /// One page of a catalog listing or a search.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CatalogPage {
     pub items: Vec<CatalogItem>,
     /// Records matching the query across all pages, as GameBanana counts them.
@@ -20,7 +25,7 @@ pub struct CatalogPage {
 
 /// What a catalog card needs. Content ratings are only known as "has some" here; the specific ones come with
 /// [`ModDetails`], so a hidden mod's thumbnail never has to be fetched to decide (decision 27).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CatalogItem {
     pub id: u64,
     pub section: Section,
@@ -46,7 +51,8 @@ pub struct CatalogItem {
 }
 
 /// How GameBanana suggests showing a submission before the viewer opts in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Visibility {
     Show,
     /// Show behind a warning (blurred).
@@ -55,14 +61,14 @@ pub enum Visibility {
 }
 
 /// A category as other records point to it. The id can be missing when GameBanana only gives a name.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CategoryRef {
     pub id: Option<u64>,
     pub name: String,
 }
 
 /// An entry of a category listing (root categories, or heroes under Skins).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Category {
     pub id: u64,
     pub name: String,
@@ -71,7 +77,7 @@ pub struct Category {
 }
 
 /// A preview image with the resized variants GameBanana has for it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Image {
     /// The uploaded file, full size. Large; fetched only on demand.
     pub original_url: String,
@@ -80,7 +86,7 @@ pub struct Image {
     pub variants: Vec<ImageVariant>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageVariant {
     pub size: ImageSize,
     pub url: String,
@@ -89,7 +95,8 @@ pub struct ImageVariant {
 }
 
 /// GameBanana's resize steps, named by their width in pixels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ImageSize {
     W100,
     W220,
@@ -125,7 +132,7 @@ impl Image {
 }
 
 /// Everything the mod page shows. Used for sounds too.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModDetails {
     pub id: u64,
     pub section: Section,
@@ -158,22 +165,84 @@ pub struct ModDetails {
     pub files: Vec<RemoteFile>,
     /// Superseded files, kept by GameBanana for older versions.
     pub archived_files: Vec<RemoteFile>,
+    pub availability: Availability,
+}
+
+/// Whether GameBanana still shows a submission to everyone. A submission that is gone entirely is
+/// [`crate::Error::NotFound`] instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Availability {
+    Public,
+    /// Hidden by GameBanana's moderators, usually until the author fixes something.
+    Withheld,
+    /// Deleted into GameBanana's trash by the author or a moderator.
+    Trashed,
+    /// Hidden by the author.
+    Private,
+}
+
+/// The cheap answer an update check needs: a submission's current files and state, without the description,
+/// gallery and credits of [`ModDetails`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModFileList {
+    pub id: u64,
+    pub section: Section,
+    pub name: String,
+    pub version: Option<String>,
+    /// Moves with every update post, but also for other edits, so it is not an update signal by itself.
+    pub date_updated: Option<i64>,
+    pub availability: Availability,
+    pub files: Vec<RemoteFile>,
+}
+
+/// One page of a submission's update posts, newest first.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpdatePage {
+    /// Trashed and private posts are left out.
+    pub posts: Vec<UpdatePost>,
+    /// Posts across all pages, as GameBanana counts them.
+    pub total: u64,
+    pub is_complete: bool,
+}
+
+/// An author's update post: what changed and which files came with it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdatePost {
+    pub id: u64,
+    pub title: String,
+    /// Free text chosen by the author (`v5.3`, `2.0`, …); not comparable in general.
+    pub version: Option<String>,
+    pub date_added: Option<i64>,
+    pub changelog: Vec<ChangeEntry>,
+    /// Ids of the files uploaded with this post. Files are re-uploaded under new ids, so older posts usually list
+    /// ids that no longer exist.
+    pub file_ids: Vec<u64>,
+    /// Untrusted HTML exactly as received; empty when the post has no text.
+    pub text_html: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangeEntry {
+    /// The author's label, e.g. `Bugfix` or `Addition`; free text.
+    pub category: Option<String>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreditGroup {
     pub name: String,
     pub authors: Vec<Credit>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Credit {
     pub name: String,
     pub role: Option<String>,
 }
 
 /// A specific content rating. Unknown ones keep GameBanana's code and English label so nothing is silently lost.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ContentRating {
     SexualThemes,
     SexualContent,
@@ -183,14 +252,14 @@ pub enum ContentRating {
     Other { code: String, label: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AlternateSource {
     pub url: String,
     pub description: Option<String>,
 }
 
 /// A downloadable file of a submission.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteFile {
     pub id: u64,
     pub file_name: String,
@@ -206,7 +275,8 @@ pub struct RemoteFile {
 }
 
 /// GameBanana's own antivirus scan of a file, shown next to it (decision 131).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Antivirus {
     /// The scan finished and found nothing.
     Clean,
