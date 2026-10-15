@@ -207,6 +207,8 @@ export function libraryMod(i: number, enabled: boolean, local = false): ModView 
     variant_groups: [{ files: files.map((f) => f.id), active: files[0]?.id ?? null }],
     add_ons: [],
     bytes: files.reduce((sum, f) => sum + f.len, 0),
+    pending: false,
+    in_game: enabled ? { copied: false, bytes: files[0]?.len ?? 0 } : null,
   };
 }
 

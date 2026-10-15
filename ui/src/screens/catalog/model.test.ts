@@ -13,7 +13,7 @@ import {
 } from './model';
 
 function library(...mods: ModView[]): LibraryView {
-  return { selected_profile: 'Default', applied_profile: 'Default', pending: false, mods, conflicts: [] };
+  return { selected_profile: 'Default', applied_profile: 'Default', pending: false, pending_count: 0, mods, conflicts: [] };
 }
 
 describe('the catalog model', () => {

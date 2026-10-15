@@ -138,6 +138,8 @@ pub enum Fault {
     CutAfter(usize),
     /// The body waits at this many bytes until the gate opens.
     HoldAt(usize, Arc<Gate>),
+    /// The connection takes this long to close once the body is dropped.
+    CloseSlowly(Duration),
     /// The whole response is this status, with no body.
     Status(u16),
     /// A redirect to this address.
@@ -348,6 +350,9 @@ impl Read for Body {
 
 impl Drop for Body {
     fn drop(&mut self) {
+        if let Some(Fault::CloseSlowly(after)) = &self.fault {
+            std::thread::sleep(*after);
+        }
         self.open.fetch_sub(1, Ordering::SeqCst);
     }
 }

@@ -42,6 +42,10 @@ export interface ModView {
   /** [file id, enabled] for files that overlap nothing else in the mod. */
   add_ons: [string, boolean][];
   bytes: number;
+  /** Some change of this mod waits to be applied (S4's "Pending" badge). */
+  pending: boolean;
+  /** Its files in the game folder: hard links take no extra space, copies do (124). `null`: not in the game. */
+  in_game: { copied: boolean; bytes: number } | null;
 }
 
 export interface ConflictView {
@@ -56,6 +60,8 @@ export interface LibraryView {
   selected_profile: string;
   applied_profile: string | null;
   pending: boolean;
+  /** S9's count: 1 for a profile switch, else one per mod and aspect (the sidebar). */
+  pending_count: number;
   mods: ModView[];
   conflicts: ConflictView[];
 }
@@ -110,6 +116,43 @@ export interface Missing {
 export interface ProfileImported {
   name: string;
   missing: Missing[];
+  /** How many mods the file lists. */
+  listed: number;
+  /** The file's name, when it came from a file. */
+  file: string | null;
+}
+
+/** A profile as the Profiles screen lists it (S5). */
+export interface ProfileOverview {
+  name: string;
+  /** Its game folder; `null` until one is chosen or applied (then the first installation is used). */
+  game_root: string | null;
+  /** Enabled mods. */
+  mods: number;
+  mod_names: string[];
+  /** Its files are in its game folder now (153). */
+  applied: boolean;
+  last_applied_unix_ms: number | null;
+}
+
+export interface ProfilesView {
+  selected: string;
+  /** Steam's installations, then the ones added by hand. */
+  installations: string[];
+  profiles: ProfileOverview[];
+}
+
+/** A missing mod of an imported profile to download (D9). */
+export interface MissingDownload {
+  section: Section;
+  mod_id: number;
+  name: string;
+  file_ids: number[];
+}
+
+export interface MissingStarted {
+  tasks: TaskId[];
+  failed: { name: string; message: UserMessage }[];
 }
 
 /** settings.json as the core writes it; sections are typed where screens use them. */
@@ -137,7 +180,8 @@ export type Notice =
   | { kind: 'recovered'; undone: boolean }
   | { kind: 'swept'; files: number }
   | { kind: 'broken_profiles'; names: string[] }
-  | { kind: 'damaged_files'; files: string[] };
+  | { kind: 'damaged_files'; files: string[] }
+  | { kind: 'foreign'; files: number };
 
 /** A push from the core (crates/app/src/events.rs `UiEvent`). */
 export type UiEvent =
@@ -613,6 +657,103 @@ export const links = {
   rename: (modId: string, name: string) => call<LibraryView>('mod_rename', { modId, name }),
 };
 
+// ---- pending changes, foreign files and gameinfo.gi (crates/core/src/pending.rs, session.rs; app backend.rs)
+
+export type Change =
+  | { kind: 'enable' }
+  | { kind: 'disable' }
+  /** Mod ids: it is now right above `above` (at the bottom: right below `below`). */
+  | { kind: 'order'; above: string | null; below: string | null }
+  /** Library file ids leaving the game and coming in. */
+  | { kind: 'variant'; from: string[]; to: string[] }
+  | { kind: 'version'; from: string; to: string };
+
+export type PendingChange = { mod_id: string; name: string } & Change;
+
+/** The part of a mod a change is about; what "Undo this change" takes back. */
+export type Aspect = 'enabled' | 'files' | 'order';
+
+export interface ProfileSwitch {
+  /** The profile in the game folder now; `null` when none was applied there. */
+  from: string | null;
+  to: string;
+  turned_on: number;
+  turned_off: number;
+}
+
+export interface FolderSummary {
+  added: number;
+  removed: number;
+  renumbered: number;
+  addons: string | null;
+}
+
+export interface Pending {
+  switch: ProfileSwitch | null;
+  changes: PendingChange[];
+  folder: FolderSummary;
+  /** What the last automatic apply after the game closed put in; Undo until the next change (143, 147). */
+  applied_after_game: { changes: PendingChange[]; at_unix_ms: number } | null;
+  /** The pending changes are the Undo of the apply at this time, waiting for the game to close. */
+  undoing: number | null;
+}
+
+export interface ForeignItem {
+  name: string;
+  kind: 'mod_file' | 'replaced_ours' | 'other_file' | 'folder';
+  slot: number | null;
+  bytes: number;
+  /** Folders: how many files they hold. */
+  files: number | null;
+  modified_unix_ms: number | null;
+  origin: 'deadlock_mod_manager' | null;
+  /** A readable mod file: its entries and the hero folder (the game's internal name). */
+  vpk: { entries: number; hero: string | null } | null;
+  takeable: boolean;
+  left: boolean;
+}
+
+export interface ForeignReport {
+  /** `null`: Deadlock wasn't found. */
+  root: string | null;
+  items: ForeignItem[];
+}
+
+export interface DiffLine {
+  text: string;
+  marked: boolean;
+}
+
+export interface GameinfoStatus {
+  state: 'ours' | 'vanilla' | 'foreign' | 'missing';
+  path: string | null;
+  diff: { expected: DiffLine[]; found: DiffLine[] } | null;
+}
+
+/** Where "Open file" / "Open folder" point: places the core knows, never a raw path. */
+export type Place = { kind: 'gameinfo' } | { kind: 'foreign'; name: string } | { kind: 'mod_files'; mod_id: string };
+
+export const library = {
+  /** S9. */
+  pending: () => call<Pending>('pending'),
+  /** S9 "Undo this change". */
+  revert: (modId: string, aspect: Aspect) => call<Changed>('pending_revert', { modId, aspect }),
+  /** S9 "Discard all" / "Keep <applied profile>". */
+  discard: () => call<Changed>('pending_discard'),
+  /** N12 / S9 "Undo all" after an automatic apply. */
+  undoApplied: () => call<Changed>('pending_undo_applied'),
+  foreign: () => call<ForeignReport>('foreign_files'),
+  leaveForeign: (name: string) => call<ForeignReport>('foreign_leave', { name }),
+  /** D11. */
+  takeForeign: (name: string, modName: string) =>
+    call<{ mod_id: string; changed: Changed }>('foreign_take', { name, modName }),
+  /** D10; `fix` ("Check again") adds our line to an original file. */
+  gameinfo: (fix: boolean) => call<GameinfoStatus>('gameinfo_status', { fix }),
+  verifyGameFiles: () => call<null>('verify_game_files'),
+  /** Notepad (`asFile`) or File Explorer with the item selected. */
+  show: (place: Place, asFile: boolean) => call<null>('show_place', { place, asFile }),
+};
+
 // ---- the window frame and the sidebar (crates/app/src/commands/shell.rs)
 
 export interface ApplyPreview {
@@ -691,6 +832,11 @@ export const api = {
   confirmAge: () => call<Settings>('confirm_age'),
   /** D1's Open (31): the page in the user's browser; only https pages are opened. */
   openLink: (url: string) => call<null>('open_link', { url }),
+  profilesOverview: () => call<ProfilesView>('profiles_overview'),
+  setProfileInstallation: (name: string, root: string) =>
+    call<ProfilesView>('set_profile_installation', { name, root }),
+  /** "Download missing" in D9. */
+  downloadMissing: (mods: MissingDownload[]) => call<MissingStarted>('profile_download_missing', { mods }),
 };
 
 // ---- Activity: the logs (crates/core/src/log.rs, activity.rs; crates/app/src/commands/activity.rs)
@@ -935,7 +1081,7 @@ export interface SetupCheck {
 }
 
 /** What "Open folder" shows. */
-export type Place =
+export type FolderPlace =
   | { place: 'data' }
   | { place: 'logs' }
   | { place: 'cache' }
@@ -957,7 +1103,7 @@ export const maintenance = {
   gameFolderDialog: (text: DialogText, select: boolean) =>
     call<string | null>('game_folder_dialog', { text, select }),
   removeInstallation: (gameRoot: string) => call<Settings>('installation_remove', { gameRoot }),
-  openFolder: (place: Place) => call<null>('open_folder', { place }),
+  openFolder: (place: FolderPlace) => call<null>('open_folder', { place }),
   about: () => call<About>('about'),
   rollbackPreview: () => call<RollbackPreview>('rollback_preview'),
   rollback: (removeForeign: boolean) => call<RolledBack>('rollback', { removeForeign }),

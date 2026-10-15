@@ -108,6 +108,8 @@ export function variantMod(): ModView {
     variant_groups: [{ files: files.map((f) => f.id), active: null }],
     add_ons: [],
     bytes: files.reduce((sum, f) => sum + f.len, 0),
+    pending: false,
+    in_game: null,
   };
 }
 

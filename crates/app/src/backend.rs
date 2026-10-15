@@ -36,6 +36,115 @@ pub trait Game: Send + Sync {
             })
             .collect()
     }
+
+    /// Hands a request to Windows: Steam's check of the game files, or a file shown in Explorer or Notepad.
+    fn shell(&self, request: &ShellRequest) -> std::io::Result<()>;
+}
+
+/// What deadloader asks Windows to show. Paths are always ones the core chose.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShellRequest {
+    /// `steam://validate/1422450` (D10, decision 132).
+    VerifyGameFiles,
+    /// File Explorer with this item selected.
+    Reveal(PathBuf),
+    /// Notepad with this file (`gameinfo.gi` has no program of its own).
+    Notepad(PathBuf),
+}
+
+impl ShellRequest {
+    /// The program and its command line, for the log (ADR 0009: external programs are logged).
+    pub fn describe(&self) -> (String, String) {
+        match self {
+            Self::VerifyGameFiles => ("steam".to_owned(), "steam://validate/1422450".to_owned()),
+            Self::Reveal(p) => (
+                "explorer.exe".to_owned(),
+                format!("/select,\"{}\"", p.display()),
+            ),
+            Self::Notepad(p) => ("notepad.exe".to_owned(), format!("\"{}\"", p.display())),
+        }
+    }
+}
+
+/// Where "Open file" / "Open folder" point: places the core knows, never a path from the UI.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Place {
+    /// The game's `gameinfo.gi` (D10).
+    Gameinfo,
+    /// A foreign item of the game's `addons` folder, by name (F9).
+    Foreign { name: String },
+    /// A library mod's files (mod details).
+    ModFiles { mod_id: String },
+}
+
+/// S9's content: the pending changes plus what the last automatic apply did, while it can be undone (143, 147).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Pending {
+    #[serde(flatten)]
+    pub view: deadloader_core::session::PendingView,
+    /// What went into the game folder when the game was last closed; Undo is offered until the next change.
+    pub applied_after_game: Option<AfterGameChanges>,
+    /// The pending changes are the Undo of the apply at this time, waiting for the game to close.
+    pub undoing: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AfterGameChanges {
+    pub changes: Vec<deadloader_core::pending::PendingChange>,
+    pub at_unix_ms: i64,
+}
+
+/// The game's `addons` folder, foreign items only (F9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ForeignReport {
+    /// The game folder looked at; `None`: Deadlock wasn't found.
+    pub root: Option<String>,
+    pub items: Vec<deadloader_core::session::ForeignView>,
+}
+
+/// D11's result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Taken {
+    pub mod_id: String,
+    pub changed: Changed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameinfoState {
+    /// Our line is in: mods load.
+    Ours,
+    /// The original: our line goes in at the next apply.
+    Vanilla,
+    /// Changed by another program (D10, E3).
+    Foreign,
+    /// No game folder or no file.
+    Missing,
+}
+
+/// D10's content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GameinfoStatus {
+    pub state: GameinfoState,
+    pub path: Option<String>,
+    /// Only for [`GameinfoState::Foreign`].
+    pub diff: Option<deadloader_core::gameinfo::Diff>,
+}
+
+/// What Undo after an automatic apply goes back to.
+struct AutoApplied {
+    restore: deadloader_core::library::Profile,
+    changes: Vec<deadloader_core::pending::PendingChange>,
+    at_unix_ms: i64,
+}
+
+fn now_unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_millis()).ok())
+        .unwrap_or(0)
 }
 
 /// The recycle bin as a way to delete library files (decision 42).
@@ -59,6 +168,12 @@ pub struct Backend {
     edits_waiting: AtomicUsize,
     /// Told about every saved settings change (the network client, the catalog).
     settings_listeners: Mutex<Vec<SettingsListener>>,
+    /// The last automatic apply after the game closed, until the next change (147).
+    auto: Mutex<Option<AutoApplied>>,
+    /// The pending changes undo the automatic apply of this time.
+    undoing: Mutex<Option<i64>>,
+    /// N6 was looked for (once per start).
+    foreign_told: std::sync::atomic::AtomicBool,
 }
 
 pub type SettingsListener = Box<dyn Fn(&Settings) + Send + Sync>;
@@ -114,6 +229,15 @@ pub struct AfterGame {
     pub library: LibraryView,
 }
 
+/// The Profiles screen (S5): every profile, which one is selected, and the game folders a profile can go into.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfilesView {
+    pub selected: String,
+    /// Steam's installations, then the ones added by hand in Settings.
+    pub installations: Vec<String>,
+    pub profiles: Vec<deadloader_core::session::ProfileOverview>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ApplyResult {
     pub library: LibraryView,
@@ -133,6 +257,9 @@ impl Backend {
                 notices: Mutex::new(opened.notices.iter().map(Notice::from).collect()),
                 edits_waiting: AtomicUsize::new(0),
                 settings_listeners: Mutex::new(Vec::new()),
+                auto: Mutex::new(None),
+                undoing: Mutex::new(None),
+                foreign_told: std::sync::atomic::AtomicBool::new(false),
             },
             Err(e) => Self {
                 session: Mutex::new(None),
@@ -142,18 +269,25 @@ impl Backend {
                 notices: Mutex::new(Vec::new()),
                 edits_waiting: AtomicUsize::new(0),
                 settings_listeners: Mutex::new(Vec::new()),
+                auto: Mutex::new(None),
+                undoing: Mutex::new(None),
+                foreign_told: std::sync::atomic::AtomicBool::new(false),
             },
         }
     }
 
-    /// What the start found; empty after the first call.
+    /// What the start found, with N6 for foreign items in the game's mod folder; empty after the first call.
     pub fn take_notices(&self) -> Vec<Notice> {
-        std::mem::take(
-            &mut *self
-                .notices
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        )
+        let foreign = if self.foreign_told.swap(true, Ordering::Relaxed) {
+            0
+        } else {
+            self.foreign_to_report()
+        };
+        let mut notices = std::mem::take(&mut *lock(&self.notices));
+        if foreign > 0 {
+            notices.push(Notice::Foreign { files: foreign });
+        }
+        notices
     }
 
     pub fn game_running(&self) -> bool {
@@ -165,11 +299,199 @@ impl Backend {
     pub fn game_closed(&self) -> Result<Option<AfterGame>, UserMessage> {
         // Read before applying: any apply starts the count again.
         let changes = self.edits_waiting.load(Ordering::Relaxed);
+        let fallback = self.game.installations().into_iter().next();
+        let (restore, items) = self.with(|s| {
+            Ok((
+                s.profile_matching_game(fallback.as_deref()),
+                s.pending_view(fallback.as_deref()).changes,
+            ))
+        })?;
         let changed = self.follow_up()?;
+        if changed.applied {
+            *lock(&self.undoing) = None;
+            *lock(&self.auto) = restore
+                .filter(|_| !items.is_empty())
+                .map(|restore| AutoApplied {
+                    restore,
+                    changes: items,
+                    at_unix_ms: now_unix_ms(),
+                });
+        }
         Ok(changed.applied.then_some(AfterGame {
             changes,
             library: changed.library,
         }))
+    }
+
+    /// S9: the pending changes, and the last automatic apply while it can be undone.
+    pub fn pending(&self) -> Result<Pending, UserMessage> {
+        let fallback = self.game.installations().into_iter().next();
+        let view = self.with(|s| Ok(s.pending_view(fallback.as_deref())))?;
+        Ok(Pending {
+            view,
+            applied_after_game: lock(&self.auto).as_ref().map(|a| AfterGameChanges {
+                changes: a.changes.clone(),
+                at_unix_ms: a.at_unix_ms,
+            }),
+            undoing: *lock(&self.undoing),
+        })
+    }
+
+    /// S9 "Undo this change".
+    pub fn revert_pending(
+        &self,
+        mod_id: &str,
+        aspect: deadloader_core::pending::Aspect,
+    ) -> Result<Changed, UserMessage> {
+        let fallback = self.game.installations().into_iter().next();
+        self.change(|s| s.revert_pending(mod_id, aspect, fallback.as_deref()))
+    }
+
+    /// S9 "Discard all" (or "Keep <applied profile>" for a switch).
+    pub fn discard_pending(&self) -> Result<Changed, UserMessage> {
+        let fallback = self.game.installations().into_iter().next();
+        self.change(|s| s.discard_pending(fallback.as_deref()))
+    }
+
+    /// Undo of the last automatic apply (N12, 147): an ordinary edit, so it waits while the game runs.
+    pub fn undo_applied(&self) -> Result<Changed, UserMessage> {
+        let auto = lock(&self.auto).take().ok_or_else(|| {
+            UserMessage::new(MessageId::Internal).arg("detail", "nothing to undo")
+        })?;
+        let changed = self.change(|s| s.restore_profile(&auto.restore))?;
+        if changed.waiting_for_game {
+            *lock(&self.undoing) = Some(auto.at_unix_ms);
+        }
+        Ok(changed)
+    }
+
+    /// The game folder the selected profile goes to, else the first one Steam knows.
+    fn root(&self) -> Result<Option<PathBuf>, UserMessage> {
+        let first = self.game.installations().into_iter().next();
+        Ok(self.with(|s| Ok(s.game_root()))?.or(first))
+    }
+
+    /// F9: the foreign items of the game's `addons` folder.
+    pub fn foreign_files(&self) -> Result<ForeignReport, UserMessage> {
+        let root = self.root()?;
+        let items = match &root {
+            Some(r) => self.with(|s| Ok(s.foreign(r)))?,
+            None => Vec::new(),
+        };
+        Ok(ForeignReport {
+            root: root.map(|r| r.display().to_string()),
+            items,
+        })
+    }
+
+    /// N6 at start: foreign items the user hasn't chosen to leave as they are.
+    pub fn foreign_to_report(&self) -> usize {
+        self.foreign_files()
+            .map(|r| r.items.iter().filter(|i| !i.left).count())
+            .unwrap_or(0)
+    }
+
+    /// F9 "Leave as is".
+    pub fn leave_foreign(&self, name: &str) -> Result<ForeignReport, UserMessage> {
+        let root = self
+            .root()?
+            .ok_or_else(|| UserMessage::new(MessageId::E2))?;
+        self.with(|s| Ok(s.leave_foreign(&root, name)?))?;
+        self.foreign_files()
+    }
+
+    /// D11 "Take under management"; then, like any edit, into the game at once when it can (138).
+    pub fn take_foreign(&self, name: &str, mod_name: &str) -> Result<Taken, UserMessage> {
+        let root = self
+            .root()?
+            .ok_or_else(|| UserMessage::new(MessageId::E2))?;
+        let running = self.game.running();
+        if running {
+            return Err(UserMessage::new(MessageId::E13));
+        }
+        let mod_id = self.with(|s| Ok(s.take_foreign(&root, name, mod_name, running)?))?;
+        let changed = self.follow_up_edit()?;
+        Ok(Taken { mod_id, changed })
+    }
+
+    /// D10: the state of `gameinfo.gi`; with `fix` ("Check again") our line goes into an original file.
+    pub fn gameinfo_status(&self, fix: bool) -> Result<GameinfoStatus, UserMessage> {
+        use deadloader_core::gameinfo::{State, diff, inspect};
+        let Some(root) = self.root()? else {
+            return Ok(GameinfoStatus {
+                state: GameinfoState::Missing,
+                path: None,
+                diff: None,
+            });
+        };
+        let path = deadloader_core::gamedir::gameinfo_path(&root);
+        let read = || std::fs::read_to_string(&path).ok();
+        let mut text = read();
+        if fix
+            && !self.game.running()
+            && text
+                .as_deref()
+                .is_some_and(|t| inspect(t) == State::Vanilla)
+        {
+            self.with(|s| Ok(s.fix_gameinfo(&root, false)?))?;
+            text = read();
+        }
+        let (state, diff) = match text.as_deref() {
+            None => (GameinfoState::Missing, None),
+            Some(t) => match inspect(t) {
+                State::Ours => (GameinfoState::Ours, None),
+                State::Vanilla => (GameinfoState::Vanilla, None),
+                State::Foreign(_) => (GameinfoState::Foreign, Some(diff(t))),
+            },
+        };
+        Ok(GameinfoStatus {
+            state,
+            path: Some(path.display().to_string()),
+            diff,
+        })
+    }
+
+    /// D10's primary action: Steam checks Deadlock's files and restores the originals.
+    pub fn verify_game_files(&self) -> Result<ShellRequest, UserMessage> {
+        self.shell(ShellRequest::VerifyGameFiles)
+    }
+
+    /// "Open file" (`as_file`, Notepad) or "Open folder" (Explorer with the item selected) for a place the core knows.
+    pub fn show(&self, place: &Place, as_file: bool) -> Result<ShellRequest, UserMessage> {
+        let unknown = |what: &str| UserMessage::new(MessageId::Internal).arg("detail", what);
+        let path = match place {
+            Place::Gameinfo => {
+                let root = self
+                    .root()?
+                    .ok_or_else(|| UserMessage::new(MessageId::E2))?;
+                deadloader_core::gamedir::gameinfo_path(&root)
+            }
+            Place::Foreign { name } => {
+                let report = self.foreign_files()?;
+                let root = report.root.ok_or_else(|| UserMessage::new(MessageId::E2))?;
+                let item = report
+                    .items
+                    .iter()
+                    .find(|i| &i.name == name)
+                    .ok_or_else(|| unknown("not a foreign item of the game's mod folder"))?;
+                deadloader_core::gamedir::addons_path(Path::new(&root)).join(&item.name)
+            }
+            Place::ModFiles { mod_id } => self
+                .with(|s| Ok(s.mod_file_path(mod_id)))?
+                .ok_or_else(|| unknown("the mod has no files in the library"))?,
+        };
+        let request = match (place, as_file) {
+            (Place::Gameinfo, true) => ShellRequest::Notepad(path),
+            _ => ShellRequest::Reveal(path),
+        };
+        self.shell(request)
+    }
+
+    fn shell(&self, request: ShellRequest) -> Result<ShellRequest, UserMessage> {
+        self.game.shell(&request).map_err(|e| {
+            UserMessage::new(MessageId::Internal).arg("detail", format!("Windows refused: {e}"))
+        })?;
+        Ok(request)
     }
 
     /// F10 + 171: link a mod imported from disk to its GameBanana page, matching its archives to the listed files.
@@ -232,6 +554,8 @@ impl Backend {
     }
 
     pub fn select_profile(&self, name: &str) -> Result<LibraryView, UserMessage> {
+        *lock(&self.auto) = None;
+        *lock(&self.undoing) = None;
         self.with(|s| {
             s.select_profile(name)?;
             Ok(s.library())
@@ -427,11 +751,61 @@ impl Backend {
         })
     }
 
+    /// Deletes a profile. An applied one takes its mods out of the game first, as its confirmation says (S5); that
+    /// waits while the game runs (E13).
     pub fn delete_profile(&self, name: &str) -> Result<Vec<String>, UserMessage> {
+        let running = self.game.running();
         self.with(|s| {
+            s.take_out_of_game(name, running)?;
             s.delete_profile(name)?;
             Ok(s.profile_names())
         })
+    }
+
+    /// The game folders a profile can use: Steam's, then the ones added by hand (decision 153).
+    fn known_installations(&self) -> Result<Vec<String>, UserMessage> {
+        let manual = self.with(|s| Ok(s.settings().game.manual_installations.clone()))?;
+        let mut known: Vec<String> = Vec::new();
+        for root in self
+            .game
+            .installations()
+            .iter()
+            .map(|r| r.display().to_string())
+            .chain(manual)
+        {
+            if !known.iter().any(|k| k.eq_ignore_ascii_case(&root)) {
+                known.push(root);
+            }
+        }
+        Ok(known)
+    }
+
+    /// The Profiles screen (S5).
+    pub fn profiles_view(&self) -> Result<ProfilesView, UserMessage> {
+        let installations = self.known_installations()?;
+        self.with(|s| {
+            Ok(ProfilesView {
+                selected: s.selected_profile().to_owned(),
+                installations: installations.clone(),
+                profiles: s.profiles_overview(),
+            })
+        })
+    }
+
+    /// "Change game installation" (153): one of the known game folders; nothing is applied.
+    pub fn set_profile_installation(
+        &self,
+        name: &str,
+        root: &str,
+    ) -> Result<ProfilesView, UserMessage> {
+        let known = self.known_installations()?;
+        let root = known
+            .iter()
+            .find(|k| k.eq_ignore_ascii_case(root))
+            .ok_or_else(|| UserMessage::new(MessageId::E2).arg("path", root))?
+            .clone();
+        self.with(|s| Ok(s.set_profile_game_root(name, Path::new(&root))?))?;
+        self.profiles_view()
     }
 
     pub fn export_profile(&self, name: &str) -> Result<String, UserMessage> {
@@ -460,14 +834,26 @@ impl Backend {
     }
 
     /// Profiles → Import from a file the user chose.
+    /// The result and its errors name the file (its name only), as D9 and the import error show it.
     pub fn import_profile_from(&self, path: &Path) -> Result<ProfileImported, UserMessage> {
+        let file = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let text = std::fs::read_to_string(path).map_err(|e| {
             UserMessage::new(MessageId::E17)
                 .arg("reason", "unreadable")
-                .arg("file", path.display())
+                .arg("file", &file)
                 .arg("detail", e)
         })?;
-        self.import_profile(&text)
+        match self.import_profile(&text) {
+            Ok(imported) => Ok(ProfileImported {
+                file: Some(file),
+                ..imported
+            }),
+            Err(e) if e.id == MessageId::E17 => Err(e.arg("file", &file)),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn settings(&self) -> Result<Settings, UserMessage> {
@@ -567,6 +953,7 @@ impl Backend {
                 .ok_or_else(|| UserMessage::new(MessageId::E2))?;
             let applied = s.apply(&root, running)?;
             self.edits_waiting.store(0, Ordering::Relaxed);
+            *lock(&self.undoing) = None;
             Ok(ApplyResult {
                 library: s.library(),
                 changed: applied.changed,
@@ -586,8 +973,11 @@ impl Backend {
         self.follow_up_edit()
     }
 
-    /// [`Self::follow_up`] after an edit: one that waits for the game counts for N12.
+    /// [`Self::follow_up`] after an edit: one that waits for the game counts for N12. Any edit ends the Undo of the
+    /// last automatic apply (147).
     fn follow_up_edit(&self) -> Result<Changed, UserMessage> {
+        *lock(&self.auto) = None;
+        *lock(&self.undoing) = None;
         let changed = self.follow_up()?;
         if changed.waiting_for_game {
             self.edits_waiting.fetch_add(1, Ordering::Relaxed);
@@ -820,6 +1210,11 @@ impl Backend {
     }
 }
 
+/// A lock that outlives a panic elsewhere (the data is plain state).
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn target(mod_id: &str, files: Option<Vec<String>>) -> Target {
     match files {
         Some(files) => Target::Files(files),
@@ -862,6 +1257,7 @@ pub(crate) mod tests {
         pub launched: Arc<std::sync::atomic::AtomicUsize>,
         pub installs: Vec<PathBuf>,
         pub recycled: Arc<std::sync::Mutex<Vec<PathBuf>>>,
+        pub shown: Arc<std::sync::Mutex<Vec<ShellRequest>>>,
     }
 
     impl Game for FakeGame {
@@ -878,6 +1274,10 @@ pub(crate) mod tests {
         fn move_to_recycle_bin(&self, path: &Path) -> std::io::Result<()> {
             self.recycled.lock().expect("lock").push(path.to_path_buf());
             deadloader_core::remove::Delete::delete(&deadloader_core::remove::Permanently, path)
+        }
+        fn shell(&self, request: &ShellRequest) -> std::io::Result<()> {
+            self.shown.lock().expect("lock").push(request.clone());
+            Ok(())
         }
     }
 
@@ -1047,6 +1447,7 @@ pub(crate) mod tests {
                 "conflicts",
                 "mods",
                 "pending",
+                "pending_count",
                 "selected_profile"
             ]
         );
@@ -1059,7 +1460,9 @@ pub(crate) mod tests {
                 "enabled",
                 "files",
                 "id",
+                "in_game",
                 "name",
+                "pending",
                 "source",
                 "variant_groups"
             ]
@@ -1523,6 +1926,270 @@ pub(crate) mod tests {
         );
     }
 
+    /// Two mods imported and applied to the game Steam knows.
+    fn two_applied(f: &Fixture, game: &FakeGame) -> (Backend, String, String) {
+        let backend = f.backend(game);
+        backend
+            .import_paths(&[
+                f.mod_file("haze.vpk", "models/haze/body.vmdl_c"),
+                f.mod_file("wraith.vpk", "models/wraith/body.vmdl_c"),
+            ])
+            .expect("imported");
+        let ids: Vec<String> = backend
+            .apply()
+            .expect("applied")
+            .library
+            .mods
+            .iter()
+            .map(|m| m.id.clone())
+            .collect();
+        (backend, ids[0].clone(), ids[1].clone())
+    }
+
+    fn with_game(f: &Fixture) -> FakeGame {
+        FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        }
+    }
+
+    #[test]
+    fn changes_made_while_the_game_runs_are_listed_and_can_be_taken_back() {
+        let f = Fixture::new("pending");
+        let game = with_game(&f);
+        let (backend, first, _) = two_applied(&f, &game);
+        game.running.store(true, Ordering::Relaxed);
+        let changed = backend.set_enabled(&first, false).expect("off");
+        assert_eq!(changed.library.pending_count, 1);
+        let pending = backend.pending().expect("pending");
+        assert_eq!(pending.view.changes.len(), 1);
+        assert!(pending.applied_after_game.is_none());
+        let changed = backend
+            .revert_pending(&first, deadloader_core::pending::Aspect::Enabled)
+            .expect("reverted");
+        assert_eq!(changed.library.pending_count, 0);
+        backend.set_enabled(&first, false).expect("off again");
+        let changed = backend.discard_pending().expect("discarded");
+        assert_eq!(changed.library.pending_count, 0);
+    }
+
+    #[test]
+    fn what_was_applied_after_the_game_closed_can_be_undone_until_the_next_change() {
+        let f = Fixture::new("undoauto");
+        let game = with_game(&f);
+        let (backend, first, _) = two_applied(&f, &game);
+        game.running.store(true, Ordering::Relaxed);
+        backend.set_enabled(&first, false).expect("off");
+        game.running.store(false, Ordering::Relaxed);
+        backend.game_closed().expect("applied").expect("changes");
+        let pending = backend.pending().expect("pending");
+        let applied = pending.applied_after_game.expect("undo offered");
+        assert_eq!(applied.changes.len(), 1);
+        assert!(pending.view.changes.is_empty());
+
+        // 147: the Undo is an edit; while the game runs again it waits and is marked as the Undo.
+        game.running.store(true, Ordering::Relaxed);
+        let changed = backend.undo_applied().expect("undone");
+        assert!(changed.waiting_for_game);
+        let pending = backend.pending().expect("pending");
+        assert_eq!(pending.undoing, Some(applied.at_unix_ms));
+        assert_eq!(pending.view.changes.len(), 1);
+        assert!(pending.applied_after_game.is_none());
+        assert!(backend.undo_applied().is_err(), "only once");
+
+        // The next change ends it.
+        backend.set_enabled(&first, false).expect("off");
+        assert!(backend.pending().expect("pending").undoing.is_none());
+    }
+
+    #[test]
+    fn another_change_ends_the_undo_of_an_automatic_apply() {
+        let f = Fixture::new("undoends");
+        let game = with_game(&f);
+        let (backend, first, second) = two_applied(&f, &game);
+        game.running.store(true, Ordering::Relaxed);
+        backend.set_enabled(&first, false).expect("off");
+        game.running.store(false, Ordering::Relaxed);
+        backend.game_closed().expect("applied");
+        backend.set_enabled(&second, false).expect("another change");
+        assert!(
+            backend
+                .pending()
+                .expect("pending")
+                .applied_after_game
+                .is_none()
+        );
+    }
+
+    fn foreign_pak(f: &Fixture) {
+        std::fs::create_dir_all(f.addons()).expect("addons");
+        std::fs::write(
+            f.addons().join("pak01_dir.vpk"),
+            vpk("models/heroes/haze/body.vmdl_c"),
+        )
+        .expect("pak");
+    }
+
+    #[test]
+    fn foreign_files_are_listed_left_and_taken_under_management() {
+        let f = Fixture::new("foreign");
+        let game = with_game(&f);
+        let backend = f.backend(&game);
+        foreign_pak(&f);
+        std::fs::write(f.addons().join("notes.txt"), b"x").expect("notes");
+        let report = backend.foreign_files().expect("listed");
+        assert_eq!(
+            report.root.as_deref(),
+            Some(f.game().display().to_string().as_str())
+        );
+        assert_eq!(report.items.len(), 2);
+        let report = backend.leave_foreign("notes.txt").expect("left");
+        assert!(report.items.iter().any(|i| i.name == "notes.txt" && i.left));
+
+        game.running.store(true, Ordering::Relaxed);
+        assert_eq!(
+            backend
+                .take_foreign("pak01_dir.vpk", "Haze")
+                .expect_err("running")
+                .id,
+            MessageId::E13
+        );
+        game.running.store(false, Ordering::Relaxed);
+        let taken = backend
+            .take_foreign("pak01_dir.vpk", "Haze")
+            .expect("taken");
+        assert!(
+            taken
+                .changed
+                .library
+                .mods
+                .iter()
+                .any(|m| m.id == taken.mod_id && m.enabled)
+        );
+        assert!(
+            !backend
+                .foreign_files()
+                .expect("listed")
+                .items
+                .iter()
+                .any(|i| i.name == "pak01_dir.vpk")
+        );
+    }
+
+    #[test]
+    fn the_start_notices_name_foreign_files_once() {
+        let f = Fixture::new("foreignnotice");
+        let game = with_game(&f);
+        foreign_pak(&f);
+        let backend = f.backend(&game);
+        assert_eq!(
+            backend.take_notices(),
+            [crate::events::Notice::Foreign { files: 1 }]
+        );
+        assert!(backend.take_notices().is_empty());
+    }
+
+    #[test]
+    fn the_start_counts_foreign_files_not_left_as_they_are() {
+        let f = Fixture::new("foreigncount");
+        let game = with_game(&f);
+        let backend = f.backend(&game);
+        assert_eq!(backend.foreign_to_report(), 0);
+        foreign_pak(&f);
+        std::fs::write(f.addons().join("notes.txt"), b"x").expect("notes");
+        assert_eq!(backend.foreign_to_report(), 2);
+        backend.leave_foreign("notes.txt").expect("left");
+        assert_eq!(backend.foreign_to_report(), 1);
+    }
+
+    fn dmm_gameinfo() -> String {
+        VANILLA.replace(
+            "\t\t\tGame\t\t\t\tcore\r\n",
+            "\t\t\tGame\t\t\t\tcore\r\n\t\t\tGame\tcitadel/addons/dmm\r\n",
+        )
+    }
+
+    #[test]
+    fn gameinfo_changed_by_another_program_comes_with_its_differences() {
+        let f = Fixture::new("gameinfo");
+        let game = with_game(&f);
+        let backend = f.backend(&game);
+        let status = backend.gameinfo_status(false).expect("status");
+        assert_eq!(status.state, GameinfoState::Vanilla);
+        assert!(status.diff.is_none());
+        let status = backend.gameinfo_status(true).expect("fixed");
+        assert_eq!(status.state, GameinfoState::Ours);
+
+        let file = f.game().join("game").join("citadel").join("gameinfo.gi");
+        std::fs::write(&file, dmm_gameinfo()).expect("dmm");
+        let status = backend.gameinfo_status(true).expect("status");
+        assert_eq!(status.state, GameinfoState::Foreign);
+        assert!(status.diff.expect("diff").found.iter().any(|l| l.marked));
+        assert_eq!(
+            status.path.as_deref(),
+            Some(file.display().to_string().as_str())
+        );
+
+        let none = Fixture::new("gameinfonone");
+        let missing = none
+            .backend(&FakeGame::default())
+            .gameinfo_status(false)
+            .expect("status");
+        assert_eq!(missing.state, GameinfoState::Missing);
+    }
+
+    #[test]
+    fn opening_files_goes_only_to_places_the_core_knows() {
+        let f = Fixture::new("shellplaces");
+        let game = with_game(&f);
+        let backend = f.backend(&game);
+        foreign_pak(&f);
+        let outcomes = backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        let id = outcomes[0].as_ref().expect("ok").mod_id.clone();
+        let gi = f.game().join("game").join("citadel").join("gameinfo.gi");
+        backend.show(&Place::Gameinfo, true).expect("notepad");
+        backend.show(&Place::Gameinfo, false).expect("folder");
+        backend
+            .show(
+                &Place::Foreign {
+                    name: "pak01_dir.vpk".into(),
+                },
+                false,
+            )
+            .expect("foreign");
+        backend
+            .show(&Place::ModFiles { mod_id: id }, false)
+            .expect("mod");
+        backend.verify_game_files().expect("steam");
+        let shown = game.shown.lock().expect("lock").clone();
+        assert_eq!(shown[0], ShellRequest::Notepad(gi.clone()));
+        assert_eq!(shown[1], ShellRequest::Reveal(gi));
+        assert_eq!(
+            shown[2],
+            ShellRequest::Reveal(f.addons().join("pak01_dir.vpk"))
+        );
+        assert!(
+            matches!(&shown[3], ShellRequest::Reveal(p) if p.starts_with(f.dir.join("deadloader-data")))
+        );
+        assert_eq!(shown[4], ShellRequest::VerifyGameFiles);
+        for refused in ["../../notepad.exe", "sub/pak.vpk", "missing.vpk"] {
+            assert!(
+                backend
+                    .show(
+                        &Place::Foreign {
+                            name: refused.into()
+                        },
+                        false
+                    )
+                    .is_err(),
+                "{refused}"
+            );
+        }
+        assert_eq!(game.shown.lock().expect("lock").len(), 5);
+    }
+
     #[test]
     fn rollback_takes_the_selected_profile_out_of_its_game_folder() {
         let f = Fixture::new("rollback");
@@ -1685,6 +2352,71 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn the_profiles_screen_sees_every_installation_and_profile() {
+        let f = Fixture::new("profilesview");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        let manual = f.dir.join("E-Deadlock");
+        let mut settings = backend.settings().expect("settings");
+        settings.game.manual_installations = vec![manual.display().to_string()];
+        backend.update_settings(settings).expect("saved");
+        backend.create_profile("Sasha").expect("created");
+        backend.apply().expect("applied");
+
+        let view = backend.profiles_view().expect("view");
+        // The field names `ui/src/lib/api.ts` relies on.
+        let json = serde_json::to_value(&view).expect("json");
+        let mut keys: Vec<&String> = json["profiles"][0]
+            .as_object()
+            .expect("profile")
+            .keys()
+            .collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "applied",
+                "game_root",
+                "last_applied_unix_ms",
+                "mod_names",
+                "mods",
+                "name"
+            ]
+        );
+        assert_eq!(view.selected, "Default");
+        assert_eq!(
+            view.installations,
+            [f.game().display().to_string(), manual.display().to_string()]
+        );
+        let names: Vec<(&str, bool)> = view
+            .profiles
+            .iter()
+            .map(|p| (p.name.as_str(), p.applied))
+            .collect();
+        assert_eq!(names, [("Default", true), ("Sasha", false)]);
+
+        let view = backend
+            .set_profile_installation("Sasha", &manual.display().to_string())
+            .expect("moved");
+        let sasha = view
+            .profiles
+            .iter()
+            .find(|p| p.name == "Sasha")
+            .expect("sasha");
+        assert_eq!(sasha.game_root, Some(manual.display().to_string()));
+        assert_eq!(
+            backend
+                .set_profile_installation("Sasha", r"Z:\Nowhere")
+                .expect_err("not a known installation")
+                .id,
+            MessageId::E2
+        );
+    }
+
+    #[test]
     fn the_age_confirmation_is_saved_and_heard_by_the_listeners() {
         let f = Fixture::new("age");
         let backend = f.backend(&FakeGame::default());
@@ -1699,5 +2431,56 @@ pub(crate) mod tests {
         let saved = backend.confirm_age().expect("saved");
         assert!(saved.acknowledgements.age_confirmed_at.is_some());
         assert!(heard.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn deleting_the_applied_profile_takes_its_mods_out_of_the_game() {
+        let f = Fixture::new("deleteapplied");
+        let game = FakeGame {
+            installs: vec![f.game()],
+            ..FakeGame::default()
+        };
+        let backend = f.backend(&game);
+        backend
+            .import_paths(&[f.mod_file("haze.vpk", "models/haze/body.vmdl_c")])
+            .expect("imported");
+        backend.apply().expect("applied");
+        backend.create_profile("Other").expect("created");
+        assert!(f.addons().join("pak01_dir.vpk").exists());
+
+        game.running.store(true, Ordering::Relaxed);
+        assert_eq!(
+            backend.delete_profile("Default").expect_err("running").id,
+            MessageId::E13
+        );
+        assert_eq!(backend.profile_names().expect("names").len(), 2);
+
+        game.running.store(false, Ordering::Relaxed);
+        backend.delete_profile("Default").expect("deleted");
+        assert!(!f.addons().join("pak01_dir.vpk").exists());
+        assert_eq!(backend.profile_names().expect("names"), ["Other"]);
+        // The mod stays in the library.
+        assert_eq!(backend.library().expect("library").mods.len(), 1);
+    }
+
+    #[test]
+    fn a_profile_file_names_itself_in_the_import_result_and_its_errors() {
+        let f = Fixture::new("profilefilename");
+        let backend = f.backend(&FakeGame::default());
+        let file = f.dir.join("night.json");
+        backend
+            .export_profile_to("Default", &file)
+            .expect("exported");
+        let imported = backend.import_profile_from(&file).expect("imported");
+        assert_eq!(imported.file.as_deref(), Some("night.json"));
+        assert_eq!(imported.listed, 0);
+        let bad = f.dir.join("skins-backup.zip");
+        std::fs::write(&bad, "PK").expect("write");
+        let err = backend.import_profile_from(&bad).expect_err("refused");
+        assert_eq!(err.id, MessageId::E17);
+        assert_eq!(
+            err.args.get("file").map(String::as_str),
+            Some("skins-backup.zip")
+        );
     }
 }
