@@ -68,6 +68,8 @@ pub enum SessionError {
     Remove(RemoveError),
     UnknownMod(String),
     UnknownFile(String),
+    /// The game folder has no `gameinfo.gi` (moved, uninstalled, or its drive is gone): nothing is written there (E2).
+    GameNotFound(PathBuf),
     Io(io::Error),
 }
 
@@ -82,6 +84,9 @@ impl std::fmt::Display for SessionError {
             Self::Remove(e) => write!(f, "{e}"),
             Self::UnknownMod(id) => write!(f, "the mod \"{id}\" is not in the library"),
             Self::UnknownFile(id) => write!(f, "the file \"{id}\" is not in the library"),
+            Self::GameNotFound(root) => {
+                write!(f, "no Deadlock installation in {}", root.display())
+            }
             Self::Io(e) => write!(f, "{e}"),
         }
     }
@@ -99,6 +104,9 @@ impl ToUserMessage for SessionError {
             Self::Import(e) => e.user_message(),
             Self::Remove(e) => e.user_message(),
             Self::Io(e) => from_io(e, Area::Data),
+            Self::GameNotFound(root) => UserMessage::new(MessageId::E2)
+                .arg("path", root.display())
+                .arg("detail", self),
             Self::UnknownMod(_) | Self::UnknownFile(_) => {
                 UserMessage::new(MessageId::Internal).arg("detail", self)
             }
@@ -712,6 +720,10 @@ impl Session {
             &self.data_dir.join("backups").join("gameinfo"),
             &backup_name,
         )?;
+        // Never recreate a game folder that is gone: the files would land in an empty tree no game reads.
+        if gameinfo == GuardOutcome::Missing {
+            return Err(SessionError::GameNotFound(game_root.to_path_buf()));
+        }
         let journal = FileJournal::new(self.data_dir.join("journal.jsonl"));
         let engine = Engine {
             fs: &fs,
@@ -1193,6 +1205,24 @@ mod tests {
         assert!(s.library().pending);
         s.apply(&game, false).expect("applied");
         assert!(!addons.join("pak01_dir.vpk").exists());
+    }
+
+    #[test]
+    fn a_game_folder_that_is_gone_is_not_recreated() {
+        let f = Fixture::new("gone");
+        let mut s = open(&f);
+        let src = f.source("haze.vpk", &[("models/haze/body.vmdl_c", 1)]);
+        s.import_file(&src, "Haze").expect("imported");
+        // Steam moved the game, or its drive is unplugged: the folder the profile remembers has no gameinfo.gi.
+        let gone = f.dir.join("Deadlock");
+        let err = s.apply(&gone, false).expect_err("no game there");
+        assert!(
+            matches!(err, SessionError::GameNotFound(ref p) if p == &gone),
+            "{err}"
+        );
+        assert_eq!(err.user_message().id, MessageId::E2);
+        assert!(!gone.exists(), "nothing was created");
+        assert!(s.library().applied_profile.is_none());
     }
 
     #[test]
