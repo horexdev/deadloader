@@ -52,6 +52,33 @@ fn the_description_is_sanitised_and_its_links_listed() {
 }
 
 #[test]
+fn plain_http_links_in_a_description_are_upgraded_to_https() {
+    let h = harness(
+        r#"<a href="http://example.org/old?a=1">old</a> <a href="HTTP://Example.com/x">x</a> <a href="https://example.net/">new</a>"#,
+        false,
+        NsfwMode::Hidden,
+    );
+    let page = h
+        .catalog
+        .details(Section::Mod, MOD, None, Initiator::User)
+        .expect("page");
+    let urls: Vec<&str> = page
+        .description
+        .links
+        .iter()
+        .map(|l| l.url.as_str())
+        .collect();
+    assert_eq!(
+        urls,
+        [
+            "https://example.org/old?a=1",
+            "https://example.com/x",
+            "https://example.net/"
+        ]
+    );
+}
+
+#[test]
 fn files_are_listed_without_download_urls_and_kept_for_downloads() {
     let h = harness("text", false, NsfwMode::Hidden);
     let page = h
