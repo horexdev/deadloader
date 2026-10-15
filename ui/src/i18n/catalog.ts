@@ -30,6 +30,8 @@ export const ERROR_IDS = [
   'E21',
   'E22',
   'E23',
+  'E24',
+  'E25',
   'Internal',
 ] as const;
 
@@ -209,6 +211,8 @@ export const TEXTS: Readonly<Record<string, TextSpec>> = {
       },
     },
   },
+  e24: { args: { status: text } },
+  e25: { args: { status: text } },
   internal: {},
 
   // Buttons named in the spec texts.

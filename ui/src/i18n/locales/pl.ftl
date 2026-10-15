@@ -251,6 +251,12 @@ e23 = deadloader nie może odczytać swojego pliku { $file }.
             [manifest] Przywróć plik manifest.json.bak albo zaktualizuj deadloader.
            *[other] Przywróć plik z kopii zapasowej albo zaktualizuj deadloader.
         }
+e24 = Tego pliku nie ma już na GameBanana.
+    .why = Autor go usunął lub zastąpił (HTTP { $status }).
+    .todo = Otwórz stronę moda, aby wybrać inny plik, albo sprawdź, czy mod ma aktualizację.
+e25 = GameBanana odrzuciło żądanie.
+    .why = Serwer odpowiedział kodem { $status }. Zwykle jest to chwilowe.
+    .todo = Spróbuj ponownie później. Jeśli to się powtarza, zgłoś to na stronie programu deadloader w serwisie GitHub.
 internal = W programie deadloader coś poszło nie tak.
     .why = To błąd programu deadloader, a nie Twój.
     .todo = Spróbuj ponownie. Jeśli to się powtórzy, zgłoś problem razem z wpisem dziennika ze Szczegółów.

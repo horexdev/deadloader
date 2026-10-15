@@ -1,4 +1,4 @@
-//! Why a download stopped, and what the user is told (spec `04-messages`: E1, E5, E6, E7, E12, E16).
+//! Why a download stopped, and what the user is told (spec `04-messages`: E1, E5, E6, E7, E12, E16, E24, E25).
 
 use crate::task::{Md5, TaskId};
 use deadloader_core::message::{Area, MessageId, ToUserMessage, UserMessage, from_io};
@@ -184,7 +184,15 @@ impl ToUserMessage for DownloadError {
                     UserMessage::new(MessageId::Internal).arg("detail", self)
                 }
             },
-            Self::Status { status } => e6("http_status").arg("status", status),
+            // Not "it will resume" (E6): the file was removed or replaced, or the request is refused for good.
+            Self::Status {
+                status: status @ (403 | 404 | 410),
+            } => UserMessage::new(MessageId::E24)
+                .arg("status", status)
+                .arg("detail", self),
+            Self::Status { status } => UserMessage::new(MessageId::E25)
+                .arg("status", status)
+                .arg("detail", self),
             Self::Stalled { .. } => e6("timeout"),
             Self::ConnectionLost { .. } | Self::Inconsistent { .. } => e6("connection_lost"),
             Self::Checksum { expected, actual } => UserMessage::new(MessageId::E7)
@@ -266,6 +274,25 @@ mod tests {
             assert_eq!(e.user_message().id, MessageId::E6);
             assert_eq!(e.recovery(), Recovery::Automatic { min_wait: None });
         }
+    }
+
+    #[test]
+    fn a_file_gone_from_gamebanana_is_e24_and_waits_for_the_user() {
+        for status in [403, 404, 410] {
+            let e = DownloadError::Status { status };
+            let m = e.user_message();
+            assert_eq!(m.id, MessageId::E24, "{status}");
+            assert_eq!(arg(&m, "status"), Some(status.to_string().as_str()));
+            assert_eq!(e.recovery(), Recovery::User);
+        }
+    }
+
+    #[test]
+    fn another_refusal_is_e25_with_its_code() {
+        let e = DownloadError::Status { status: 451 };
+        let m = e.user_message();
+        assert_eq!((m.id, arg(&m, "status")), (MessageId::E25, Some("451")));
+        assert_eq!(e.recovery(), Recovery::User);
     }
 
     #[test]

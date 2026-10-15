@@ -304,6 +304,7 @@ export type CatalogError =
   | { kind: 'rate_limited'; retry_in_s: number; message: UserMessage }
   | { kind: 'api_changed'; message: UserMessage }
   | { kind: 'blocked'; message: UserMessage }
+  | { kind: 'refused'; message: UserMessage }
   | { kind: 'not_found'; other_game: number | null }
   | { kind: 'invalid_search'; problem: 'too_short' | 'too_long' }
   | { kind: 'internal'; message: UserMessage };
