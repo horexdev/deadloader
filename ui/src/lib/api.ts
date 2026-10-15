@@ -561,11 +561,16 @@ export const links = {
 
 // ---- the window frame and the sidebar (crates/app/src/commands/shell.rs)
 
+export interface ApplyPreview {
+  turned_off: string[];
+  turned_on: string[];
+}
+
 export const shell = {
-  /** Play (F4): applies the selected profile, then Steam starts Deadlock. Ask with D13 first (`turnedOffByApply`). */
+  /** Play (F4): applies the selected profile, then Steam starts Deadlock. Ask with D13 first (`applyPreview`). */
   play: () => call<ApplyResult>('play'),
-  /** D13: the mods Apply or Play would take out of the game, by name. */
-  turnedOffByApply: () => call<string[]>('turned_off_by_apply'),
+  /** D13: the mods Apply or Play would take out of the game and bring into it, by name. */
+  applyPreview: () => call<ApplyPreview>('apply_preview'),
   minimize: () => call<null>('window_minimize'),
   toggleMaximize: () => call<null>('window_toggle_maximize'),
   close: () => call<null>('window_close'),

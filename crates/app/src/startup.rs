@@ -79,7 +79,7 @@ pub fn run() -> Result<(), StartError> {
         .invoke_handler(tauri::generate_handler![
             commands::system::subscribe,
             commands::shell::play,
-            commands::shell::turned_off_by_apply,
+            commands::shell::apply_preview,
             commands::shell::window_minimize,
             commands::shell::window_toggle_maximize,
             commands::shell::window_close,

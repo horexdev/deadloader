@@ -27,10 +27,10 @@ pub async fn play(
     .await
 }
 
-/// D13: the mods Apply or Play would take out of the game (by name).
+/// D13: the mods Apply or Play would take out of the game and bring into it (by name).
 #[tauri::command]
-pub async fn turned_off_by_apply(backend: Shared<'_>) -> Reply<Vec<String>> {
-    blocking(backend, move |b| b.turned_off_by_apply()).await
+pub async fn apply_preview(backend: Shared<'_>) -> Reply<deadloader_core::session::ApplyPreview> {
+    blocking(backend, move |b| b.apply_preview()).await
 }
 
 /// The title bar's buttons: our window has no system frame (the design's title bar).

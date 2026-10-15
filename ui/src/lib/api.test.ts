@@ -191,14 +191,14 @@ describe('api', () => {
   it('calls the window and Play commands by their Rust names', async () => {
     invoke.mockResolvedValue({});
     await shell.play();
-    await shell.turnedOffByApply();
+    await shell.applyPreview();
     await shell.minimize();
     await shell.toggleMaximize();
     await shell.close();
     await shell.startDrag();
     expect(invoke.mock.calls.map(([name]) => name)).toEqual([
       'play',
-      'turned_off_by_apply',
+      'apply_preview',
       'window_minimize',
       'window_toggle_maximize',
       'window_close',

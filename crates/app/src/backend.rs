@@ -473,7 +473,7 @@ impl Backend {
     }
 
     /// Play (F4): the selected profile goes into the game folder, then Steam starts Deadlock. The UI asks first when
-    /// [`Backend::turned_off_by_apply`] isn't empty for a profile switch (D13, 146).
+    /// [`Backend::apply_preview`] turns mods off for a profile switch (D13, 146).
     pub fn play(&self) -> Result<ApplyResult, UserMessage> {
         if self.game.running() {
             return Err(UserMessage::new(MessageId::E13));
@@ -486,10 +486,10 @@ impl Backend {
         Ok(applied)
     }
 
-    /// D13: the mods Apply or Play would take out of the game.
-    pub fn turned_off_by_apply(&self) -> Result<Vec<String>, UserMessage> {
+    /// D13: the mods Apply or Play would take out of the game and bring into it.
+    pub fn apply_preview(&self) -> Result<deadloader_core::session::ApplyPreview, UserMessage> {
         let fallback = self.game.installations().into_iter().next();
-        self.with(|s| Ok(s.turned_off_by_apply(fallback.as_deref())))
+        self.with(|s| Ok(s.apply_preview(fallback.as_deref())))
     }
 
     /// Apply / Play: the selected profile goes into its game folder, or the first one Steam knows.
