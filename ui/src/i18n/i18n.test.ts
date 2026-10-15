@@ -4,6 +4,8 @@ import {
   formatDate,
   formatNumber,
   formatSize,
+  formatClock,
+  formatInstant,
   formatTime,
   language,
   setLanguage,
@@ -32,6 +34,16 @@ describe('the regional format (178)', () => {
     setRegion('ru-RU');
     expect(formatTime(twenty_past_two)).toBe('14:20');
     expect(formatDate(twenty_past_two, new Date(2026, 0, 1))).toBe('October 15');
+  });
+
+  it('writes log times to the second, and exactly to the millisecond with the date', () => {
+    const moment = new Date(2026, 9, 15, 14, 32, 9, 601);
+    setRegion('en-GB');
+    expect(formatClock(moment)).toBe('14:32:09');
+    // Words and their order come from the language (English here), the clock from the region.
+    expect(formatInstant(moment)).toBe('Thu, Oct 15, 2026, 14:32:09.601');
+    setRegion('en-US');
+    expect(formatClock(moment)).toMatch(/^2:32:09\sPM$/u);
   });
 
   it("writes numbers the region's way", () => {

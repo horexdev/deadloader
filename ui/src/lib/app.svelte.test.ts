@@ -21,6 +21,15 @@ afterEach(() => {
 });
 
 describe('the app state', () => {
+  it('tells who listens which logs got new lines, until they stop', () => {
+    const heard: string[][] = [];
+    const stop = app.onLog((kinds) => heard.push(kinds));
+    app.handle({ event: 'log', data: { kinds: ['network', 'files'] } });
+    stop();
+    app.handle({ event: 'log', data: { kinds: ['app'] } });
+    expect(heard).toEqual([['network', 'files']]);
+  });
+
   it('starts with the library, the settings, the game and the network', () => {
     expect(app.library?.selected_profile).toBe('Default');
     expect(app.settings).not.toBeNull();

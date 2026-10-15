@@ -17,6 +17,7 @@ import {
   type GameStatus,
   type Installed,
   type LibraryView,
+  type LogKind,
   type Section,
   type Settings,
   type TaskSnapshot,
@@ -90,6 +91,8 @@ export class AppState {
   /** The latest mod update check (N3): the catalog's badges and the mod page's Update buttons read it. */
   updates: UpdateReport | null = $state(null);
   #toastId = 0;
+  /** Who hears of new log lines (Activity's live view). */
+  #logListeners: ((kinds: LogKind[]) => void)[] = [];
 
   /** Running downloads, for the sidebar. */
   get downloads(): number {
@@ -158,6 +161,11 @@ export class AppState {
       case 'drop_failed':
         this.fail(event.data.message);
         break;
+      case 'log':
+        for (const listener of this.#logListeners) {
+          listener(event.data.kinds);
+        }
+        break;
       default:
         break;
     }
@@ -181,6 +189,14 @@ export class AppState {
         this.tasks = this.tasks.filter((t) => t.id !== event.id);
         break;
     }
+  }
+
+  /** `listener` hears which logs got new lines; returns the function that stops it. */
+  onLog(listener: (kinds: LogKind[]) => void): () => void {
+    this.#logListeners = [...this.#logListeners, listener];
+    return () => {
+      this.#logListeners = this.#logListeners.filter((l) => l !== listener);
+    };
   }
 
   private followInstalled(id: number, installed: Installed): void {
