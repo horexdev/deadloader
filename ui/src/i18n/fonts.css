@@ -1,0 +1,14 @@
+/* The font stack of the language shown, set by the i18n module on <html lang>. Chinese, Japanese and Korean use the
+   system fonts of the design tokens, which also gives Han characters the shapes of the language. */
+
+:root:lang(ja) {
+  --font-sans: var(--font-sans-ja);
+}
+
+:root:lang(ko) {
+  --font-sans: var(--font-sans-ko);
+}
+
+:root:lang(zh) {
+  --font-sans: var(--font-sans-zh);
+}

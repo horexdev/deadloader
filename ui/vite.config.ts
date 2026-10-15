@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [svelte()],
   // Component tests mount real components, so Svelte must resolve to its client build there.
   resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
+  // The i18n tests read the Rust sources (message ids, reasons, language codes) to stay in step with the core.
+  server: process.env.VITEST ? { fs: { allow: ['.', '../crates'] } } : undefined,
   build: {
     // Assets stay separate files: the CSP allows no data: URLs.
     assetsInlineLimit: 0,
@@ -15,7 +17,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     environment: 'happy-dom',
     setupFiles: ['src/lib/test/setup.ts'],
-    // Tests read the design stylesheets as text; other CSS is not processed in tests.
-    css: { include: [/theme\/(tokens|components)\.css/] },
+    // Tests read the design stylesheets and the font stacks per script as text; other CSS is not processed in tests.
+    css: { include: [/theme\/(tokens|components)\.css/, /i18n\/fonts\.css/] },
   },
 });
