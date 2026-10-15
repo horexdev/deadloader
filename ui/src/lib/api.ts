@@ -189,7 +189,8 @@ export type UiEvent =
   | { event: 'download'; data: DownloadEvent }
   | { event: 'installed'; data: { task: TaskId; installed: Installed } }
   | { event: 'updates'; data: UpdateReport }
-  | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } };
+  | { event: 'update_step'; data: { task: TaskId | null; step: UpdateStep } }
+  | { event: 'log'; data: { kinds: LogKind[] } };
 
 /**
  * Listens to the core's pushes. Call once after the app mounts; events the core sent before are delivered first.
@@ -732,4 +733,122 @@ export const api = {
     call<ProfilesView>('set_profile_installation', { name, root }),
   /** "Download missing" in D9. */
   downloadMissing: (mods: MissingDownload[]) => call<MissingStarted>('profile_download_missing', { mods }),
+};
+
+// ---- Activity: the logs (crates/core/src/log.rs, activity.rs; crates/app/src/commands/activity.rs)
+
+export type LogKind = 'network' | 'files' | 'app';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogRange = 'hour' | 'today' | '7d' | '30d';
+export type LogResults = 'all' | 'ok' | 'error';
+export type HostSource = 'builtin' | 'github' | 'user' | 'user-image';
+export type Purpose = 'catalog' | 'thumbnail' | 'description-image' | 'download' | 'update-check';
+export type FileOp = 'hardlink' | 'copy' | 'rename' | 'delete' | 'write' | 'backup' | 'restore';
+
+/** The fields every log line starts with; `ts` is RFC 3339 with the local offset and milliseconds. */
+export interface LogLine {
+  ts: string;
+  id: string;
+  lvl: LogLevel;
+  msg: string;
+}
+
+/** One hop or try of a request (`network-*.jsonl`). */
+export interface NetworkLine extends LogLine {
+  req: string;
+  hop: number;
+  /** Written only for retries; 1 when missing. */
+  attempt?: number;
+  method: string;
+  url: string;
+  host_source?: HostSource;
+  initiator: 'auto' | 'user';
+  purpose: Purpose;
+  status?: number;
+  /** The announced `Content-Length`. */
+  bytes?: number;
+  ms: number;
+  range?: string;
+  error?: string;
+  /** Refused before any byte left the machine: `host-not-listed`, `local-mode`, `not-https`… */
+  blocked?: string;
+}
+
+export interface FileLine extends LogLine {
+  op: FileOp;
+  src?: string;
+  dst?: string;
+  bytes?: number;
+  sha256?: string;
+  /** The change (journal transaction) it belonged to. */
+  txn?: number;
+  result: 'ok' | 'failed';
+  error?: string;
+}
+
+export interface AppLine extends LogLine {
+  fields?: Record<string, unknown>;
+}
+
+/** A row of the list with its full record: a request with every hop and try (oldest first), or one line. */
+export type LogEntry =
+  | { kind: 'network'; req: string; lines: NetworkLine[] }
+  | { kind: 'files'; record: FileLine }
+  | { kind: 'app'; record: AppLine };
+
+/** Where a page ended; hand it back as it came. */
+export interface LogCursor {
+  file: string;
+  offset: number;
+  skip: string[];
+}
+
+export interface LogQuery {
+  kind: LogKind;
+  range: LogRange;
+  purpose?: Purpose | null;
+  op?: FileOp | null;
+  level?: LogLevel | null;
+  result?: LogResults;
+  host?: string | null;
+  text?: string;
+  cursor?: LogCursor | null;
+  limit?: number;
+}
+
+export interface LogPage {
+  entries: LogEntry[];
+  /** `null`: nothing older in the range. */
+  cursor: LogCursor | null;
+}
+
+export interface LogCounts {
+  network: { requests: number; failed: number; purposes: Partial<Record<Purpose, number>>; hosts: Record<string, number> };
+  files: { operations: number; failed: number; ops: Partial<Record<FileOp, number>> };
+  app: { events: number; errors: number; levels: Partial<Record<LogLevel, number>> };
+}
+
+export interface LogSummary {
+  contacted: { host: string; requests: number; source: HostSource | null }[];
+  blocked: { host: string; requests: number; last: string }[];
+  game: {
+    changes: number;
+    ops: Partial<Record<FileOp, number>>;
+    gameinfo: number;
+    failed: number;
+    batches: number;
+    folders: string[];
+  };
+  /** Nothing in the network or files log at all: a fresh install. */
+  empty: boolean;
+}
+
+export const activity = {
+  page: (query: LogQuery) => call<LogPage>('log_page', { query }),
+  /** One entry by line id or request id; a network line gives its whole request. */
+  entry: (id: string) => call<LogEntry | null>('log_entry', { id }),
+  counts: (range: LogRange) => call<LogCounts>('log_counts', { range }),
+  summary: () => call<LogSummary>('log_summary'),
+  /** Opens deadloader's logs folder in File Explorer; resolves to the folder as it may be shown. */
+  openFolder: () => call<string>('open_logs_folder'),
 };

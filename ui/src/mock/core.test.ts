@@ -9,6 +9,9 @@ import type {
   Granted,
   LibraryView,
   Listing,
+  LogCounts,
+  LogPage,
+  LogSummary,
   ModPage,
   TaskSnapshot,
   UiEvent,
@@ -127,6 +130,22 @@ describe('the mock core (pnpm dev:mock)', () => {
     expect(await invoke<Granted>('catalog_grant', { id: image?.id, scope: 'always' })).toEqual({ activated: [image?.id] });
     const again = await invoke<ModPage>('catalog_details', { section: 'mod', id: 700_000, listedUpdated: null });
     expect(again.description.images.find((i) => i.id === image?.id)?.access).toBe('load');
+  });
+
+  it('pages through invented logs, filters them and sums them up', async () => {
+    const first = await invoke<LogPage>('log_page', { query: { kind: 'network', range: 'today', limit: 50 } });
+    expect(first.entries).toHaveLength(50);
+    const second = await invoke<LogPage>('log_page', {
+      query: { kind: 'network', range: 'today', limit: 50, cursor: first.cursor },
+    });
+    expect(second.entries[0]).not.toEqual(first.entries[0]);
+    const blocked = await invoke<LogPage>('log_page', { query: { kind: 'network', range: 'today', result: 'error', text: 'FASTMIRROR' } });
+    expect(blocked.entries).toHaveLength(1);
+    const counts = await invoke<LogCounts>('log_counts', { range: '7d' });
+    expect(counts.files.operations).toBeGreaterThan(10);
+    const summary = await invoke<LogSummary>('log_summary');
+    expect(summary.game.changes).toBeGreaterThan(0);
+    expect(summary.empty).toBe(false);
   });
 
   it('says which command it does not know yet', async () => {
