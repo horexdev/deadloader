@@ -2,6 +2,7 @@
      stretched over the whole card, so the card is one click target with one focus ring; the favourite and quick
      install buttons sit above it. Its size comes from the grid cell (16:9 thumbnail + fixed info block). -->
 <script lang="ts">
+  import { tooltip } from './tooltip';
   import Download from '@lucide/svelte/icons/download';
   import EyeOff from '@lucide/svelte/icons/eye-off';
   import Heart from '@lucide/svelte/icons/heart';
@@ -155,7 +156,7 @@
           class="dl-card__fav"
           aria-pressed={favourite ? 'true' : 'false'}
           aria-label={favouriteLabel}
-          title={favouriteLabel}
+          {@attach tooltip({ text: favouriteLabel ?? '' })}
           {tabindex}
           onclick={onfavourite}><Heart class="dl-icon" /></button
         >
@@ -180,12 +181,12 @@
     </h3>
     <div class="dl-card__author">{byline}</div>
     <div class="dl-card__meta">
-      <span title={likesLabel}
+      <span {@attach tooltip({ text: likesLabel ?? '' })}
         ><ThumbsUp class="dl-icon" /><span aria-hidden="true">{likes}</span><span class="dl-visually-hidden"
           >{likesLabel}</span
         ></span
       >
-      <span title={dateTitle}>{date}</span>
+      <span {@attach tooltip({ text: dateTitle ?? '' })}>{date}</span>
       {#if offline}<span><WifiOff class="dl-icon" />{offline}</span>{/if}
       {#if progressText}<span>{progressText}</span>{/if}
       {#if quickInstall}

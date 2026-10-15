@@ -1,6 +1,7 @@
 <!-- SearchField (design: SearchField.md): search for the catalog, library and Activity log. Esc clears, a second Esc
      leaves the field. Searches are debounced; clearing searches at once. -->
 <script lang="ts">
+  import { tooltip } from './tooltip';
   import Search from '@lucide/svelte/icons/search';
   import SearchX from '@lucide/svelte/icons/search-x';
   import X from '@lucide/svelte/icons/x';
@@ -120,7 +121,7 @@
         type="button"
         class="dl-btn dl-btn--ghost dl-btn--icon dl-search__clear"
         aria-label={clearLabel}
-        title={clearLabel}
+        {@attach tooltip({ text: clearLabel ?? '' })}
         {disabled}
         onclick={clearAndRefocus}><X class="dl-icon" /></button
       >

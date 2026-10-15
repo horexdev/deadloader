@@ -3,6 +3,7 @@
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
   import Spinner from './Spinner.svelte';
+  import { tooltip } from './tooltip';
   import type { IconComponent } from './types';
 
   export type ButtonVariant = 'secondary' | 'primary' | 'ghost' | 'danger' | 'play';
@@ -42,6 +43,8 @@
     children,
     type = 'button',
     class: className,
+    // The design system's tooltip, never Windows' own (`title` on the native button).
+    title,
     onclick,
     ...rest
   }: Props = $props();
@@ -71,6 +74,7 @@
   aria-busy={busy ? 'true' : undefined}
   data-state={error ? 'error' : undefined}
   onclick={handleClick}
+  {@attach tooltip({ text: title ?? '' })}
 >
   {#if Icon}<Icon class="dl-icon" />{/if}
   {#if busy}<Spinner />{/if}

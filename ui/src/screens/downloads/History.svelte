@@ -1,6 +1,7 @@
 <!-- "Finished this session" (board Downloads): what left the queue since deadloader started, newest first. New lines
      fade in; the list is cleared when deadloader closes. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import Ban from '@lucide/svelte/icons/ban';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import LibraryBig from '@lucide/svelte/icons/library-big';
@@ -46,9 +47,9 @@
           {#if ok}<CircleCheck class="dl-icon" />{:else}<Ban class="dl-icon" />{/if}
         </span>
         <div class="text">
-          <span class="mod" title={entry.name}>{entry.name}</span>
-          <span class="word" title={word}
-            >{word} · <span title={`${formatDate(entry.at)}, ${formatTime(entry.at)}`}>{agoText(entry.at, now)}</span></span
+          <span class="mod" {@attach tooltip({ text: entry.name ?? '' })}>{entry.name}</span>
+          <span class="word" {@attach tooltip({ text: word ?? '' })}
+            >{word} · <span {@attach tooltip({ text: `${formatDate(entry.at)}, ${formatTime(entry.at)}` })}>{agoText(entry.at, now)}</span></span
           >
         </div>
         {#if ok || entry.outcome === 'kept'}
@@ -56,7 +57,7 @@
             class="dl-btn dl-btn--ghost dl-btn--icon dl-btn--sm"
             href="#/library"
             aria-label={t('downloads-show-in-library-of', { name: entry.name })}
-            title={t('downloads-show-in-library')}><LibraryBig class="dl-icon" /></a
+            {@attach tooltip({ text: t('downloads-show-in-library') ?? '' })}><LibraryBig class="dl-icon" /></a
           >
         {:else if entry.outcome === 'cancelled' && entry.again}
           <Button

@@ -2,7 +2,7 @@ import GitCompareArrows from '@lucide/svelte/icons/git-compare-arrows';
 import Link from '@lucide/svelte/icons/link';
 import { createRawSnippet, flushSync, type ComponentProps } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
-import { all, click, keydown, one, render } from '../test/render';
+import { all, click, hoverTooltip, keydown, one, render } from '../test/render';
 import LibraryRow from './LibraryRow.svelte';
 import RowAddon from './RowAddon.svelte';
 import RowParts from './RowParts.svelte';
@@ -93,7 +93,8 @@ describe('LibraryRow', () => {
   it('disables the toggle with a reason when changes cannot be applied', () => {
     const { row } = setup({ toggleDisabled: true, toggleTitle: 'Deadlock was not found' });
     expect(one<HTMLInputElement>(row, '.dl-switch input').disabled).toBe(true);
-    expect(one(row, '.dl-switch').title).toBe('Deadlock was not found');
+    expect(one(row, '.dl-switch').hasAttribute('title')).toBe(false);
+    expect(hoverTooltip(one(row, '.dl-switch'))).toBe('Deadlock was not found');
   });
 
   it('reorders by keyboard: Space picks up, arrows move, Space drops, Esc cancels', () => {

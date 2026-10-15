@@ -2,6 +2,7 @@
      folder, grouped like the summary line, with its pak slot before and after. Up to three times 99 rows, so only the
      rows in view are drawn (decision 120). Not drawn in the design (open point): built from the summary box's style. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import type { FolderFile, ModView } from '../../lib/api';
   import { t } from '../../i18n';
   import { fileLabel } from './model';
@@ -77,7 +78,7 @@
       {:else}
         <div class="file" role="listitem" style:top={`${at.tops[index] ?? 0}px`}>
           <span class="dl-mono slots">{slots(item.file)}</span>
-          <span class="owner" title={owner(item.file)}>{owner(item.file)}</span>
+          <span class="owner" {@attach tooltip({ text: owner(item.file) ?? '' })}>{owner(item.file)}</span>
         </div>
       {/if}
     {/each}

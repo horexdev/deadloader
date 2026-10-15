@@ -1,4 +1,5 @@
 import { flushSync, mount, unmount, type Component } from 'svelte';
+import { vi } from 'vitest';
 
 type Mounted = ReturnType<typeof mount>;
 
@@ -79,4 +80,26 @@ export function one<E extends Element = HTMLElement>(root: ParentNode, selector:
 /** Returns all elements matching `selector` inside `root`. */
 export function all<E extends Element = HTMLElement>(root: ParentNode, selector: string): E[] {
   return [...root.querySelectorAll<E>(selector)];
+}
+
+/**
+ * Hovers `element` past the tooltip delay and returns the text of the design system's tooltip it shows (null when
+ * none), then moves the pointer away again.
+ */
+export function hoverTooltip(element: Element): string | null {
+  const faked = vi.isFakeTimers();
+  if (!faked) {
+    vi.useFakeTimers();
+  }
+  try {
+    fire(element, 'pointerenter');
+    vi.advanceTimersByTime(500);
+  } finally {
+    if (!faked) {
+      vi.useRealTimers();
+    }
+  }
+  const text = document.querySelector('body > .dl-tooltip')?.textContent.trim() ?? null;
+  fire(element, 'pointerleave');
+  return text;
 }

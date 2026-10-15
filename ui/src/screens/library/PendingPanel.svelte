@@ -2,6 +2,7 @@
      with Undo; Apply (off while the game runs), Discard all; a profile switch as one change that waits for Apply or
      Play; what applying does to the game folder; the result of the automatic apply after the game closed, with Undo. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import Layers from '@lucide/svelte/icons/layers';
   import Undo2 from '@lucide/svelte/icons/undo-2';
@@ -160,7 +161,7 @@
           <span class="label">{t('library-what-happens')}</span>
           <span class="body">{t('library-folder-summary', { added: folder.added, removed: folder.removed, renumbered: folder.renumbered })}</span>
           {#if folder.addons}
-            <span class="dl-mono path" title={folder.addons}>{tail(folder.addons)}</span>
+            <span class="dl-mono path" {@attach tooltip({ text: folder.addons ?? '' })}>{tail(folder.addons)}</span>
           {/if}
           {#if folder.files.length > 0}
             <button type="button" class="dl-link show" aria-expanded={listOpen ? 'true' : 'false'} onclick={() => (listOpen = !listOpen)}>

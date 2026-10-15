@@ -1,6 +1,7 @@
 <!-- One profile (board Profiles): its markers (selected, applied, not applied yet), mods, game installation and last
      apply, the first mods by name, Select, and the "more" menu. Renaming happens in place. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import CircleDot from '@lucide/svelte/icons/circle-dot';
   import CirclePlus from '@lucide/svelte/icons/copy-plus';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
@@ -149,19 +150,19 @@
       </div>
     {:else}
       <div class="pf-nameline">
-        <span class="pf-name" title={profile.name}>{profile.name}</span>
+        <span class="pf-name" {@attach tooltip({ text: profile.name ?? '' })}>{profile.name}</span>
         {#if selected}
-          <span class="pf-mark pf-mark--sel" title={t('profiles-selected-title')}
+          <span class="pf-mark pf-mark--sel" {@attach tooltip({ text: t('profiles-selected-title') ?? '' })}
             ><CircleDot class="dl-icon" />{t('profiles-selected')}</span
           >
         {/if}
         {#if profile.applied}
-          <span class="pf-mark pf-mark--app" title={t('profiles-applied-title', { drive: driveOf(root) })}
+          <span class="pf-mark pf-mark--app" {@attach tooltip({ text: (t('profiles-applied-title', { drive: driveOf(root) })) ?? '' })}
             ><Gamepad class="dl-icon" />{t('profiles-applied')}</span
           >
         {/if}
         {#if pending}
-          <span class="pf-mark pf-mark--pend" title={t('profiles-pending-title')}
+          <span class="pf-mark pf-mark--pend" {@attach tooltip({ text: t('profiles-pending-title') ?? '' })}
             ><ListTodo class="dl-icon" />{t('profiles-not-applied')}</span
           >
         {/if}
@@ -170,9 +171,9 @@
     <div class="pf-meta">
       <span>{mods}</span>
       {#if root}<span class="pf-sep">·</span><span class="pf-path"><PathTooltip path={root} /></span>{/if}
-      <span class="pf-sep">·</span><span title={when.exact || undefined}>{when.text}</span>
+      <span class="pf-sep">·</span><span {@attach tooltip({ text: (when.exact || undefined) ?? '' })}>{when.text}</span>
     </div>
-    <div class="pf-preview" title={preview}>{preview}</div>
+    <div class="pf-preview" {@attach tooltip({ text: preview ?? '' })}>{preview}</div>
   </div>
   <div class="pf-actions">
     {#if !selected && !renaming}
@@ -184,7 +185,7 @@
       aria-haspopup="menu"
       aria-expanded={menuOpen ? 'true' : 'false'}
       aria-label={t('profiles-more-of', { name: profile.name })}
-      title={t('profiles-more-of', { name: profile.name })}
+      {@attach tooltip({ text: t('profiles-more-of', { name: profile.name }) ?? '' })}
       onclick={() => void toggleMenu()}><Ellipsis class="dl-icon" /></button
     >
     {#if menuOpen}
@@ -209,7 +210,7 @@
           class="dl-option pf-danger"
           role="menuitem"
           aria-disabled={deletable ? 'false' : 'true'}
-          title={deletable ? undefined : t('profiles-delete-last')}
+          {@attach tooltip({ text: (deletable ? undefined : t('profiles-delete-last')) ?? '' })}
           onclick={() => deletable && choose(ondelete)}
           ><Trash class="dl-icon" />{profile.applied ? t('profiles-delete-confirm') : t('profiles-delete')}</button
         >

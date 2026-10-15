@@ -1,6 +1,7 @@
 <!-- S2 Catalog (design: Main, CatalogLoading, CatalogEmpty, CatalogOffline, CatalogStates): section, search, sort,
      category and hero, the filters, and the virtualized grid with infinite scroll; every state of the boards. -->
 <script lang="ts">
+  import { tooltip } from '../../lib/components/tooltip';
   import { notice } from '../../lib/notice.svelte';
   import Check from '@lucide/svelte/icons/check';
   import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
@@ -307,7 +308,7 @@
   {#if !local}
     <div class="toolbar">
       {#if browser.searching}
-        <span title={t('catalog-sort-best-title')}>
+        <span {@attach tooltip({ text: t('catalog-sort-best-title') ?? '' })}>
           <Select
             options={[{ value: 'best', label: t('catalog-sort-best') }]}
             value="best"

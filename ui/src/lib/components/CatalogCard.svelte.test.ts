@@ -2,7 +2,7 @@ import Check from '@lucide/svelte/icons/check';
 import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
 import { flushSync, type ComponentProps } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
-import { all, click, fire, one, render } from '../test/render';
+import { all, click, fire, hoverTooltip, one, render } from '../test/render';
 import CatalogCard from './CatalogCard.svelte';
 
 type CardProps = ComponentProps<typeof CatalogCard>;
@@ -38,7 +38,10 @@ describe('CatalogCard', () => {
     expect(one(card, '.dl-card__author').textContent).toBe('basilisken · Skins → Celeste');
     const meta = one(card, '.dl-card__meta');
     expect(meta.textContent).toContain('221 likes');
-    expect(one(meta, '[title="11 Oct 2026, 14:20"]').textContent).toBe('3 days ago');
+    const date = all(meta, ':scope > span')[1];
+    expect(date?.textContent).toBe('3 days ago');
+    expect(date?.hasAttribute('title')).toBe(false);
+    expect(hoverTooltip(date ?? meta)).toBe('11 Oct 2026, 14:20');
   });
 
   it('falls back to the missing-image box when there is no thumbnail or it fails', () => {

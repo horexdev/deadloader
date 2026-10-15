@@ -1,7 +1,7 @@
 import Download from '@lucide/svelte/icons/download';
 import { createRawSnippet, flushSync } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
-import { click, one, render } from '../test/render';
+import { click, hoverTooltip, one, render } from '../test/render';
 import Button from './Button.svelte';
 
 describe('Button', () => {
@@ -94,7 +94,8 @@ describe('Button', () => {
   it('passes other attributes through to the button', () => {
     const { target } = render(Button, { label: 'Install', title: 'Install the mod', type: 'submit' });
     const button = one<HTMLButtonElement>(target, 'button');
-    expect(button.title).toBe('Install the mod');
+    expect(button.hasAttribute('title')).toBe(false);
+    expect(hoverTooltip(button)).toBe('Install the mod');
     expect(button.type).toBe('submit');
     flushSync();
   });
