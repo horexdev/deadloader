@@ -1,5 +1,8 @@
-//! Windows specifics: Steam discovery, hard links, the recycle bin, process detection and WebView2 settings.
+//! Windows specifics: Steam discovery, hard links, the recycle bin, free disk space, process detection and WebView2
+//! settings.
 
+#[cfg(windows)]
+pub mod disk;
 #[cfg(windows)]
 pub mod process;
 #[cfg(windows)]
