@@ -1,6 +1,7 @@
 <!-- S2 Catalog (design: Main, CatalogLoading, CatalogEmpty, CatalogOffline, CatalogStates): section, search, sort,
      category and hero, the filters, and the virtualized grid with infinite scroll; every state of the boards. -->
 <script lang="ts">
+  import { notice } from '../../lib/notice.svelte';
   import Check from '@lucide/svelte/icons/check';
   import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
   import CircleX from '@lucide/svelte/icons/circle-x';
@@ -162,8 +163,8 @@
   }
 
   function enableCatalog(): void {
-    // F13: Settings → Catalog turns it on (with the wizard's GameBanana step).
-    router.open('settings', 'catalog');
+    // F13: the wizard's network step says what turning the catalog on means, then turns it on.
+    notice.open({ mode: 'catalog' });
   }
 
   function badges(card: Card): CardBadge[] {

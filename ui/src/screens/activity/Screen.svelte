@@ -2,6 +2,7 @@
      files and app logs as virtualized tables with filters, search and a live view, and the details of an entry. The
      address can name an entry: `#/activity/<id>` opens it (error messages point at their log entry this way). -->
 <script lang="ts">
+  import { notice } from '../../lib/notice.svelte';
   import ActivityIcon from '@lucide/svelte/icons/activity';
   import Archive from '@lucide/svelte/icons/archive';
   import ArchiveRestore from '@lucide/svelte/icons/archive-restore';
@@ -75,6 +76,11 @@
   import { ActivityView } from './view.svelte';
 
   const view = new ActivityView({ fail: (error) => app.fail(error) });
+
+  /** F13: the wizard's network step, then the catalog is on. */
+  function enableCatalog(): void {
+    notice.open({ mode: 'catalog' });
+  }
 
   let innerWidth = $state(typeof window === 'undefined' ? 1280 : window.innerWidth);
   let innerHeight = $state(typeof window === 'undefined' ? 800 : window.innerHeight);
@@ -410,7 +416,7 @@
           <p class="dl-empty__text">{t('activity-local-why')}</p>
           <p class="dl-empty__text">{t('activity-local-do')}</p>
           <div class="dl-empty__actions">
-            <button type="button" class="dl-btn dl-btn--primary" onclick={() => router.go('settings')}
+            <button type="button" class="dl-btn dl-btn--primary" onclick={enableCatalog}
               >{t('activity-enable-catalog')}</button
             >
           </div>
@@ -420,7 +426,7 @@
       {#if localNet}
         <Banner kind="neutral" icon={Unplug} title={t('activity-local-title')} text={t('activity-local-history')}>
           {#snippet actions()}
-            <button type="button" class="dl-btn" onclick={() => router.go('settings')}>{t('activity-enable-catalog')}</button>
+            <button type="button" class="dl-btn" onclick={enableCatalog}>{t('activity-enable-catalog')}</button>
           {/snippet}
         </Banner>
       {/if}
