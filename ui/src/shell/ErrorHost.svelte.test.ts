@@ -17,7 +17,18 @@ describe('the error dialog of the window (D12)', () => {
     expect(one(target, '.dl-dialog__title').textContent).toBe('Not enough disk space.');
     expect(one(target, '.dl-dialog__body').textContent).toContain('The disk is full.');
     expect(one(target, '.dl-dialog__details .dl-mono').textContent).toBe('file-20261015-1412-0031');
-    expect(one<HTMLAnchorElement>(target, '.dl-dialog__details a').getAttribute('href')).toBe('#/activity');
+    // The entry itself, not just Activity.
+    expect(one<HTMLAnchorElement>(target, '.dl-dialog__details a').getAttribute('href')).toBe(
+      '#/activity/file-20261015-1412-0031',
+    );
+  });
+
+  it('offers no Activity link when the error names no log entry', () => {
+    const app = new AppState();
+    const { target } = render(ErrorHost, { app });
+    app.showError({ id: 'Internal', args: { detail: 'boom' } });
+    flushSync();
+    expect(target.querySelector('.dl-dialog__details a')).toBeNull();
   });
 
   it('closes through the app state', () => {

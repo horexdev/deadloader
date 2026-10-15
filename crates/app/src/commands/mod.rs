@@ -37,9 +37,13 @@ async fn blocking<T: Send + 'static>(
     work: impl FnOnce(&Backend) -> Reply<T> + Send + 'static,
 ) -> Reply<T> {
     let backend = Arc::clone(backend.inner());
+    let reporter = Arc::clone(&backend);
     tauri::async_runtime::spawn_blocking(move || work(&backend))
         .await
-        .map_err(|e| UserMessage::new(MessageId::Internal).arg("detail", e))?
+        .map_err(|e| UserMessage::new(MessageId::Internal).arg("detail", e))
+        .and_then(|reply| reply)
+        // Every failure is in the app log, and its message names the entry (D12 links to it).
+        .map_err(|message| reporter.reported(message))
 }
 
 type Slot<'a> = State<'a, Arc<CatalogSlot>>;
