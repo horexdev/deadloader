@@ -688,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "deadloader"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "deadloader-catalog",
  "deadloader-core",
@@ -706,7 +706,7 @@ dependencies = [
 
 [[package]]
 name = "deadloader-archive"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cc",
  "sevenz-rust2",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "deadloader-catalog"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "deadloader-core",
  "deadloader-gamebanana",
@@ -729,7 +729,7 @@ dependencies = [
 
 [[package]]
 name = "deadloader-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "deadloader-archive",
  "md-5",
@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "deadloader-downloads"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "deadloader-core",
  "deadloader-net",
@@ -754,7 +754,7 @@ dependencies = [
 
 [[package]]
 name = "deadloader-gamebanana"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "deadloader-html"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "html5ever 0.40.1",
  "url",
@@ -770,14 +770,14 @@ dependencies = [
 
 [[package]]
 name = "deadloader-net"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ureq",
 ]
 
 [[package]]
 name = "deadloader-platform-windows"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "webview2-com",
  "windows-core",

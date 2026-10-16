@@ -37,7 +37,7 @@ pub enum GuardOutcome {
     Missing,
 }
 
-/// Makes `gameinfo.gi` list our addons folder if it is vanilla.
+/// Makes `gameinfo.gi` list our addons folder if it is vanilla, and repairs 0.1.0's edit (see `gameinfo::upgrade`).
 pub fn ensure_mods_load(
     fs: &(impl FileOps + ReadText),
     game_root: &Path,
@@ -50,7 +50,7 @@ pub fn ensure_mods_load(
         backup_dir,
         backup_name,
         |text| match gameinfo::inspect(text) {
-            State::Ours => Ok(None),
+            State::Ours => Ok(gameinfo::upgrade(text)),
             State::Foreign(reasons) => Err(GuardOutcome::Foreign(reasons)),
             State::Vanilla => Ok(gameinfo::add_addons_path(text).ok()),
         },
@@ -200,6 +200,33 @@ mod tests {
             GuardOutcome::AlreadyOk
         );
         assert_eq!(fs.snapshot(), before, "no backup, no write");
+    }
+
+    #[test]
+    fn the_0_1_0_edit_is_repaired_after_a_backup() {
+        // 0.1.0 added the addons line alone, which made the game stop at start; applying again repairs it.
+        let old = VANILLA.replace(
+            "\t\t\tGame\t\t\t\tcitadel\r\n",
+            "\t\t\tGame\t\t\t\tcitadel/addons\r\n\t\t\tGame\t\t\t\tcitadel\r\n",
+        );
+        let fs = MemFs::default().with(GAMEINFO, old.as_bytes());
+        let outcome = ensure_mods_load(&fs, root(), Path::new(BACKUPS), "b.gi").expect("guard");
+        let backup = PathBuf::from(format!(r"{BACKUPS}\b.gi"));
+        assert_eq!(
+            outcome,
+            GuardOutcome::Added {
+                backup: backup.clone()
+            }
+        );
+        assert_eq!(
+            fs.read(&backup.to_string_lossy()).as_deref(),
+            Some(old.as_bytes())
+        );
+        let now = String::from_utf8(fs.read(GAMEINFO).expect("file")).expect("text");
+        assert_eq!(
+            now,
+            crate::gameinfo::add_addons_path(VANILLA).expect("vanilla")
+        );
     }
 
     #[test]

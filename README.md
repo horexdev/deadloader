@@ -41,7 +41,8 @@ profile. Nothing is written to `%APPDATA%` or the registry.
 One exception: when the folder is read-only, deadloader can't keep anything there, so the window that tells you so
 keeps the WebView2 profile in `%TEMP%\deadloader-webview-<process id>` and deletes it on exit.
 
-In the game, deadloader only adds mod files to `game\citadel\addons\` and one line to `game\citadel\gameinfo.gi`.
+In the game, deadloader only adds mod files to `game\citadel\addons\` and three lines to `game\citadel\gameinfo.gi`
+(the addons folder first, and the game's own folder kept as its main and save folder).
 
 ## Uninstall
 Settings → Game → **Rollback** removes everything deadloader put into the game. Then delete the deadloader folder.
