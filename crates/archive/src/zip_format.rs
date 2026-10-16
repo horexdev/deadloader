@@ -23,7 +23,8 @@ fn entries(archive: &mut Archive) -> Result<Vec<Entry>, ArchiveError> {
         .map(|i| {
             let f = archive.by_index_raw(i).map_err(|e| map_error(e, None))?;
             Ok(Entry {
-                name: f.name().to_owned(),
+                // zip 9: a name that can't be decoded is a damaged archive, like any other read error.
+                name: f.name().map_err(|e| map_error(e, None))?.into_owned(),
                 size: f.size(),
                 is_dir: f.is_dir(),
             })
@@ -49,7 +50,7 @@ pub(crate) fn extract(
     let mut compressed = Vec::with_capacity(vpks.len());
     for &i in &vpks {
         let f = archive.by_index_raw(i).map_err(|e| map_error(e, None))?;
-        let entry = Some(f.name().to_owned());
+        let entry = Some(f.name().map_err(|e| map_error(e, None))?.into_owned());
         if f.encrypted() {
             return Err(ArchiveError::Encrypted { entry });
         }
