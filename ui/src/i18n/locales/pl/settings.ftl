@@ -73,9 +73,9 @@ settings-install-steam = Znaleziona przez Steam
 settings-install-manual = Dodana ręcznie
 settings-install-known = Wciąż są tu pliki deadloader
 settings-install-manual-meta = Dodana ręcznie
-settings-gi-ours = gameinfo.gi: OK — wiersz deadloader jest na miejscu
+settings-gi-ours = gameinfo.gi: OK — wiersze deadloader są na miejscu
 settings-gi-wait = gameinfo.gi: zostanie przygotowany, gdy profil zacznie jej używać
-settings-gi-rolled = gameinfo.gi: oryginalny — „Zastosuj” ponownie doda wiersz deadloader
+settings-gi-rolled = gameinfo.gi: oryginalny — „Zastosuj” ponownie doda wiersze deadloader
 settings-gi-foreign = gameinfo.gi: zmieniony przez inny program
 settings-gi-missing = gameinfo.gi: nie znaleziono — folder mógł zostać przeniesiony
 settings-installs-none = Nie znaleziono jeszcze żadnej instalacji.
@@ -87,10 +87,10 @@ settings-install-removed = Usunięto instalację z listy.
 settings-install-removed-text = W tym folderze nic nie zmieniono.
 settings-gameinfo-group = Po aktualizacjach gry
 settings-autofix = Naprawiaj gameinfo.gi automatycznie
-settings-autofix-help = Aktualizacja Deadlock przywraca plik gry, który każe wczytywać mody. deadloader robi jego kopię, przywraca swój wiersz i informuje cię. Gdy wyłączone, najpierw zapyta baner.
+settings-autofix-help = Aktualizacja Deadlock przywraca plik gry, który każe wczytywać mody. deadloader robi jego kopię, przywraca swoje wiersze i informuje cię. Gdy wyłączone, najpierw zapyta baner.
 settings-danger-group = Cofanie i usuwanie
 settings-rollback = Przywróć folder gry wybranego profilu
-settings-rollback-help = Dla instalacji wybranego profilu { $profile } ({ $drive }): usuwa pliki modów, które deadloader tam umieścił ({ $files }), i jego wiersz w gameinfo.gi. Biblioteka i profile zostają; „Zastosuj” wszystko przywróci.
+settings-rollback-help = Dla instalacji wybranego profilu { $profile } ({ $drive }): usuwa pliki modów, które deadloader tam umieścił ({ $files }), i jego wiersze w gameinfo.gi. Biblioteka i profile zostają; „Zastosuj” wszystko przywróci.
 settings-rollback-help-others = Inne foldery gry nie są ruszane; aby je przywrócić, wybierz profil, który ich używa.
 settings-rollback-nothing = Na { $drive } nie ma nic do przywrócenia — deadloader nie ma tam teraz plików.
 settings-rollback-no-game = Nie znaleziono Deadlock, więc nie ma folderu gry do przywrócenia.
@@ -98,8 +98,8 @@ settings-rollback-button = Przywróć…
 settings-rolled-title = Przywrócono folder gry na { $drive }.
 settings-rolled-text =
     { $foreign ->
-        [0] Na { $drive } usunięto pliki modów ({ $files }) i wiersz deadloader w gameinfo.gi. Biblioteka i profile zostały — „Zastosuj” lub „Graj” przywróci mody.
-       *[other] Na { $drive } usunięto pliki modów ({ $files }), wiersz deadloader w gameinfo.gi i obce pliki ({ $foreign }). Biblioteka i profile zostały — „Zastosuj” lub „Graj” przywróci mody.
+        [0] Na { $drive } usunięto pliki modów ({ $files }) i wiersze deadloader w gameinfo.gi. Biblioteka i profile zostały — „Zastosuj” lub „Graj” przywróci mody.
+       *[other] Na { $drive } usunięto pliki modów ({ $files }), wiersze deadloader w gameinfo.gi i obce pliki ({ $foreign }). Biblioteka i profile zostały — „Zastosuj” lub „Graj” przywróci mody.
     }
 settings-wipe = Usuń wszystkie dane deadloader
 settings-wipe-help = Usuwa bibliotekę, profile, dzienniki, pamięć podręczną i ustawienia ({ $size }), a potem zamyka deadloader. deadloader.exe zostaje — usuń go potem sam.
@@ -342,7 +342,7 @@ settings-d7-files =
         [many] { $count } plików modów, które dodał w
        *[other] { $count } pliku modów, które dodał w
     }
-settings-d7-line = Swój wiersz w gameinfo.gi
+settings-d7-line = Swoje wiersze w gameinfo.gi
 settings-d7-line-why = — plik wraca do stanu, w jakim zainstalował go Steam.
 settings-d7-stays = Zostaje bez zmian:
 settings-d7-library = Twoja biblioteka — mody: { $mods }, { $size }
@@ -397,7 +397,7 @@ settings-d8-other = Inne
 settings-d8-other-has = niedokończone pobierania, kopie gameinfo.gi, dane silnika okna
 settings-d8-exe = Nie usunięto: sam deadloader.exe — usuń go sam, jeśli już go nie potrzebujesz.
 settings-d8-rollback = Najpierw przywróć każdy folder gry używany przez deadloader (zalecane)
-settings-d8-rollback-why = Przed usunięciem usuwa pliki modów deadloader i jego wiersz w gameinfo.gi z każdego folderu gry. Obce pliki zostają.
+settings-d8-rollback-why = Przed usunięciem usuwa pliki modów deadloader i jego wiersze w gameinfo.gi z każdego folderu gry. Obce pliki zostają.
 settings-d8-rollback-off = Niezaznaczone: pliki modów deadloader zostaną w folderach gry, a Deadlock będzie je dalej wczytywać — bez deadloader, który mógłby je usunąć.
 settings-d8-type-1 = Aby potwierdzić, wpisz
 settings-d8-type-2 = { "" }

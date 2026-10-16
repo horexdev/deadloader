@@ -1,7 +1,7 @@
 ## Notifications
 
 n1 = Deadlock 已更新，模组已恢复。
-    .why = 更新重置了 gameinfo.gi，因此 deadloader 重新添加了它的那一行。
+    .why = 更新重置了 gameinfo.gi，因此 deadloader 重新添加了它的那几行。
 n2 = 已安装并启用 { $name }。
 n3 = 有 { $count } 个模组更新可用。
 n4 = Deadlock 正在运行。
@@ -46,7 +46,7 @@ e2 = 未找到 Deadlock。
     .todo = 请手动选择游戏文件夹。
 e3 = 游戏文件已被其他程序修改。
     .why = gameinfo.gi 与原始文件不一致——通常是 Deadlock Mod Manager 修改的。deadloader 不会覆盖其他程序所做的更改。
-    .todo = 请在 Steam 中验证游戏文件的完整性，之后 deadloader 会添加它的那一行。
+    .todo = 请在 Steam 中验证游戏文件的完整性，之后 deadloader 会添加它的那几行。
 e4 = 目录不可用。
     .why = GameBanana 更改了其 API，deadloader 无法读取。你的库和配置方案仍可正常使用。
     .todo = 请检查 deadloader 是否有更新，或稍后重试。

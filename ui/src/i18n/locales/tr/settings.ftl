@@ -72,9 +72,9 @@ settings-install-steam = Steam aracılığıyla bulundu
 settings-install-manual = Elle eklendi
 settings-install-known = Burada hâlâ deadloader dosyaları var
 settings-install-manual-meta = Elle eklendi
-settings-gi-ours = gameinfo.gi: Tamam — deadloader’ın satırı yerinde
+settings-gi-ours = gameinfo.gi: Tamam — deadloader’ın satırları yerinde
 settings-gi-wait = gameinfo.gi: bir profil kullandığında hazırlanır
-settings-gi-rolled = gameinfo.gi: orijinal — Uygula, deadloader’ın satırını yeniden ekler
+settings-gi-rolled = gameinfo.gi: orijinal — Uygula, deadloader’ın satırlarını yeniden ekler
 settings-gi-foreign = gameinfo.gi: başka bir program tarafından değiştirilmiş
 settings-gi-missing = gameinfo.gi: bulunamadı — klasör taşınmış olabilir
 settings-installs-none = Henüz kurulum bulunamadı.
@@ -86,10 +86,10 @@ settings-install-removed = Kurulum listeden kaldırıldı.
 settings-install-removed-text = O klasörde hiçbir şey değiştirilmedi.
 settings-gameinfo-group = Oyun güncellemelerinden sonra
 settings-autofix = gameinfo.gi’yi otomatik onar
-settings-autofix-help = Bir Deadlock güncellemesi, modların yüklenmesini söyleyen oyun dosyasını sıfırlar. deadloader dosyayı yedekler, satırını geri koyar ve size haber verir. Kapalıyken önce bir uyarı şeridi sorar.
+settings-autofix-help = Bir Deadlock güncellemesi, modların yüklenmesini söyleyen oyun dosyasını sıfırlar. deadloader dosyayı yedekler, satırlarını geri koyar ve size haber verir. Kapalıyken önce bir uyarı şeridi sorar.
 settings-danger-group = Geri al ve kaldır
 settings-rollback = Seçili profilin oyun klasörünü geri al
-settings-rollback-help = Seçili profil { $profile } kurulumu için ({ $drive }): deadloader’ın oraya koyduğu { $files } mod dosyasını ve gameinfo.gi’deki satırını kaldırır. Kitaplık ve profiller kalır; Uygula her şeyi geri getirir.
+settings-rollback-help = Seçili profil { $profile } kurulumu için ({ $drive }): deadloader’ın oraya koyduğu { $files } mod dosyasını ve gameinfo.gi’deki satırlarını kaldırır. Kitaplık ve profiller kalır; Uygula her şeyi geri getirir.
 settings-rollback-help-others = Diğer oyun klasörlerine dokunulmaz; onları geri almak için onları kullanan bir profil seçin.
 settings-rollback-nothing = { $drive } üzerinde geri alınacak bir şey yok — deadloader’ın şu an orada dosyası yok.
 settings-rollback-no-game = Deadlock bulunamadı, bu yüzden geri alınacak oyun klasörü yok.
@@ -97,8 +97,8 @@ settings-rollback-button = Geri al…
 settings-rolled-title = { $drive } üzerindeki oyun klasörü geri alındı.
 settings-rolled-text =
     { $foreign ->
-        [0] { $drive } üzerinde { $files } mod dosyası ve deadloader’ın gameinfo.gi’deki satırı kaldırıldı. Kitaplık ve profiller korundu — Uygula veya Oyna modları geri getirir.
-       *[other] { $drive } üzerinde { $files } mod dosyası, deadloader’ın gameinfo.gi’deki satırı ve { $foreign } yabancı dosya kaldırıldı. Kitaplık ve profiller korundu — Uygula veya Oyna modları geri getirir.
+        [0] { $drive } üzerinde { $files } mod dosyası ve deadloader’ın gameinfo.gi’deki satırları kaldırıldı. Kitaplık ve profiller korundu — Uygula veya Oyna modları geri getirir.
+       *[other] { $drive } üzerinde { $files } mod dosyası, deadloader’ın gameinfo.gi’deki satırları ve { $foreign } yabancı dosya kaldırıldı. Kitaplık ve profiller korundu — Uygula veya Oyna modları geri getirir.
     }
 settings-wipe = Tüm deadloader verilerini sil
 settings-wipe-help = Kitaplığı, profilleri, günlükleri, önbelleği ve ayarları ({ $size }) siler, ardından deadloader’ı kapatır. deadloader.exe kalır — onu daha sonra kendiniz silin.
@@ -335,7 +335,7 @@ settings-d7-files =
     { $count ->
        *[other] Eklediği { $count } mod dosyası, konum:
     }
-settings-d7-line = gameinfo.gi’deki satırı
+settings-d7-line = gameinfo.gi’deki satırları
 settings-d7-line-why = — dosya Steam’in kurduğu hâline döner.
 settings-d7-stays = Olduğu gibi kalır:
 settings-d7-library = Kitaplığınız — { $mods } mod, { $size }
@@ -384,7 +384,7 @@ settings-d8-other = Diğer
 settings-d8-other-has = yarım kalan indirmeler, gameinfo.gi yedekleri, pencere motorunun verileri
 settings-d8-exe = Silinmez: deadloader.exe’nin kendisi — artık gerekmiyorsa kendiniz silin.
 settings-d8-rollback = Önce deadloader’ın kullandığı her oyun klasörünü geri al (önerilir)
-settings-d8-rollback-why = Silmeden önce deadloader’ın mod dosyalarını ve gameinfo.gi’deki satırını her oyun klasöründen kaldırır. Yabancı dosyalar kalır.
+settings-d8-rollback-why = Silmeden önce deadloader’ın mod dosyalarını ve gameinfo.gi’deki satırlarını her oyun klasöründen kaldırır. Yabancı dosyalar kalır.
 settings-d8-rollback-off = İşaretli değil: deadloader’ın mod dosyaları oyun klasörlerinde kalır ve Deadlock onları yüklemeye devam eder — onları kaldıracak bir deadloader kalmadan.
 settings-d8-type-1 = Onaylamak için
 settings-d8-type-2 = yazın

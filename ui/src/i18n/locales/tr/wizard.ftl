@@ -28,7 +28,7 @@ wizard-to-library = Ardından kütüphaneniz açılır (yerel mod).
 wizard-s1-title = deadloader’a hoş geldiniz
 wizard-s1-lead = deadloader, Deadlock modlarını GameBanana’dan veya diskinizden kurar ve yaptığı her değişikliği size gösterir.
 wizard-f1a = Oyunun mod klasörüne mod dosyaları ekler ve
-wizard-f1b = dosyasına bir satır ekler — Deadlock’a modları yüklemesini söyleyen bir oyun dosyası.
+wizard-f1b = dosyasına üç satır ekler — Deadlock’a modları yüklemesini söyleyen bir oyun dosyası.
 wizard-f2 = Her şey geri alınabilir: geri alma, deadloader’ın oyuna koyduğu her şeyi kaldırır.
 wizard-f3a = Tüm verileri
 wizard-f3b = klasöründe,
@@ -137,13 +137,13 @@ wizard-hide-files = Dosyaları gizle
 wizard-from-dmm = Deadlock Mod Manager
 wizard-gi-setup = Kurulacak
 wizard-gi-setup-a = deadloader, modları ilk kez uyguladığınızda
-wizard-gi-setup-b = dosyasına bir satır ekler. Şu anda hiçbir şey değişmez.
+wizard-gi-setup-b = dosyasına üç satır ekler. Şu anda hiçbir şey değişmez.
 wizard-gi-ours = Zaten kurulu
-wizard-gi-ours-text = deadloader’ın satırı zaten orada.
+wizard-gi-ours-text = deadloader’ın satırları zaten orada.
 wizard-gi-foreign = Başka bir program tarafından değiştirilmiş
 wizard-gi-foreign-text = Orijinal gibi görünmüyor — bunu genellikle Deadlock Mod Manager yapar. deadloader başkalarının değişikliklerinin üzerine yazmaz ve kurulumdan sonra ne yapmanız gerektiğini açıklar.
 wizard-what-is = Bu nedir?
-wizard-gi-more = dosyası, Deadlock’a hangi klasörleri yükleyeceğini söyleyen bir oyun dosyasıdır. Genellikle Steam’de oyun dosyalarını doğrulamak sorunu çözer; ardından deadloader kendi satırını ekler.
+wizard-gi-more = dosyası, Deadlock’a hangi klasörleri yükleyeceğini söyleyen bir oyun dosyasıdır. Genellikle Steam’de oyun dosyalarını doğrulamak sorunu çözer; ardından deadloader kendi satırlarını ekler.
 
 # E1
 wizard-nw-title = deadloader verilerini kaydedemiyor.

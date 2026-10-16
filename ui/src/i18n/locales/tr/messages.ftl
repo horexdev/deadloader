@@ -1,7 +1,7 @@
 ## Notifications
 
 n1 = Deadlock güncellendi — modlar geri yüklendi.
-    .why = Güncelleme gameinfo.gi dosyasını sıfırladı, bu yüzden deadloader kendi satırını yeniden ekledi.
+    .why = Güncelleme gameinfo.gi dosyasını sıfırladı, bu yüzden deadloader kendi satırlarını yeniden ekledi.
 n2 = { $name } yüklendi ve etkinleştirildi.
 n3 =
     { $count ->
@@ -66,7 +66,7 @@ e2 = Deadlock bulunamadı.
     .todo = Oyun klasörünü elle seçin.
 e3 = Bir oyun dosyası başka bir program tarafından değiştirildi.
     .why = gameinfo.gi orijinaline benzemiyor — bunu çoğu zaman Deadlock Mod Manager yapar. deadloader başkalarının yaptığı değişikliklerin üzerine yazmaz.
-    .todo = Steam’de oyun dosyalarının bütünlüğünü doğrulayın; ardından deadloader kendi satırını ekler.
+    .todo = Steam’de oyun dosyalarının bütünlüğünü doğrulayın; ardından deadloader kendi satırlarını ekler.
 e4 = Katalog kullanılamıyor.
     .why = GameBanana API’sini değiştirdi, bu yüzden deadloader onu okuyamıyor. Kütüphaneniz ve profilleriniz her zamanki gibi çalışır.
     .todo = deadloader için güncelleme olup olmadığını kontrol edin veya daha sonra yeniden deneyin.

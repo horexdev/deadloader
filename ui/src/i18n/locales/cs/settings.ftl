@@ -73,9 +73,9 @@ settings-install-steam = Nalezeno přes Steam
 settings-install-manual = Přidáno ručně
 settings-install-known = Jsou tu ještě soubory deadloaderu
 settings-install-manual-meta = Přidáno ručně
-settings-gi-ours = gameinfo.gi: v pořádku — řádek deadloaderu je na místě
+settings-gi-ours = gameinfo.gi: v pořádku — řádky deadloaderu jsou na místě
 settings-gi-wait = gameinfo.gi: připraví se, až ji bude používat profil
-settings-gi-rolled = gameinfo.gi: původní — Použít znovu přidá řádek deadloaderu
+settings-gi-rolled = gameinfo.gi: původní — Použít znovu přidá řádky deadloaderu
 settings-gi-foreign = gameinfo.gi: změněno jiným programem
 settings-gi-missing = gameinfo.gi: nenalezeno — složka byla možná přesunuta
 settings-installs-none = Zatím nebyla nalezena žádná instalace.
@@ -87,10 +87,10 @@ settings-install-removed = Instalace odebrána ze seznamu.
 settings-install-removed-text = V té složce se nic nezměnilo.
 settings-gameinfo-group = Po aktualizacích hry
 settings-autofix = Opravovat gameinfo.gi automaticky
-settings-autofix-help = Aktualizace Deadlocku obnoví soubor hry, který říká, že se mají načítat mody. deadloader ho zálohuje, vrátí svůj řádek a dá vám vědět. Když je vypnuto, nejprve se zeptá oznámení.
+settings-autofix-help = Aktualizace Deadlocku obnoví soubor hry, který říká, že se mají načítat mody. deadloader ho zálohuje, vrátí své řádky a dá vám vědět. Když je vypnuto, nejprve se zeptá oznámení.
 settings-danger-group = Vrácení a odstranění
 settings-rollback = Vrátit složku hry vybraného profilu
-settings-rollback-help = Pro instalaci vybraného profilu { $profile } ({ $drive }): odebere soubory modů, které tam deadloader vložil ({ $files }), a jeho řádek v gameinfo.gi. Knihovna a profily zůstanou; Použít vše vrátí.
+settings-rollback-help = Pro instalaci vybraného profilu { $profile } ({ $drive }): odebere soubory modů, které tam deadloader vložil ({ $files }), a jeho řádky v gameinfo.gi. Knihovna a profily zůstanou; Použít vše vrátí.
 settings-rollback-help-others = Ostatní složky hry zůstanou beze změny; chcete-li je vrátit, vyberte profil, který je používá.
 settings-rollback-nothing = Na { $drive } není co vracet — deadloader tam teď nemá žádné soubory.
 settings-rollback-no-game = Deadlock nebyl nalezen, takže není co vracet.
@@ -98,8 +98,8 @@ settings-rollback-button = Vrátit…
 settings-rolled-title = Složka hry na { $drive } vrácena.
 settings-rolled-text =
     { $foreign ->
-        [0] Na { $drive } byly odebrány soubory modů ({ $files }) a řádek deadloaderu v gameinfo.gi. Knihovna a profily zůstaly — Použít nebo Hrát mody vrátí.
-       *[other] Na { $drive } byly odebrány soubory modů ({ $files }), řádek deadloaderu v gameinfo.gi a cizí soubory ({ $foreign }). Knihovna a profily zůstaly — Použít nebo Hrát mody vrátí.
+        [0] Na { $drive } byly odebrány soubory modů ({ $files }) a řádky deadloaderu v gameinfo.gi. Knihovna a profily zůstaly — Použít nebo Hrát mody vrátí.
+       *[other] Na { $drive } byly odebrány soubory modů ({ $files }), řádky deadloaderu v gameinfo.gi a cizí soubory ({ $foreign }). Knihovna a profily zůstaly — Použít nebo Hrát mody vrátí.
     }
 settings-wipe = Smazat všechna data deadloaderu
 settings-wipe-help = Smaže knihovnu, profily, protokoly, mezipaměť a nastavení ({ $size }) a pak deadloader zavře. deadloader.exe zůstane — smažte ho potom sami.
@@ -342,7 +342,7 @@ settings-d7-files =
         [many] { $count } souboru modů, které přidal do
        *[other] { $count } souborů modů, které přidal do
     }
-settings-d7-line = Svůj řádek v gameinfo.gi
+settings-d7-line = Své řádky v gameinfo.gi
 settings-d7-line-why = — soubor bude zase takový, jak ho nainstaloval Steam.
 settings-d7-stays = Zůstane beze změny:
 settings-d7-library = Vaše knihovna — modů: { $mods }, { $size }
@@ -397,7 +397,7 @@ settings-d8-other = Ostatní
 settings-d8-other-has = nedokončená stahování, zálohy gameinfo.gi, data jádra okna
 settings-d8-exe = Nesmaže se: samotný deadloader.exe — smažte ho sami, pokud ho už nepotřebujete.
 settings-d8-rollback = Nejprve vrátit každou složku hry, kterou deadloader používá (doporučeno)
-settings-d8-rollback-why = Před smazáním odebere soubory modů deadloaderu a jeho řádek v gameinfo.gi z každé složky hry. Cizí soubory zůstanou.
+settings-d8-rollback-why = Před smazáním odebere soubory modů deadloaderu a jeho řádky v gameinfo.gi z každé složky hry. Cizí soubory zůstanou.
 settings-d8-rollback-off = Nezaškrtnuto: soubory modů deadloaderu zůstanou ve složkách hry a Deadlock je bude dál načítat — bez deadloaderu, který by je odebral.
 settings-d8-type-1 = Pro potvrzení napište
 settings-d8-type-2 = { "" }

@@ -28,7 +28,7 @@ wizard-to-library = 接下来会打开你的库（本地模式）。
 wizard-s1-title = 欢迎使用 deadloader
 wizard-s1-lead = deadloader 从 GameBanana 或你的磁盘安装 Deadlock 模组，并向你展示它做出的每一项更改。
 wizard-f1a = 它会把模组文件放进游戏的模组文件夹，并在
-wizard-f1b = 中添加一行——这是让 Deadlock 加载模组的游戏文件。
+wizard-f1b = 中添加三行——这是让 Deadlock 加载模组的游戏文件。
 wizard-f2 = 一切都可以撤销：回滚会从游戏中移除 deadloader 放入的所有内容。
 wizard-f3a = 它的所有数据都保存在
 wizard-f3b = 文件夹中，该文件夹位于
@@ -137,13 +137,13 @@ wizard-hide-files = 隐藏文件
 wizard-from-dmm = Deadlock Mod Manager
 wizard-gi-setup = 将会设置
 wizard-gi-setup-a = 首次应用模组时，deadloader 会在
-wizard-gi-setup-b = 中添加一行。现在不会更改任何内容。
+wizard-gi-setup-b = 中添加三行。现在不会更改任何内容。
 wizard-gi-ours = 已设置
-wizard-gi-ours-text = deadloader 的那一行已经存在。
+wizard-gi-ours-text = deadloader 的那几行已经存在。
 wizard-gi-foreign = 已被其他程序更改
 wizard-gi-foreign-text = 它看起来不是原始文件——通常是 Deadlock Mod Manager 造成的。deadloader 不会覆盖别人的更改，并会在设置完成后告诉你该怎么做。
 wizard-what-is = 这是什么？
-wizard-gi-more = 是告诉 Deadlock 要加载哪些文件夹的游戏文件。通常在 Steam 中验证游戏文件完整性即可修复；之后 deadloader 会添加它的那一行。
+wizard-gi-more = 是告诉 Deadlock 要加载哪些文件夹的游戏文件。通常在 Steam 中验证游戏文件完整性即可修复；之后 deadloader 会添加它的那几行。
 
 # E1
 wizard-nw-title = deadloader 无法保存数据。

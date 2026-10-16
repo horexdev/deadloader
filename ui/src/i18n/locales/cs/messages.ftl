@@ -1,7 +1,7 @@
 ## Notifications
 
 n1 = Deadlock byl aktualizován — mody byly obnoveny.
-    .why = Aktualizace vrátila soubor gameinfo.gi do původního stavu, a tak do něj deadloader znovu přidal svůj řádek.
+    .why = Aktualizace vrátila soubor gameinfo.gi do původního stavu, a tak do něj deadloader znovu přidal své řádky.
 n2 = { $name } — nainstalováno a zapnuto.
 n3 =
     { $count ->
@@ -76,7 +76,7 @@ e2 = Deadlock nebyl nalezen.
     .todo = Vyberte složku hry ručně.
 e3 = Soubor hry změnil jiný program.
     .why = Soubor gameinfo.gi nevypadá jako originál — často ho mění Deadlock Mod Manager. deadloader nepřepisuje cizí změny.
-    .todo = Nechte Steam ověřit integritu souborů hry; deadloader pak přidá svůj řádek.
+    .todo = Nechte Steam ověřit integritu souborů hry; deadloader pak přidá své řádky.
 e4 = Katalog není k dispozici.
     .why = GameBanana změnil své API, takže ho deadloader nedokáže přečíst. Knihovna a profily fungují jako obvykle.
     .todo = Zkontrolujte, zda není k dispozici aktualizace programu deadloader, nebo to zkuste později.
