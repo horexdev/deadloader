@@ -101,6 +101,8 @@ jobs:
             "- Built by GitHub Actions from this tag; check it with ``gh attestation verify $env:ZIP --repo $env:GITHUB_REPOSITORY``.",
             '- This release is not code-signed yet, so Windows may show "Windows protected your PC": choose "More info" →',
             '  "Run anyway" after checking the hash.',
+            "- Code signing: see the [code signing policy](https://github.com/$env:GITHUB_REPOSITORY#code-signing-policy);",
+            '  signing through SignPath Foundation starts once the project is approved.',
             ''
           )
           ($intro + (Get-Content "$env:RUNNER_TEMP/changes.md")) | Set-Content "$env:RUNNER_TEMP/notes.md"
