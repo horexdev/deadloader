@@ -1,8 +1,13 @@
-//! The gameinfo.gi guard: recognising whether `game\citadel\gameinfo.gi` loads mods, adding and removing our one line.
+//! The gameinfo.gi guard: recognising whether `game\citadel\gameinfo.gi` loads mods, adding and removing our lines.
 //!
 //! The file is never parsed into a tree and written back: only the lines of the `SearchPaths` block are read, and an
-//! edit inserts or removes exactly one line, copying the style (indentation, separators, quotes, line ending) of the
-//! `Game citadel` line it sits on. Every other byte stays as it was, so a diff of our change is one line.
+//! edit inserts or removes our lines in front of `Game citadel`, copying its style (indentation, separators, quotes,
+//! line ending). Every other byte stays as it was.
+//!
+//! Our lines are `Game citadel/addons` and, unless the block has these keys already, `Mod citadel` and `Write citadel`.
+//! The engine makes the *first* `Game` path the MOD and the default write path when there is no `Mod` / `Write` key;
+//! with only the addons path in front, Deadlock looked for its own config in `addons` and stopped at start with
+//! "FATAL ERROR: Unable to read default keybinding configuration" (0.1.0). The two keys keep both on `citadel`.
 //!
 //! "Vanilla" is recognised by what must *not* be there (any `addons` path, another manager's markers) rather than by
 //! comparing with a reference copy, so harmless changes Valve makes in future builds don't lock the user out.
@@ -13,7 +18,7 @@ const OUR_VALUE: &str = "citadel/addons";
 pub enum State {
     /// As Valve ships it: no addons path; ours can be added.
     Vanilla,
-    /// Vanilla plus exactly our line in front of `Game citadel`.
+    /// Vanilla plus exactly our lines in front of `Game citadel` (or 0.1.0's addons line alone: see [`upgrade`]).
     Ours,
     /// Changed by something else; we don't touch it.
     Foreign(Vec<Foreign>),
@@ -38,7 +43,8 @@ pub fn inspect(text: &str) -> State {
     }
 }
 
-/// Inserts `Game citadel/addons` in front of the first `Game citadel` entry. Only for vanilla files.
+/// Inserts our lines (`Game citadel/addons`, then `Mod citadel` and `Write citadel` unless the block has those keys)
+/// in front of the first `Game citadel` entry. Only for vanilla files.
 pub fn add_addons_path(text: &str) -> Result<String, State> {
     let a = analyse(text).map_err(|r| State::Foreign(vec![r]))?;
     if a.state != State::Vanilla {
@@ -47,26 +53,66 @@ pub fn add_addons_path(text: &str) -> Result<String, State> {
     let game = &a.lines[a
         .game_citadel
         .ok_or(State::Foreign(vec![Foreign::NoGameCitadel]))?];
-    let value = game.tokens[1];
-    let mut new_line = String::new();
-    new_line.push_str(&game.content[..value.start]);
-    new_line.push_str(&game.content[value.start..value.end].replacen("citadel", OUR_VALUE, 1));
-    new_line.push_str(game.terminator(text));
-    let mut out = String::with_capacity(text.len() + new_line.len());
+    let new_lines = our_lines(game, !a.has_mod, !a.has_write)
+        .iter()
+        .map(|l| format!("{l}{}", game.terminator(text)))
+        .collect::<String>();
+    let mut out = String::with_capacity(text.len() + new_lines.len());
     out.push_str(&text[..game.start]);
-    out.push_str(&new_line);
+    out.push_str(&new_lines);
     out.push_str(&text[game.start..]);
     Ok(out)
 }
 
-/// Removes exactly the line [`add_addons_path`] inserted. Only for files in the [`State::Ours`] state.
+/// Removes exactly the lines [`add_addons_path`] inserted (or 0.1.0's single line). Only for [`State::Ours`] files.
 pub fn remove_addons_path(text: &str) -> Result<String, State> {
     let a = analyse(text).map_err(|r| State::Foreign(vec![r]))?;
     if a.state != State::Ours {
         return Err(a.state);
     }
-    let ours = &a.lines[a.addons[0]];
-    Ok(format!("{}{}", &text[..ours.start], &text[ours.end..]))
+    let first = &a.lines[a.addons[0]];
+    let last = &a.lines[a.addons[0] + a.ours_keys];
+    Ok(format!("{}{}", &text[..first.start], &text[last.end..]))
+}
+
+/// The file with our current lines when it has 0.1.0's edit (the addons line without the `Mod` / `Write` keys the
+/// game needs); `None` for anything else. Applying a profile runs it, so a 0.1.0 install repairs itself.
+pub fn upgrade(text: &str) -> Option<String> {
+    let a = analyse(text).ok()?;
+    if a.state != State::Ours || a.ours_keys > 0 || (a.has_mod && a.has_write) {
+        return None;
+    }
+    add_addons_path(&remove_addons_path(text).ok()?).ok()
+}
+
+/// Our lines in the style of the `Game citadel` line `game`, without line endings.
+fn our_lines(game: &Line<'_>, with_mod: bool, with_write: bool) -> Vec<String> {
+    let (key, value) = (game.tokens[0], game.tokens[1]);
+    let content = game.content;
+    let with_value = |v: &str| {
+        format!(
+            "{}{}{}",
+            &content[..value.start],
+            content[value.start..value.end].replacen("citadel", v, 1),
+            &content[value.end..]
+        )
+    };
+    let with_key = |k: &str| {
+        format!(
+            "{}{}{}",
+            &content[..key.start],
+            content[key.start..key.end].replacen(key.text(content), k, 1),
+            &content[key.end..]
+        )
+    };
+    let mut lines = vec![with_value(OUR_VALUE)];
+    if with_mod {
+        lines.push(with_key("Mod"));
+    }
+    if with_write {
+        lines.push(with_key("Write"));
+    }
+    lines
 }
 
 /// One line of [`Diff`], without its line ending.
@@ -118,6 +164,15 @@ pub fn diff(text: &str) -> Diff {
                 .split('/')
                 .any(|seg| seg.eq_ignore_ascii_case("addons"))
     };
+    // `Mod` / `Write` keys the block has besides other programs' addons paths.
+    let has_key = |key: &str| {
+        (header + 1..end).any(|i| {
+            let l = &lines[i];
+            l.tokens.len() >= 2
+                && l.tokens[0].text(l.content).eq_ignore_ascii_case(key)
+                && !is_addons(i)
+        })
+    };
     let mut found = Vec::new();
     let mut expected = Vec::new();
     let mut ours_added = false;
@@ -138,15 +193,11 @@ pub fn diff(text: &str) -> Diff {
             && l.tokens[0].text(l.content).eq_ignore_ascii_case("Game")
             && l.tokens[1].text(l.content).eq_ignore_ascii_case("citadel");
         if game_citadel && !ours_added {
-            let value = l.tokens[1];
-            expected.push(DiffLine {
-                text: format!(
-                    "{}{}",
-                    &l.content[..value.start],
-                    l.content[value.start..value.end].replacen("citadel", OUR_VALUE, 1)
-                ),
-                marked: true,
-            });
+            expected.extend(
+                our_lines(l, !has_key("Mod"), !has_key("Write"))
+                    .into_iter()
+                    .map(|text| DiffLine { text, marked: true }),
+            );
             ours_added = true;
         }
         expected.push(line(l, false));
@@ -191,6 +242,10 @@ struct Analysis<'a> {
     game_citadel: Option<usize>,
     /// Indices into `lines` of entries whose value is an addons path.
     addons: Vec<usize>,
+    /// How many of our `Mod citadel` / `Write citadel` lines follow our addons line (0 for 0.1.0's edit).
+    ours_keys: usize,
+    has_mod: bool,
+    has_write: bool,
 }
 
 fn analyse(text: &str) -> Result<Analysis<'_>, Foreign> {
@@ -256,13 +311,32 @@ fn analyse(text: &str) -> Result<Analysis<'_>, Foreign> {
         })
         .collect();
 
-    let ours = match (addons.as_slice(), game_citadel) {
-        ([only], Some(g)) => {
-            let (k, v) = entry(*only);
-            k.eq_ignore_ascii_case("Game") && v.eq_ignore_ascii_case(OUR_VALUE) && only + 1 == g
-        }
-        _ => false,
+    let has_key = |key: &str| {
+        entries
+            .iter()
+            .any(|&i| entry(i).0.eq_ignore_ascii_case(key))
     };
+    let (has_mod, has_write) = (has_key("Mod"), has_key("Write"));
+    // Ours: the addons line, then only our `Mod citadel` / `Write citadel` lines, then `Game citadel`.
+    let ours_keys = match (addons.as_slice(), game_citadel) {
+        ([only], Some(g)) if *only < g => {
+            let (k, v) = entry(*only);
+            let keys = (only + 1..g).all(|i| {
+                lines[i].tokens.len() >= 2 && {
+                    let (k, v) = entry(i);
+                    (k.eq_ignore_ascii_case("Mod") || k.eq_ignore_ascii_case("Write"))
+                        && v.eq_ignore_ascii_case("citadel")
+                }
+            });
+            (k.eq_ignore_ascii_case("Game")
+                && v.eq_ignore_ascii_case(OUR_VALUE)
+                && keys
+                && g - only <= 3)
+                .then_some(g - only - 1)
+        }
+        _ => None,
+    };
+    let ours = ours_keys.is_some();
 
     let mut reasons = Vec::new();
     if other_manager {
@@ -286,6 +360,9 @@ fn analyse(text: &str) -> Result<Analysis<'_>, Foreign> {
         state,
         game_citadel,
         addons,
+        ours_keys: ours_keys.unwrap_or(0),
+        has_mod,
+        has_write,
     })
 }
 
@@ -412,12 +489,24 @@ mod tests {
 \t}\r\n\
 }\r\n";
 
-    const OUR_LINE: &str = "\t\t\tGame\t\t\t\tcitadel/addons\r\n";
+    /// What we insert in front of `Game citadel`: the addons path first, and the `Mod` and `Write` paths the engine
+    /// would otherwise take from the first `Game` line — ours.
+    const OUR_LINES: &str = "\t\t\tGame\t\t\t\tcitadel/addons\r\n\t\t\tMod\t\t\t\tcitadel\r\n\t\t\tWrite\t\t\t\tcitadel\r\n";
+    /// What 0.1.0 inserted: the addons path alone, which made it the game's MOD and write path (FATAL ERROR at start).
+    const OLD_LINE: &str = "\t\t\tGame\t\t\t\tcitadel/addons\r\n";
 
     fn ours() -> String {
         VANILLA.replacen(
             "\t\t\tGame\t\t\t\tcitadel\r\n",
-            &format!("{OUR_LINE}\t\t\tGame\t\t\t\tcitadel\r\n"),
+            &format!("{OUR_LINES}\t\t\tGame\t\t\t\tcitadel\r\n"),
+            1,
+        )
+    }
+
+    fn old_ours() -> String {
+        VANILLA.replacen(
+            "\t\t\tGame\t\t\t\tcitadel\r\n",
+            &format!("{OLD_LINE}\t\t\tGame\t\t\t\tcitadel\r\n"),
             1,
         )
     }
@@ -435,9 +524,66 @@ mod tests {
     }
 
     #[test]
-    fn adding_inserts_one_line_in_the_same_style_before_game_citadel() {
+    fn adding_inserts_our_lines_in_the_same_style_before_game_citadel() {
         let patched = add_addons_path(VANILLA).expect("vanilla");
         assert_eq!(patched, ours());
+    }
+
+    #[test]
+    fn the_game_keeps_citadel_as_its_mod_and_write_path() {
+        // The engine makes the first `Game` path the MOD and write path unless `Mod` / `Write` keys exist; with only
+        // `Game citadel/addons` in front, Deadlock looked for its own config in addons and stopped with a FATAL ERROR.
+        let patched = add_addons_path(VANILLA).expect("vanilla");
+        let block: Vec<&str> = patched
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with("Game\t") || l.starts_with("Mod") || l.starts_with("Write"))
+            .collect();
+        assert_eq!(
+            block,
+            [
+                "Game\t\t\t\tcitadel/addons",
+                "Mod\t\t\t\tcitadel",
+                "Write\t\t\t\tcitadel",
+                "Game\t\t\t\tcitadel",
+                "Game\t\t\t\tcore"
+            ]
+        );
+    }
+
+    #[test]
+    fn mod_and_write_keys_the_file_already_has_are_not_added_again() {
+        let with_keys = VANILLA.replace(
+            "\t\t\tGame\t\t\t\tcore\r\n",
+            "\t\t\tGame\t\t\t\tcore\r\n\t\t\tMod\t\t\t\tcitadel\r\n\t\t\tWrite\t\t\t\tcitadel\r\n",
+        );
+        assert_eq!(inspect(&with_keys), State::Vanilla);
+        let patched = add_addons_path(&with_keys).expect("vanilla");
+        assert_eq!(
+            patched,
+            with_keys.replacen(
+                "\t\t\tGame\t\t\t\tcitadel\r\n",
+                &format!("{OLD_LINE}\t\t\tGame\t\t\t\tcitadel\r\n"),
+                1
+            )
+        );
+        assert_eq!(inspect(&patched), State::Ours);
+        assert_eq!(upgrade(&patched), None, "nothing is missing");
+        assert_eq!(remove_addons_path(&patched).expect("ours"), with_keys);
+    }
+
+    #[test]
+    fn the_line_0_1_0_added_is_ours_and_is_upgraded() {
+        assert_eq!(inspect(&old_ours()), State::Ours);
+        assert_eq!(upgrade(&old_ours()), Some(ours()));
+        assert_eq!(remove_addons_path(&old_ours()).expect("ours"), VANILLA);
+    }
+
+    #[test]
+    fn only_an_old_edit_is_upgraded() {
+        assert_eq!(upgrade(&ours()), None);
+        assert_eq!(upgrade(VANILLA), None);
+        assert_eq!(upgrade("x"), None);
     }
 
     #[test]
@@ -469,7 +615,7 @@ mod tests {
         let patched = add_addons_path(&quoted).expect("vanilla");
         assert!(
             patched
-                .contains("\t\t\t\"Game\"\t\"citadel/addons\"\r\n\t\t\t\"Game\"\t\"citadel\"\r\n")
+                .contains("\t\t\t\"Game\"\t\"citadel/addons\"\r\n\t\t\t\"Mod\"\t\"citadel\"\r\n\t\t\t\"Write\"\t\"citadel\"\r\n\t\t\t\"Game\"\t\"citadel\"\r\n")
         );
         assert_eq!(inspect(&patched), State::Ours);
     }
@@ -572,13 +718,15 @@ mod tests {
         assert_eq!(texts(&diff.found).last(), Some(&("\t\t}", false)));
         // Expected: the other lines gone, ours in front of `Game citadel` in the same style.
         assert_eq!(
-            texts(&diff.expected)[7..9],
+            texts(&diff.expected)[7..11],
             [
                 ("\t\t\tGame\t\t\t\tcitadel/addons", true),
+                ("\t\t\tMod\t\t\t\tcitadel", true),
+                ("\t\t\tWrite\t\t\t\tcitadel", true),
                 ("\t\t\tGame\t\t\t\tcitadel", false),
             ]
         );
-        assert_eq!(diff.expected.len(), diff.found.len() - 1);
+        assert_eq!(diff.expected.len(), diff.found.len() + 1);
     }
 
     #[test]
@@ -603,6 +751,8 @@ mod tests {
                 ("\tSearchPaths", false),
                 ("\t{", false),
                 ("\t\tGame\tcitadel/addons", true),
+                ("\t\tMod\tcitadel", true),
+                ("\t\tWrite\tcitadel", true),
                 ("\t\tGame\tcitadel", false),
                 ("\t}", false),
             ]
@@ -620,10 +770,10 @@ mod tests {
     }
 
     #[test]
-    fn the_diff_of_a_vanilla_file_only_adds_our_line() {
+    fn the_diff_of_a_vanilla_file_only_adds_our_lines() {
         let diff = diff(VANILLA);
         assert!(diff.found.iter().all(|l| !l.marked));
-        assert_eq!(diff.expected.iter().filter(|l| l.marked).count(), 1);
+        assert_eq!(diff.expected.iter().filter(|l| l.marked).count(), 3);
     }
 
     #[test]
