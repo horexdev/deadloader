@@ -55,8 +55,21 @@ The window is drawn by Microsoft WebView2, part of Windows. deadloader starts it
 route to the internet; WebView2 itself is updated by Windows.
 
 ## Privacy
-deadloader collects nothing and sends nothing about you. Logs stay on your PC and hide your Windows user name.
+deadloader collects nothing and sends nothing about you. It transfers no information to other networked systems
+unless you ask for it: GameBanana when you turn the catalog on, image hosts you allow, and GitHub when you enable the
+update check (see [Network](#network)). Logs stay on your PC and hide your Windows user name.
 Requests to GameBanana are subject to GameBanana's [Terms of Service](https://gamebanana.com/wikis/334).
+
+## Code signing policy
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/).
+
+- Committers and reviewers: [horexdev](https://github.com/horexdev)
+- Approvers: [horexdev](https://github.com/horexdev)
+
+Every signed release is built by GitHub Actions from a tagged commit of this repository and approved by hand.
+Privacy: see [Privacy](#privacy). Releases up to 0.1.0 are not signed; signing starts once SignPath Foundation
+approves the project.
 
 ## License
 [GPL-3.0](LICENSE). Mods are made by their authors and are subject to their own licences; you use them at your own risk.
