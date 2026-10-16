@@ -73,9 +73,9 @@ settings-install-steam = Trouvée via Steam
 settings-install-manual = Ajoutée manuellement
 settings-install-known = Des fichiers de deadloader s’y trouvent encore
 settings-install-manual-meta = Ajoutée manuellement
-settings-gi-ours = gameinfo.gi : OK — la ligne de deadloader est présente
+settings-gi-ours = gameinfo.gi : OK — les lignes de deadloader sont présentes
 settings-gi-wait = gameinfo.gi : configuré dès qu’un profil l’utilise
-settings-gi-rolled = gameinfo.gi : d’origine — Appliquer ajoute de nouveau la ligne de deadloader
+settings-gi-rolled = gameinfo.gi : d’origine — Appliquer ajoute de nouveau les lignes de deadloader
 settings-gi-foreign = gameinfo.gi : modifié par un autre programme
 settings-gi-missing = gameinfo.gi : introuvable — le dossier a peut-être été déplacé
 settings-installs-none = Aucune installation trouvée pour l’instant.
@@ -87,10 +87,10 @@ settings-install-removed = Installation retirée de la liste.
 settings-install-removed-text = Rien n’a été modifié dans ce dossier.
 settings-gameinfo-group = Après les mises à jour du jeu
 settings-autofix = Réparer gameinfo.gi automatiquement
-settings-autofix-help = Une mise à jour de Deadlock réinitialise le fichier qui lui dit de charger les mods. deadloader le sauvegarde, remet sa ligne et vous prévient. Si désactivé, un bandeau vous demande d’abord.
+settings-autofix-help = Une mise à jour de Deadlock réinitialise le fichier qui lui dit de charger les mods. deadloader le sauvegarde, remet ses lignes et vous prévient. Si désactivé, un bandeau vous demande d’abord.
 settings-danger-group = Annuler et supprimer
 settings-rollback = Restaurer le dossier du jeu du profil sélectionné
-settings-rollback-help = Pour l’installation du profil sélectionné { $profile } ({ $drive }) : retire les { $files } fichiers de mods que deadloader y a placés et sa ligne dans gameinfo.gi. La bibliothèque et les profils restent ; Appliquer rétablit tout.
+settings-rollback-help = Pour l’installation du profil sélectionné { $profile } ({ $drive }) : retire les { $files } fichiers de mods que deadloader y a placés et ses lignes dans gameinfo.gi. La bibliothèque et les profils restent ; Appliquer rétablit tout.
 settings-rollback-help-others = Les autres dossiers du jeu ne sont pas touchés ; sélectionnez un profil qui les utilise pour les restaurer.
 settings-rollback-nothing = Rien à restaurer sur { $drive } — deadloader n’y a aucun fichier pour l’instant.
 settings-rollback-no-game = Deadlock est introuvable, il n’y a donc aucun dossier du jeu à restaurer.
@@ -98,8 +98,8 @@ settings-rollback-button = Restaurer…
 settings-rolled-title = Dossier du jeu sur { $drive } restauré.
 settings-rolled-text =
     { $foreign ->
-        [0] Sur { $drive }, { $files } fichiers de mods et la ligne de deadloader dans gameinfo.gi ont été retirés. La bibliothèque et les profils sont conservés — Appliquer ou Jouer remet les mods.
-       *[other] Sur { $drive }, { $files } fichiers de mods, la ligne de deadloader dans gameinfo.gi et { $foreign } fichiers étrangers ont été retirés. La bibliothèque et les profils sont conservés — Appliquer ou Jouer remet les mods.
+        [0] Sur { $drive }, { $files } fichiers de mods et les lignes de deadloader dans gameinfo.gi ont été retirés. La bibliothèque et les profils sont conservés — Appliquer ou Jouer remet les mods.
+       *[other] Sur { $drive }, { $files } fichiers de mods, les lignes de deadloader dans gameinfo.gi et { $foreign } fichiers étrangers ont été retirés. La bibliothèque et les profils sont conservés — Appliquer ou Jouer remet les mods.
     }
 settings-wipe = Supprimer toutes les données de deadloader
 settings-wipe-help = Supprime la bibliothèque, les profils, les journaux, le cache et les paramètres ({ $size }), puis ferme deadloader. deadloader.exe reste — supprimez-le vous-même ensuite.
@@ -338,7 +338,7 @@ settings-d7-files =
         [one] 1 fichier de mod qu’il a ajouté dans
        *[other] { $count } fichiers de mods qu’il a ajoutés dans
     }
-settings-d7-line = Sa ligne dans gameinfo.gi
+settings-d7-line = Ses lignes dans gameinfo.gi
 settings-d7-line-why = — le fichier redevient tel que Steam l’a installé.
 settings-d7-stays = Reste tel quel :
 settings-d7-library = Votre bibliothèque — { $mods } mods, { $size }
@@ -390,7 +390,7 @@ settings-d8-other = Autres
 settings-d8-other-has = téléchargements partiels, sauvegardes de gameinfo.gi, données du moteur de la fenêtre
 settings-d8-exe = Non supprimé : deadloader.exe lui-même — supprimez-le vous-même si vous n’en avez plus besoin.
 settings-d8-rollback = D’abord restaurer chaque dossier du jeu utilisé par deadloader (recommandé)
-settings-d8-rollback-why = Retire les fichiers de mods de deadloader et sa ligne dans gameinfo.gi de chaque dossier du jeu avant la suppression. Les fichiers étrangers restent.
+settings-d8-rollback-why = Retire les fichiers de mods de deadloader et ses lignes dans gameinfo.gi de chaque dossier du jeu avant la suppression. Les fichiers étrangers restent.
 settings-d8-rollback-off = Non coché : les fichiers de mods de deadloader restent dans les dossiers du jeu et Deadlock continue de les charger — sans deadloader pour les retirer.
 settings-d8-type-1 = Pour confirmer, saisissez
 settings-d8-type-2 = { "" }

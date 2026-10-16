@@ -72,9 +72,9 @@ settings-install-steam = 通过 Steam 找到
 settings-install-manual = 手动添加
 settings-install-known = 这里还有 deadloader 的文件
 settings-install-manual-meta = 手动添加
-settings-gi-ours = gameinfo.gi：正常——deadloader 的那一行在
+settings-gi-ours = gameinfo.gi：正常——deadloader 的那几行在
 settings-gi-wait = gameinfo.gi：有配置使用时再设置
-settings-gi-rolled = gameinfo.gi：原始——“应用”会重新添加 deadloader 的那一行
+settings-gi-rolled = gameinfo.gi：原始——“应用”会重新添加 deadloader 的那几行
 settings-gi-foreign = gameinfo.gi：已被其他程序修改
 settings-gi-missing = gameinfo.gi：未找到——文件夹可能已被移动
 settings-installs-none = 尚未找到任何安装。
@@ -86,10 +86,10 @@ settings-install-removed = 已从列表中移除安装。
 settings-install-removed-text = 该文件夹中没有任何更改。
 settings-gameinfo-group = 游戏更新后
 settings-autofix = 自动修复 gameinfo.gi
-settings-autofix-help = Deadlock 更新会重置告诉它加载模组的游戏文件。deadloader 会先备份，再放回自己的那一行并通知你。关闭时，会先用横幅询问你。
+settings-autofix-help = Deadlock 更新会重置告诉它加载模组的游戏文件。deadloader 会先备份，再放回自己的那几行并通知你。关闭时，会先用横幅询问你。
 settings-danger-group = 撤销和移除
 settings-rollback = 回滚所选配置的游戏文件夹
-settings-rollback-help = 针对所选配置 { $profile } 的安装（{ $drive }）：移除 deadloader 放在那里的 { $files } 个模组文件，以及它在 gameinfo.gi 中的那一行。库和配置保留；“应用”会恢复一切。
+settings-rollback-help = 针对所选配置 { $profile } 的安装（{ $drive }）：移除 deadloader 放在那里的 { $files } 个模组文件，以及它在 gameinfo.gi 中的那几行。库和配置保留；“应用”会恢复一切。
 settings-rollback-help-others = 其他游戏文件夹不受影响；要回滚它们，请选择使用它们的配置。
 settings-rollback-nothing = { $drive } 上没有可回滚的内容——deadloader 目前在那里没有文件。
 settings-rollback-no-game = 未找到 Deadlock，因此没有可回滚的游戏文件夹。
@@ -97,8 +97,8 @@ settings-rollback-button = 回滚…
 settings-rolled-title = 已回滚 { $drive } 上的游戏文件夹。
 settings-rolled-text =
     { $foreign ->
-        [0] 已在 { $drive } 上移除 { $files } 个模组文件和 gameinfo.gi 中 deadloader 的那一行。库和配置已保留——“应用”或“开始游戏”会恢复模组。
-       *[other] 已在 { $drive } 上移除 { $files } 个模组文件、gameinfo.gi 中 deadloader 的那一行和 { $foreign } 个外部文件。库和配置已保留——“应用”或“开始游戏”会恢复模组。
+        [0] 已在 { $drive } 上移除 { $files } 个模组文件和 gameinfo.gi 中 deadloader 的那几行。库和配置已保留——“应用”或“开始游戏”会恢复模组。
+       *[other] 已在 { $drive } 上移除 { $files } 个模组文件、gameinfo.gi 中 deadloader 的那几行和 { $foreign } 个外部文件。库和配置已保留——“应用”或“开始游戏”会恢复模组。
     }
 settings-wipe = 删除所有 deadloader 数据
 settings-wipe-help = 删除库、配置、日志、缓存和设置（{ $size }），然后关闭 deadloader。deadloader.exe 会保留——之后请自行删除。
@@ -335,7 +335,7 @@ settings-d7-files =
     { $count ->
        *[other] 它添加的 { $count } 个模组文件，位于
     }
-settings-d7-line = 它在 gameinfo.gi 中的那一行
+settings-d7-line = 它在 gameinfo.gi 中的那几行
 settings-d7-line-why = ——文件恢复为 Steam 安装时的样子。
 settings-d7-stays = 保持不变：
 settings-d7-library = 你的库——{ $mods } 个模组，{ $size }
@@ -383,7 +383,7 @@ settings-d8-other = 其他
 settings-d8-other-has = 未完成的下载、gameinfo.gi 备份、窗口引擎数据
 settings-d8-exe = 不会删除：deadloader.exe 本身——如果不再需要，请自行删除。
 settings-d8-rollback = 先回滚 deadloader 使用的每个游戏文件夹（推荐）
-settings-d8-rollback-why = 删除前从每个游戏文件夹中移除 deadloader 的模组文件和它在 gameinfo.gi 中的那一行。外部文件保留。
+settings-d8-rollback-why = 删除前从每个游戏文件夹中移除 deadloader 的模组文件和它在 gameinfo.gi 中的那几行。外部文件保留。
 settings-d8-rollback-off = 未勾选：deadloader 的模组文件会留在游戏文件夹中，Deadlock 会继续加载它们——而再也没有 deadloader 来移除它们。
 settings-d8-type-1 = 要确认，请输入
 settings-d8-type-2 = { "" }

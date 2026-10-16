@@ -31,7 +31,7 @@ wizard-to-library = Opens your library next (local mode).
 # Step 1
 wizard-s1-title = Welcome to deadloader
 wizard-s1-lead = deadloader installs Deadlock mods from GameBanana or from your disk and shows you every change it makes.
-wizard-f1a = It adds mod files to the game’s mod folder and one line to
+wizard-f1a = It adds mod files to the game’s mod folder and three lines to
 wizard-f1b = — a game file that tells Deadlock to load mods.
 wizard-f2 = Everything can be undone: Rollback removes all of it from the game.
 wizard-f3a = All its data stays in the
@@ -144,14 +144,14 @@ wizard-show-files = Show files
 wizard-hide-files = Hide files
 wizard-from-dmm = Deadlock Mod Manager
 wizard-gi-setup = Will be set up
-wizard-gi-setup-a = deadloader adds one line to
+wizard-gi-setup-a = deadloader adds three lines to
 wizard-gi-setup-b = when you first apply mods. Nothing is changed now.
 wizard-gi-ours = Already set up
-wizard-gi-ours-text = deadloader’s line is already there.
+wizard-gi-ours-text = deadloader’s lines are already there.
 wizard-gi-foreign = Changed by another program
 wizard-gi-foreign-text = It doesn’t look like the original — often Deadlock Mod Manager does this. deadloader won’t overwrite someone else’s changes and will explain what to do after setup.
 wizard-what-is = What is this?
-wizard-gi-more = is a game file that tells Deadlock which folders to load. Usually you fix it by verifying the game files in Steam; deadloader then adds its line.
+wizard-gi-more = is a game file that tells Deadlock which folders to load. Usually you fix it by verifying the game files in Steam; deadloader then adds its lines.
 
 # E1
 wizard-nw-title = deadloader can’t save its data.

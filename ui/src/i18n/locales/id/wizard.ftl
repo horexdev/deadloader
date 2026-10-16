@@ -27,7 +27,7 @@ wizard-to-library = Setelah ini pustaka Anda terbuka (mode lokal).
 # Step 1
 wizard-s1-title = Selamat datang di deadloader
 wizard-s1-lead = deadloader memasang mod Deadlock dari GameBanana atau dari disk Anda dan menunjukkan setiap perubahan yang dibuatnya.
-wizard-f1a = deadloader menambahkan file mod ke folder mod game dan satu baris ke
+wizard-f1a = deadloader menambahkan file mod ke folder mod game dan tiga baris ke
 wizard-f1b = — file game yang memberi tahu Deadlock untuk memuat mod.
 wizard-f2 = Semuanya bisa dibatalkan: pengembalian menghapus dari game semua yang ditaruh deadloader.
 wizard-f3a = Semua datanya tetap di folder
@@ -136,7 +136,7 @@ wizard-show-files = Tampilkan file
 wizard-hide-files = Sembunyikan file
 wizard-from-dmm = Deadlock Mod Manager
 wizard-gi-setup = Akan disiapkan
-wizard-gi-setup-a = deadloader menambahkan satu baris ke
+wizard-gi-setup-a = deadloader menambahkan tiga baris ke
 wizard-gi-setup-b = saat Anda pertama kali menerapkan mod. Sekarang tidak ada yang diubah.
 wizard-gi-ours = Sudah disiapkan
 wizard-gi-ours-text = Baris deadloader sudah ada.

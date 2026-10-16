@@ -16,7 +16,7 @@ describe('the change a file operation was part of (186)', () => {
     expect(changeText(line({ txn: 1, change: { kind: 'take_foreign', file: 'pak03_dir.vpk' } }))).toBe(
       'pak03_dir.vpk taken under management',
     );
-    expect(changeText(line({ txn: 1, change: { kind: 'gameinfo_fixed' } }))).toBe('Our line added to gameinfo.gi');
+    expect(changeText(line({ txn: 1, change: { kind: 'gameinfo_fixed' } }))).toBe('Our lines added to gameinfo.gi');
     expect(changeText(line({ txn: 1, change: { kind: 'recovered' } }))).toBe('Interrupted change finished at start');
   });
 

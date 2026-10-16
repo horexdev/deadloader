@@ -32,7 +32,7 @@ wizard-to-library = Potom se otevře knihovna (místní režim).
 # Step 1
 wizard-s1-title = Vítejte v deadloaderu
 wizard-s1-lead = deadloader instaluje mody do Deadlocku z GameBanana nebo z vašeho disku a ukazuje vám každou změnu, kterou provede.
-wizard-f1a = Přidává soubory modů do složky modů hry a jeden řádek do
+wizard-f1a = Přidává soubory modů do složky modů hry a tři řádky do
 wizard-f1b = — souboru hry, který Deadlocku říká, aby načítal mody.
 wizard-f2 = Vše jde vrátit: vrácení odstraní ze hry všechno, co tam deadloader přidal.
 wizard-f3a = Všechna jeho data zůstávají ve složce
@@ -146,14 +146,14 @@ wizard-show-files = Zobrazit soubory
 wizard-hide-files = Skrýt soubory
 wizard-from-dmm = Deadlock Mod Manager
 wizard-gi-setup = Bude nastaven
-wizard-gi-setup-a = deadloader přidá jeden řádek do
+wizard-gi-setup-a = deadloader přidá tři řádky do
 wizard-gi-setup-b = při prvním použití modů. Teď se nic nemění.
 wizard-gi-ours = Už nastaven
-wizard-gi-ours-text = Řádek deadloaderu už tam je.
+wizard-gi-ours-text = Řádky deadloaderu už tam jsou.
 wizard-gi-foreign = Změněn jiným programem
 wizard-gi-foreign-text = Nevypadá jako originál — často to dělá Deadlock Mod Manager. deadloader nepřepisuje cizí změny a po nastavení vysvětlí, co dělat.
 wizard-what-is = Co to je?
-wizard-gi-more = je soubor hry, který Deadlocku říká, jaké složky načíst. Obvykle pomůže ověřit soubory hry ve Steamu; potom deadloader přidá svůj řádek.
+wizard-gi-more = je soubor hry, který Deadlocku říká, jaké složky načíst. Obvykle pomůže ověřit soubory hry ve Steamu; potom deadloader přidá své řádky.
 
 # E1
 wizard-nw-title = deadloader nemůže uložit svá data.

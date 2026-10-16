@@ -1,7 +1,7 @@
 ## Notifications
 
 n1 = Deadlock foi atualizado — mods restaurados.
-    .why = A atualização redefiniu o gameinfo.gi, então o deadloader adicionou sua linha de novo.
+    .why = A atualização redefiniu o gameinfo.gi, então o deadloader adicionou suas linhas de novo.
 n2 = { $name } instalado e ativado.
 n3 =
     { $count ->
@@ -66,7 +66,7 @@ e2 = Deadlock não foi encontrado.
     .todo = Escolha a pasta do jogo manualmente.
 e3 = Um arquivo do jogo foi alterado por outro programa.
     .why = O gameinfo.gi não parece o original — geralmente quem o altera é o Deadlock Mod Manager. O deadloader não sobrescreve alterações de terceiros.
-    .todo = Verifique a integridade dos arquivos do jogo no Steam; depois o deadloader adicionará sua linha.
+    .todo = Verifique a integridade dos arquivos do jogo no Steam; depois o deadloader adicionará suas linhas.
 e4 = O catálogo não está disponível.
     .why = O GameBanana mudou sua API, então o deadloader não consegue lê-la. Sua biblioteca e seus perfis funcionam normalmente.
     .todo = Verifique se há uma atualização do deadloader ou tente novamente mais tarde.
